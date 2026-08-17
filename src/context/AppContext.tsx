@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { AppData, DailyEntry, Settings, Workout } from '../types'
-import { createInitialData, loadData, saveData } from '../utils/storage'
+import { storageService } from '../services/storageService'
+import { createInitialData } from '../utils/storage'
 
 interface AppContextValue {
   data: AppData
@@ -9,6 +10,7 @@ interface AppContextValue {
   addWorkout: (workout: Workout) => void
   deleteWorkout: (id: string) => void
   updateSettings: (settings: Partial<Settings>) => void
+  updateCoachNote: (rangeKey: string, note: string) => void
   replaceData: (data: AppData) => void
   clearData: () => void
 }
@@ -16,11 +18,23 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData>(loadData)
+  const [data, setData] = useState<AppData>(createInitialData)
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
-    saveData(data)
-  }, [data])
+    let active = true
+    void storageService.load().then((stored) => {
+      if (!active) return
+      setData(stored)
+      setHydrated(true)
+    })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated) return
+    void storageService.save(data).catch((error) => console.error('Nie udało się zapisać danych Formlog.', error))
+  }, [data, hydrated])
 
   const value = useMemo<AppContextValue>(() => ({
     data,
@@ -44,9 +58,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateSettings: (settings) => {
       setData((current) => ({ ...current, settings: { ...current.settings, ...settings } }))
     },
+    updateCoachNote: (rangeKey, note) => {
+      setData((current) => ({ ...current, coachNotes: { ...current.coachNotes, [rangeKey]: note } }))
+    },
     replaceData: setData,
     clearData: () => setData(createInitialData()),
   }), [data])
+
+  if (!hydrated) return <div className="app-boot" role="status"><span>F</span><p>Wczytywanie Formlog…</p></div>
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

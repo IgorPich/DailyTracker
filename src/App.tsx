@@ -8,6 +8,7 @@ import {
   Settings as SettingsIcon,
   X,
 } from 'lucide-react'
+import formlogIcon from './assets/formlog-logo.png'
 
 const Dashboard = lazy(async () => ({ default: (await import('./pages/Dashboard')).Dashboard }))
 const Journal = lazy(async () => ({ default: (await import('./pages/Journal')).Journal }))
@@ -38,7 +39,7 @@ export default function App() {
     <div className="app-shell">
       <aside className={`sidebar ${menuOpen ? 'sidebar--open' : ''}`}>
         <div className="brand">
-          <span className="brand__mark"><Dumbbell size={20} /></span>
+          <span className="brand__mark"><img src={formlogIcon} alt="" /></span>
           <div><strong>Formlog</strong><small>Daily Tracker</small></div>
         </div>
         <button className="icon-button sidebar__close" onClick={() => setMenuOpen(false)} aria-label="Zamknij menu">
@@ -62,7 +63,7 @@ export default function App() {
       <div className="app-main">
         <header className="mobile-header">
           <button className="icon-button" onClick={() => setMenuOpen(true)} aria-label="Otwórz menu"><Menu size={21} /></button>
-          <div className="brand brand--mobile"><span className="brand__mark"><Dumbbell size={17} /></span><strong>Formlog</strong></div>
+          <div className="brand brand--mobile"><span className="brand__mark"><img src={formlogIcon} alt="" /></span><strong>Formlog</strong></div>
           <button className="icon-button" onClick={() => navigate('settings')} aria-label="Ustawienia"><SettingsIcon size={20} /></button>
         </header>
         <main>

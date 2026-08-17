@@ -1,5 +1,5 @@
 import { formatNumber } from '../utils/calculations'
-import { formatShortDate } from '../utils/date'
+import { formatLongDate } from '../utils/date'
 
 interface PayloadItem {
   dataKey?: string
@@ -15,11 +15,11 @@ export function WeightTooltip({ active, payload, label }: {
   if (!active || !payload?.length || !label) return null
   return (
     <div className="chart-tooltip">
-      <strong>{formatShortDate(label)}</strong>
+      <strong>{formatLongDate(label)}</strong>
       {payload.map((item) => (
         <div key={item.dataKey}>
           <span style={{ background: item.color }} />
-          {item.dataKey === 'movingAverage' ? 'Średnia 7 dni' : 'Masa'}: {formatNumber(item.value)} kg
+          {item.dataKey === 'movingAverage' ? 'Średnia 7 dni' : 'Masa dzienna'}: {formatNumber(item.value)} kg
         </div>
       ))}
     </div>

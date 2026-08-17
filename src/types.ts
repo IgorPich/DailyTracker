@@ -28,6 +28,7 @@ export interface WorkoutExercise {
   sets: WorkoutSet[]
   skipped?: boolean
   isCustom?: boolean
+  note?: string
 }
 
 export interface Workout {
@@ -60,6 +61,13 @@ export interface Settings {
   calorieTarget: number
   proteinTarget: number
   weightTarget?: number
+  trendThresholds: TrendThresholds
+}
+
+export interface TrendThresholds {
+  lossBelow: number
+  stableUpper: number
+  slowGainUpper: number
 }
 
 export interface AppData {
@@ -68,4 +76,5 @@ export interface AppData {
   workouts: Workout[]
   templates: TrainingTemplate[]
   settings: Settings
+  coachNotes: Record<string, string>
 }
