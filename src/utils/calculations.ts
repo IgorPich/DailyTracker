@@ -1,5 +1,6 @@
 import type { DailyEntry, Workout } from '../types'
 import { addDays, dateInRange, parseDate, toIsoDate } from './date'
+import { formatDecimal } from './numbers'
 
 export const average = (values: Array<number | undefined>) => {
   const valid = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
@@ -57,7 +58,7 @@ export const weightChartData = (entries: DailyEntry[], from?: string, to?: strin
 }
 
 export const formatNumber = (value: number | undefined, decimals = 1) =>
-  value === undefined ? '—' : value.toLocaleString('pl-PL', { maximumFractionDigits: decimals, minimumFractionDigits: decimals })
+  formatDecimal(value, decimals, decimals)
 
 export const formatInteger = (value: number | undefined) =>
   value === undefined ? '—' : Math.round(value).toLocaleString('pl-PL')

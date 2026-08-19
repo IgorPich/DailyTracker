@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import {
   Activity,
   ArrowRight,
-  BatteryCharging,
   ChevronDown,
   Dumbbell,
   Footprints,
@@ -28,7 +27,7 @@ import type { View } from '../App'
 import { EmptyState } from '../components/EmptyState'
 import { WeightTooltip } from '../components/ChartTooltip'
 import { useApp } from '../context/AppContext'
-import type { Phase, WorkoutExercise } from '../types'
+import type { Phase } from '../types'
 import {
   average,
   entriesBetween,
@@ -40,13 +39,11 @@ import {
   windowFor,
 } from '../utils/calculations'
 import { daysAgoIso, formatLongDate, isoToday } from '../utils/date'
+import { phaseLabel } from '../utils/labels'
+import { formatSet, getBestSet } from '../utils/workoutProgress'
 
 type Range = '30' | '90' | 'all'
 const phases: Phase[] = ['Maintenance', 'Lean Gain', 'Mini Cut', 'Redukcja']
-
-const bestSet = (exercise: WorkoutExercise) => exercise.sets
-  .filter((set) => set.weight !== undefined && set.reps !== undefined)
-  .sort((a, b) => ((b.weight ?? 0) * (b.reps ?? 0)) - ((a.weight ?? 0) * (a.reps ?? 0)))[0]
 
 export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const { data, updateSettings } = useApp()
@@ -63,8 +60,9 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
   const weightDelta = currentWeight !== undefined && previousWeight !== undefined ? currentWeight - previousWeight : undefined
   const calories = average(currentEntries.map((entry) => entry.calories))
   const protein = average(currentEntries.map((entry) => entry.protein))
+  const carbs = average(currentEntries.map((entry) => entry.carbs))
+  const fat = average(currentEntries.map((entry) => entry.fat))
   const steps = average(currentEntries.map((entry) => entry.steps))
-  const recovery = average(currentEntries.map((entry) => entry.recovery))
   const latestWaist = latestMeasurement(data.dailyEntries, 'waist')
   const recentWorkouts = data.workouts.filter((workout) => workout.date >= currentWindow.from && workout.date <= currentWindow.to)
 
@@ -78,11 +76,11 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
   const lastWorkout = [...data.workouts].sort((a, b) => b.date.localeCompare(a.date))[0]
   const templateIndex = lastWorkout ? data.templates.findIndex((template) => template.id === lastWorkout.templateId) : -1
   const nextTemplate = data.templates[(templateIndex + 1 + data.templates.length) % data.templates.length] ?? data.templates[0]
-  const completedLastExercises = lastWorkout?.exercises.filter((exercise) => !exercise.skipped && bestSet(exercise)) ?? []
-  const priorityExercises = completedLastExercises.filter((exercise) => /bench|incline|pull-up|chest-supported|hack squat|romanian|lateral raise/i.test(exercise.name))
+  const completedLastExercises = lastWorkout?.exercises.filter((exercise) => !exercise.skipped && getBestSet(exercise)) ?? []
+  const priorityExercises = completedLastExercises.filter((exercise) => /bench|incline|pull-up|chest-supported|hack squat|romanian|lateral raise|wyciskanie|podciąganie|wiosło na wyciągu|martwy ciąg|unoszenie bokiem/i.test(exercise.name))
   const lastHighlights = [...priorityExercises, ...completedLastExercises.filter((exercise) => !priorityExercises.includes(exercise))]
     .slice(0, 3)
-    .map((exercise) => ({ name: exercise.name, set: bestSet(exercise)! }))
+    .map((exercise) => ({ name: exercise.name, set: getBestSet(exercise)! }))
 
   const friendlyDate = new Intl.DateTimeFormat('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${today}T12:00:00`))
 
@@ -90,7 +88,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
     <div className="page dashboard-page dashboard-v2">
       <header className="dashboard-hero">
         <div>
-          <span className="eyebrow">FORMLOG</span>
+          <span className="eyebrow">GREEKGOD</span>
           <p>{friendlyDate.charAt(0).toUpperCase() + friendlyDate.slice(1)}</p>
           <h1>Twój progres</h1>
         </div>
@@ -103,11 +101,11 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
       <section className="phase-bar">
         <div className="phase-control">
           <button className="phase-status" onClick={() => setPhaseOpen((current) => !current)} aria-expanded={phaseOpen}>
-            <i /> <span>{data.settings.phase}</span> <ChevronDown size={14} />
+            <i /> <span>{phaseLabel(data.settings.phase)}</span> <ChevronDown size={14} />
           </button>
           {phaseOpen && (
             <div className="phase-menu">
-              {phases.map((phase) => <button key={phase} className={data.settings.phase === phase ? 'active' : ''} onClick={() => { updateSettings({ phase }); setPhaseOpen(false) }}>{phase}</button>)}
+              {phases.map((phase) => <button key={phase} className={data.settings.phase === phase ? 'active' : ''} onClick={() => { updateSettings({ phase }); setPhaseOpen(false) }}>{phaseLabel(phase)}</button>)}
             </div>
           )}
         </div>
@@ -120,7 +118,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
         <article className="primary-metric">
           <div><span>Masa</span><Scale size={18} /></div>
           <strong>{formatNumber(currentWeight)} <small>kg</small></strong>
-          <p>{signed(weightDelta, ' kg')} vs poprzednie 7 dni</p>
+          <p>{signed(weightDelta, ' kg')} w porównaniu z poprzednimi 7 dniami</p>
         </article>
         <article className="primary-metric">
           <div><span>Talia</span><Ruler size={18} /></div>
@@ -130,7 +128,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
         <article className="primary-metric">
           <div><span>Kalorie</span><Utensils size={18} /></div>
           <strong>{formatInteger(calories)}</strong>
-          <p>cel {data.settings.calorieTarget.toLocaleString('pl-PL')} kcal</p>
+          <p>cel {formatInteger(data.settings.calorieTarget)} kcal</p>
         </article>
         <article className="primary-metric">
           <div><span>Treningi</span><Dumbbell size={18} /></div>
@@ -141,8 +139,9 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
 
       <section className="secondary-metrics">
         <div><Gauge size={16} /><span>Białko</span><strong>{formatInteger(protein)} g</strong><small>cel {data.settings.proteinTarget} g</small></div>
+        <div><Utensils size={16} /><span>Węglowodany</span><strong>{formatInteger(carbs)} g</strong><small>średnio / dzień</small></div>
+        <div><Utensils size={16} /><span>Tłuszcz</span><strong>{formatInteger(fat)} g</strong><small>średnio / dzień</small></div>
         <div><Footprints size={16} /><span>Kroki</span><strong>{formatInteger(steps)}</strong><small>średnio / dzień</small></div>
-        <div><BatteryCharging size={16} /><span>Regeneracja</span><strong>{formatNumber(recovery)}/10</strong><small>średnia 7 dni</small></div>
       </section>
 
       <section className="dashboard-focus-grid">
@@ -159,7 +158,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
                 <LineChart data={chartData} margin={{ top: 18, right: 12, left: -12, bottom: 0 }}>
                   <CartesianGrid stroke="rgba(255,255,255,.055)" strokeDasharray="3 5" vertical={false} />
                   <XAxis dataKey="date" tickFormatter={(value) => value.slice(5).replace('-', '.')} stroke="#6f767d" tickLine={false} axisLine={false} minTickGap={32} />
-                  <YAxis domain={[(min: number) => Math.floor((min - 0.75) * 2) / 2, (max: number) => Math.ceil((max + 0.75) * 2) / 2]} stroke="#6f767d" tickLine={false} axisLine={false} tickFormatter={(value) => value.toFixed(1)} width={48} />
+                  <YAxis domain={[(min: number) => Math.floor((min - 0.75) * 2) / 2, (max: number) => Math.ceil((max + 0.75) * 2) / 2]} stroke="#6f767d" tickLine={false} axisLine={false} tickFormatter={(value) => formatNumber(value)} width={48} />
                   <Tooltip content={<WeightTooltip />} cursor={{ stroke: 'rgba(255,255,255,.12)', strokeDasharray: '3 3' }} />
                   <Line type="monotone" dataKey="weight" stroke="#737a80" strokeWidth={1.25} dot={{ r: 2.4, fill: '#8b9298', strokeWidth: 0 }} activeDot={{ r: 4.5, fill: '#d9dde0', stroke: '#111416', strokeWidth: 2 }} connectNulls />
                   <Line type="monotone" dataKey="movingAverage" stroke="#2997ff" strokeWidth={2.8} dot={false} activeDot={{ r: 4, fill: '#2997ff', strokeWidth: 0 }} />
@@ -175,13 +174,13 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
             <div className="card-heading"><div><span className="section-kicker">OSTATNIA SESJA</span><h2>Ostatni trening</h2></div><Activity size={18} /></div>
             {lastWorkout ? <>
               <div className="last-workout-card__title"><span className="template-code">{lastWorkout.templateCode}</span><div><strong>{lastWorkout.templateName}</strong><small>{formatLongDate(lastWorkout.date)}{lastWorkout.duration ? ` · ${lastWorkout.duration} min` : ''}</small></div></div>
-              <div className="last-results">{lastHighlights.map(({ name, set }) => <div key={name}><span>{name}</span><strong>{formatNumber(set.weight)} × {set.reps}</strong></div>)}</div>
+              <div className="last-results">{lastHighlights.map(({ name, set }) => <div key={name}><span>{name}</span><strong>{formatSet(set)}</strong></div>)}</div>
               <button className="link-button" onClick={() => onNavigate('training')}>Zobacz trening <ArrowRight size={15} /></button>
             </> : <div className="compact-empty"><Dumbbell size={20} /><span>Jeszcze nie zapisano treningu.</span></div>}
           </article>
 
           <article className="card next-workout-card">
-            <div><span className="section-kicker">ROLLING SPLIT</span><p>Następny trening</p></div>
+            <div><span className="section-kicker">CYKL TRENINGOWY</span><p>Następny trening</p></div>
             <div className="next-workout-card__main"><span>{nextTemplate.code}</span><div><strong>{nextTemplate.name}</strong><small>{nextTemplate.exercises.length} ćwiczeń</small></div></div>
             <button className="button button--primary button--full" onClick={() => onNavigate('training')}><Play size={15} fill="currentColor" /> Rozpocznij</button>
           </article>

@@ -7,7 +7,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .build(tauri::generate_context!())
-        .expect("failed to initialize Formlog");
+        .expect("failed to initialize GreekGod");
 
     app.run(|app_handle, event| {
         if let RunEvent::WindowEvent {

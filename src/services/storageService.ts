@@ -32,8 +32,8 @@ export const storageService = {
       const raw = localStorage.getItem(STORAGE_KEY)
       return raw ? normalizeData(JSON.parse(raw)) : createInitialData()
     } catch (error) {
-      console.error('Nie udało się wczytać danych Formlog.', error)
-      return createInitialData()
+      console.error('Nie udało się wczytać danych GreekGod.', error)
+      throw error
     }
   },
 

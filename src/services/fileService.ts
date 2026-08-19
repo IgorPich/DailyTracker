@@ -34,7 +34,7 @@ export async function pickJsonText() {
     import('@tauri-apps/plugin-dialog'),
     import('@tauri-apps/plugin-fs'),
   ])
-  const path = await open({ multiple: false, directory: false, filters: [{ name: 'Formlog JSON', extensions: ['json'] }] })
+  const path = await open({ multiple: false, directory: false, filters: [{ name: 'GreekGod JSON', extensions: ['json'] }] })
   if (!path || Array.isArray(path)) return null
   return readTextFile(path)
 }
@@ -59,7 +59,7 @@ export async function savePngDataUrl(dataUrl: string, filename: string) {
   return true
 }
 
-export async function confirmAction(message: string, title = 'Formlog') {
+export async function confirmAction(message: string, title = 'GreekGod') {
   if (!isTauri()) return window.confirm(message)
   const { confirm } = await import('@tauri-apps/plugin-dialog')
   return confirm(message, { title, kind: 'warning' })

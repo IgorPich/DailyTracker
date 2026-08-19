@@ -7,6 +7,7 @@ export interface DailyEntry {
   calories?: number
   protein?: number
   fat?: number
+  carbs?: number
   steps?: number
   waist?: number
   sleep?: number
@@ -28,6 +29,7 @@ export interface WorkoutExercise {
   sets: WorkoutSet[]
   skipped?: boolean
   isCustom?: boolean
+  equipmentSensitive?: boolean
   note?: string
 }
 
@@ -39,6 +41,7 @@ export interface Workout {
   templateName: string
   exercises: WorkoutExercise[]
   duration?: number
+  gymLocation?: string
   note?: string
 }
 
@@ -47,6 +50,7 @@ export interface TemplateExercise {
   name: string
   prescription: string
   defaultSets: number
+  equipmentSensitive?: boolean
 }
 
 export interface TrainingTemplate {
@@ -61,6 +65,8 @@ export interface Settings {
   calorieTarget: number
   proteinTarget: number
   weightTarget?: number
+  gymLocations?: string[]
+  lastGymLocation?: string
   trendThresholds: TrendThresholds
 }
 
