@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { AppData, DailyEntry, Settings, TrainingTemplate, Workout } from '../types'
+import type { AppData, DailyEntry, ExerciseDefinition, Settings, TrainingTemplate, Workout, WorkoutExercise } from '../types'
 import { storageService } from '../services/storageService'
+import { canonicalExerciseId, normalizeExerciseName, renameExerciseDefinition, withRegisteredExercise } from '../utils/exerciseIdentity'
+import { createId } from '../utils/id'
 import { createInitialData } from '../utils/storage'
 import { replaceWorkoutById } from '../utils/workoutData'
 
@@ -22,6 +24,107 @@ interface AppContextValue {
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
+
+const attachWorkoutExerciseIdentities = (
+  library: ExerciseDefinition[],
+  exercises: WorkoutExercise[],
+  previousExercises?: WorkoutExercise[],
+) => {
+  let nextLibrary = library
+  const nextExercises = exercises.map((exercise) => {
+    const explicitId = exercise.exerciseId?.trim()
+    if (explicitId) {
+      const existingDefinition = nextLibrary.find((definition) => definition.id === explicitId)
+      if (!existingDefinition) {
+        nextLibrary = [...nextLibrary, {
+          id: explicitId,
+          name: exercise.name.trim().replace(/\s+/g, ' '),
+          equipmentSensitive: Boolean(exercise.equipmentSensitive),
+        }]
+      } else {
+        const previous = previousExercises?.find((item) => item.id === exercise.id)
+        const previousSensitivity = previous?.equipmentSensitive ?? existingDefinition.equipmentSensitive
+        const currentSensitivity = exercise.equipmentSensitive ?? existingDefinition.equipmentSensitive
+        const sensitivityChanged = previousSensitivity !== currentSensitivity
+        if (sensitivityChanged) {
+          nextLibrary = renameExerciseDefinition(nextLibrary, explicitId, existingDefinition.name, currentSensitivity)
+        }
+      }
+      return { ...exercise, exerciseId: explicitId }
+    }
+    const registered = withRegisteredExercise(
+      nextLibrary,
+      exercise.name,
+      Boolean(exercise.equipmentSensitive),
+      `exercise-${createId()}`,
+    )
+    nextLibrary = registered.library
+    return {
+      ...exercise,
+      exerciseId: registered.definition.id,
+      equipmentSensitive: registered.definition.equipmentSensitive,
+    }
+  })
+  return { library: nextLibrary, exercises: nextExercises }
+}
+
+const updateTemplateAndLibrary = (current: AppData, template: TrainingTemplate) => {
+  const previousTemplate = current.templates.find((item) => item.id === template.id)
+  let library = current.exerciseLibrary
+  const changedDefinitions = new Set<string>()
+
+  const exercises = template.exercises.map((exercise) => {
+    const previous = previousTemplate?.exercises.find((item) => item.id === exercise.id)
+    let exerciseId = exercise.exerciseId?.trim() || previous?.exerciseId?.trim()
+    if (!exerciseId) {
+      const registered = withRegisteredExercise(
+        library,
+        exercise.name,
+        Boolean(exercise.equipmentSensitive),
+        `exercise-${createId()}`,
+      )
+      library = registered.library
+      exerciseId = registered.definition.id
+    } else if (!library.some((definition) => definition.id === exerciseId)) {
+      library = [...library, {
+        id: exerciseId,
+        name: exercise.name.trim().replace(/\s+/g, ' '),
+        equipmentSensitive: Boolean(exercise.equipmentSensitive),
+      }]
+    }
+
+    const sameIdentity = previous && canonicalExerciseId(previous) === exerciseId
+    const definition = library.find((item) => item.id === exerciseId)!
+    const nextName = exercise.name.trim().replace(/\s+/g, ' ')
+    const sensitivityChanged = sameIdentity && Boolean(exercise.equipmentSensitive) !== definition.equipmentSensitive
+    const nameChanged = sameIdentity && normalizeExerciseName(nextName) !== normalizeExerciseName(previous.name)
+    if (nameChanged || sensitivityChanged) {
+      library = renameExerciseDefinition(library, exerciseId, nameChanged ? nextName : definition.name, Boolean(exercise.equipmentSensitive))
+      changedDefinitions.add(exerciseId)
+    }
+    const resolved = library.find((item) => item.id === exerciseId)!
+    return {
+      ...exercise,
+      exerciseId,
+      name: sameIdentity ? nextName : resolved.name,
+      equipmentSensitive: resolved.equipmentSensitive,
+    }
+  })
+
+  const replacedTemplates = current.templates.map((item) => item.id === template.id
+    ? { ...structuredClone(template), exercises }
+    : item)
+  const templates = replacedTemplates.map((item) => ({
+    ...item,
+    exercises: item.exercises.map((exercise) => {
+      const exerciseId = canonicalExerciseId(exercise)
+      if (!changedDefinitions.has(exerciseId)) return exercise
+      const definition = library.find((candidate) => candidate.id === exerciseId)!
+      return { ...exercise, name: definition.name, equipmentSensitive: definition.equipmentSensitive }
+    }),
+  }))
+  return { library, templates }
+}
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(createInitialData)
@@ -61,22 +164,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setData((current) => ({ ...current, dailyEntries: current.dailyEntries.filter((entry) => entry.id !== id) }))
     },
     addWorkout: (workout) => {
-      setData((current) => ({ ...current, workouts: [...current.workouts, workout] }))
+      setData((current) => {
+        const attached = attachWorkoutExerciseIdentities(current.exerciseLibrary, workout.exercises)
+        return {
+          ...current,
+          exerciseLibrary: attached.library,
+          workouts: [...current.workouts, { ...workout, exercises: attached.exercises }],
+        }
+      })
     },
     updateWorkout: (workout) => {
-      setData((current) => ({
-        ...current,
-        workouts: replaceWorkoutById(current.workouts, workout),
-      }))
+      setData((current) => {
+        const previous = current.workouts.find((item) => item.id === workout.id)
+        const attached = attachWorkoutExerciseIdentities(current.exerciseLibrary, workout.exercises, previous?.exercises)
+        return {
+          ...current,
+          exerciseLibrary: attached.library,
+          workouts: replaceWorkoutById(current.workouts, { ...workout, exercises: attached.exercises }),
+        }
+      })
     },
     deleteWorkout: (id) => {
       setData((current) => ({ ...current, workouts: current.workouts.filter((workout) => workout.id !== id) }))
     },
     updateTemplate: (template) => {
-      setData((current) => ({
-        ...current,
-        templates: current.templates.map((item) => item.id === template.id ? structuredClone(template) : item),
-      }))
+      setData((current) => {
+        const updated = updateTemplateAndLibrary(current, template)
+        return { ...current, templates: updated.templates, exerciseLibrary: updated.library }
+      })
     },
     updateSettings: (settings) => {
       setData((current) => ({ ...current, settings: { ...current.settings, ...settings } }))

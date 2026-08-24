@@ -32,7 +32,7 @@ Bezpieczna migracja ze starszej wersji przeglądarkowej:
 3. Wybierz **Ustawienia → Importuj kopię JSON** i wskaż pobrany plik.
 4. Potwierdź zastąpienie danych. Import zastępuje aktualny zestaw zamiast dopisywać duplikaty.
 
-Kopia ma nazwę `greekgod-kopia-YYYY-MM-DD.json` i zawiera kompletny stan aplikacji. Starsze pola `sleep`, `recovery` i `rir` pozostają zachowane dla kompatybilności, choć nie są już pokazywane w interfejsie. Migracja danych v2→v3 zmienia wyłącznie wbudowane szablony przyszłych treningów; zapisane wpisy i treningi pozostają bez zmian.
+Kopia ma nazwę `greekgod-kopia-YYYY-MM-DD.json` i zawiera kompletny stan aplikacji. Starsze pola `sleep`, `recovery` i `rir` pozostają zachowane dla kompatybilności, choć nie są już pokazywane w interfejsie. Import starszej kopii zachowuje jej szablony bez przywracania wartości domyślnych. Migracja v3→v4 dodaje globalne identyfikatory ćwiczeń i jednorazową kopię Store; zapisane serie, wpisy i snapshoty treningów pozostają bez zmian.
 
 ## Development
 
@@ -63,10 +63,10 @@ Build najpierw tworzy statyczny frontend Vite, osadza go w aplikacji i nie uruch
 Wyniki:
 
 - samodzielny plik: `src-tauri/target/release/greekgod.exe`,
-- zalecany instalator: `src-tauri/target/release/bundle/nsis/GreekGod_2.5.0_x64-setup.exe`,
-- instalatory MSI: `src-tauri/target/release/bundle/msi/GreekGod_2.5.0_x64_pl-PL.msi` i `GreekGod_2.5.0_x64_en-US.msi`.
+- zalecany instalator: `src-tauri/target/release/bundle/nsis/GreekGod_2.6.1_x64-setup.exe`,
+- instalatory MSI: `src-tauri/target/release/bundle/msi/GreekGod_2.6.1_x64_pl-PL.msi` i `GreekGod_2.6.1_x64_en-US.msi`.
 
-Do normalnej instalacji uruchom plik `GreekGod_2.5.0_x64-setup.exe`. Instalator działa dla bieżącego użytkownika i dodaje GreekGod do menu Start oraz skrót na pulpicie. Kliknięcie systemowego `X` kończy aplikację — projekt nie zawiera ikony w zasobniku, autostartu ani zadań w tle.
+Do normalnej instalacji uruchom plik `GreekGod_2.6.1_x64-setup.exe`. Instalator działa dla bieżącego użytkownika i dodaje GreekGod do menu Start oraz skrót na pulpicie. Kliknięcie systemowego `X` kończy aplikację — projekt nie zawiera ikony w zasobniku, autostartu ani zadań w tle.
 
 ## Struktura
 

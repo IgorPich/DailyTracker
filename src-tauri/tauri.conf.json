@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "GreekGod",
-  "version": "2.5.0",
+  "version": "2.6.1",
   "identifier": "com.igorpich.formlog",
   "build": {
     "beforeDevCommand": "npm run dev -- --port 1420",

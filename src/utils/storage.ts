@@ -1,10 +1,10 @@
 import { DEFAULT_TEMPLATES } from '../data/templates'
 import { saveTextExport } from '../services/fileService'
 import type { AppData, DailyEntry, Settings, Workout } from '../types'
-import { upgradeBuiltInTemplates } from './dataMigration'
+import { migrateExerciseIdentity } from './dataMigration'
 
 export const STORAGE_KEY = 'formlog.data.v1'
-export const CURRENT_DATA_VERSION = 3
+export const CURRENT_DATA_VERSION = 4
 
 export const DEFAULT_SETTINGS: Settings = {
   phase: 'Maintenance',
@@ -17,14 +17,18 @@ export const DEFAULT_SETTINGS: Settings = {
   },
 }
 
-export const createInitialData = (): AppData => ({
-  version: CURRENT_DATA_VERSION,
-  dailyEntries: [],
-  workouts: [],
-  templates: DEFAULT_TEMPLATES,
-  settings: DEFAULT_SETTINGS,
-  coachNotes: {},
-})
+export const createInitialData = (): AppData => {
+  const identity = migrateExerciseIdentity(DEFAULT_TEMPLATES, [])
+  return {
+    version: CURRENT_DATA_VERSION,
+    dailyEntries: [],
+    workouts: [],
+    templates: identity.templates,
+    exerciseLibrary: identity.exerciseLibrary,
+    settings: DEFAULT_SETTINGS,
+    coachNotes: {},
+  }
+}
 
 export const normalizeData = (value: unknown): AppData => {
   if (!value || typeof value !== 'object') throw new Error('Nieprawidłowy format pliku.')
@@ -32,13 +36,24 @@ export const normalizeData = (value: unknown): AppData => {
   if (!Array.isArray(candidate.dailyEntries) || !Array.isArray(candidate.workouts)) {
     throw new Error('Plik nie zawiera wymaganych danych.')
   }
+  const sourceVersion = Number(candidate.version ?? 0)
+  if (!Number.isFinite(sourceVersion) || sourceVersion > CURRENT_DATA_VERSION) {
+    throw new Error('Plik pochodzi z nowszej, nieobsługiwanej wersji GreekGod.')
+  }
+  if (!Array.isArray(candidate.templates) || !candidate.templates.length) {
+    throw new Error('Plik nie zawiera zapisanych szablonów treningowych.')
+  }
+  const identity = migrateExerciseIdentity(
+    candidate.templates,
+    candidate.workouts as Workout[],
+    Array.isArray(candidate.exerciseLibrary) ? candidate.exerciseLibrary : [],
+  )
   return {
     version: CURRENT_DATA_VERSION,
     dailyEntries: candidate.dailyEntries as DailyEntry[],
-    workouts: candidate.workouts as Workout[],
-    templates: Number(candidate.version ?? 0) < CURRENT_DATA_VERSION
-      ? upgradeBuiltInTemplates(Array.isArray(candidate.templates) && candidate.templates.length ? candidate.templates : DEFAULT_TEMPLATES, DEFAULT_TEMPLATES)
-      : (Array.isArray(candidate.templates) && candidate.templates.length ? candidate.templates : DEFAULT_TEMPLATES),
+    workouts: identity.workouts,
+    templates: identity.templates,
+    exerciseLibrary: identity.exerciseLibrary,
     settings: {
       ...DEFAULT_SETTINGS,
       ...(candidate.settings ?? {}),

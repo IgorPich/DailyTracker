@@ -4,8 +4,9 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { useApp } from '../context/AppContext'
-import type { Workout, WorkoutExercise, WorkoutSet } from '../types'
+import type { ExerciseDefinition, Workout, WorkoutExercise, WorkoutSet } from '../types'
 import { daysAgoIso, formatLongDate } from '../utils/date'
+import { canonicalExerciseId, normalizeExerciseName } from '../utils/exerciseIdentity'
 import { formatDecimal } from '../utils/numbers'
 import { formatGymName, formatSet, getBestSet, isEquipmentSensitive } from '../utils/workoutProgress'
 
@@ -15,7 +16,12 @@ type ProgressRange = '30' | '90' | '180' | 'all'
 interface ProgressOccurrence {
   workout: Workout
   exercise: WorkoutExercise
+  exercises: WorkoutExercise[]
   bestSet: WorkoutSet
+}
+
+interface ProgressExercise extends ExerciseDefinition {
+  label: string
 }
 
 const ALL_GYMS = '__all__'
@@ -29,18 +35,40 @@ const SERIES_COLORS = ['#30d158', '#2997ff', '#b8bec3', '#6f767d', '#7c9cff']
 
 export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => void }) {
   const { data } = useApp()
-  const exercises = useMemo(() => {
-    const byId = new Map<string, { id: string; name: string; equipmentSensitive: boolean }>()
-    ;[...data.workouts].sort((a, b) => b.date.localeCompare(a.date)).forEach((workout) => workout.exercises.forEach((exercise) => {
-      const current = byId.get(exercise.id)
-      byId.set(exercise.id, { id: exercise.id, name: current?.name ?? exercise.name, equipmentSensitive: Boolean(current?.equipmentSensitive || isEquipmentSensitive(exercise)) })
-    }))
-    data.templates.forEach((template) => template.exercises.forEach((exercise) => {
-      const current = byId.get(exercise.id)
-      byId.set(exercise.id, { id: exercise.id, name: exercise.name, equipmentSensitive: Boolean(current?.equipmentSensitive || exercise.equipmentSensitive || isEquipmentSensitive({ ...exercise, sets: [] })) })
-    }))
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))
-  }, [data.templates, data.workouts])
+  const exercises = useMemo<ProgressExercise[]>(() => {
+    const references = [
+      ...data.templates.flatMap((template) => template.exercises),
+      ...[...data.workouts].sort((a, b) => b.date.localeCompare(a.date)).flatMap((workout) => workout.exercises),
+    ]
+    const referencedIds = new Set(references.map(canonicalExerciseId))
+    const byId = new Map<string, ExerciseDefinition>()
+    data.exerciseLibrary.filter((definition) => referencedIds.has(definition.id)).forEach((definition) => byId.set(definition.id, definition))
+    references.forEach((exercise) => {
+      const id = canonicalExerciseId(exercise)
+      if (byId.has(id)) return
+      byId.set(id, {
+        id,
+        name: exercise.name,
+        equipmentSensitive: isEquipmentSensitive(exercise),
+      })
+    })
+    const sorted = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl') || a.id.localeCompare(b.id))
+    const nameCounts = sorted.reduce((counts, exercise) => {
+      const name = normalizeExerciseName(exercise.name)
+      counts.set(name, (counts.get(name) ?? 0) + 1)
+      return counts
+    }, new Map<string, number>())
+    const nameIndexes = new Map<string, number>()
+    return sorted.map((exercise) => {
+      const normalizedName = normalizeExerciseName(exercise.name)
+      const index = (nameIndexes.get(normalizedName) ?? 0) + 1
+      nameIndexes.set(normalizedName, index)
+      return {
+        ...exercise,
+        label: (nameCounts.get(normalizedName) ?? 0) > 1 ? `${exercise.name} · wariant ${index}` : exercise.name,
+      }
+    })
+  }, [data.exerciseLibrary, data.templates, data.workouts])
 
   const [exerciseId, setExerciseId] = useState(() => exercises.find((exercise) => exercise.id === 'bench-press')?.id ?? exercises[0]?.id ?? '')
   const [metric, setMetric] = useState<ProgressMetric>('weight')
@@ -49,14 +77,19 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
   const selectedExercise = exercises.find((exercise) => exercise.id === exerciseId) ?? exercises[0]
 
   useEffect(() => {
-    if (!selectedExercise && exercises[0]) setExerciseId(exercises[0].id)
-  }, [exercises, selectedExercise])
+    if (!exercises.some((exercise) => exercise.id === exerciseId) && exercises[0]) setExerciseId(exercises[0].id)
+  }, [exerciseId, exercises])
 
   const allOccurrences = useMemo<ProgressOccurrence[]>(() => data.workouts
-    .flatMap((workout) => workout.exercises
-      .filter((exercise) => exercise.id === selectedExercise?.id && !exercise.skipped)
-      .map((exercise) => ({ workout, exercise, bestSet: getBestSet(exercise) })))
-    .filter((item): item is ProgressOccurrence => Boolean(item.bestSet && item.exercise.sets.some(completeSet)))
+    .flatMap((workout) => {
+      const candidates = workout.exercises
+        .filter((exercise) => canonicalExerciseId(exercise) === selectedExercise?.id && !exercise.skipped)
+        .map((exercise) => ({ workout, exercise, bestSet: getBestSet(exercise) }))
+        .filter((item): item is Omit<ProgressOccurrence, 'exercises'> => Boolean(item.bestSet && item.exercise.sets.some(completeSet)))
+        .sort((left, right) => estimatedResult(right.bestSet) - estimatedResult(left.bestSet))
+      const best = candidates[0]
+      return best ? [{ ...best, exercises: candidates.map((item) => item.exercise) }] : []
+    })
     .sort((a, b) => a.workout.date.localeCompare(b.workout.date)), [data.workouts, selectedExercise?.id])
 
   const occurrenceGymNames = useMemo(() => [...new Set(
@@ -116,7 +149,7 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
     <PageHeader eyebrow="HISTORIA ĆWICZEŃ" title="Progres" description="Analizuj konkretne ćwiczenie w czasie, bez mieszania wyników z różnych maszyn." />
 
     <section className="card progress-controls">
-      <label className="field"><span>Ćwiczenie</span><select value={selectedExercise?.id ?? ''} onChange={(event) => setExerciseId(event.target.value)}>{exercises.map((exercise) => <option value={exercise.id} key={exercise.id}>{exercise.name}</option>)}</select></label>
+      <label className="field"><span>Ćwiczenie</span><select value={selectedExercise?.id ?? ''} onChange={(event) => setExerciseId(event.target.value)}>{exercises.map((exercise) => <option value={exercise.id} key={exercise.id}>{exercise.label}</option>)}</select></label>
       {selectedExercise?.equipmentSensitive && <label className="field"><span>Siłownia</span><select value={gymFilter} onChange={(event) => setGymFilter(event.target.value)}><option value={ALL_GYMS}>Wszystkie siłownie</option>{gymNames.map((gym) => <option value={gymToken(gym)} key={gym}>{gym}</option>)}{hasMissingGym && <option value={MISSING_GYM}>Nie podano</option>}</select></label>}
       <div className="progress-control-group"><span>Wyświetl</span><div className="segmented-control segmented-control--large"><button className={metric === 'weight' ? 'active' : ''} onClick={() => setMetric('weight')}>Ciężar</button><button className={metric === 'reps' ? 'active' : ''} onClick={() => setMetric('reps')}>Powtórzenia</button><button className={metric === 'estimated' ? 'active' : ''} onClick={() => setMetric('estimated')}>Szacowany wynik</button></div></div>
       <div className="progress-control-group"><span>Zakres czasu</span><div className="segmented-control segmented-control--large"><button className={range === '30' ? 'active' : ''} onClick={() => setRange('30')}>30 dni</button><button className={range === '90' ? 'active' : ''} onClick={() => setRange('90')}>90 dni</button><button className={range === '180' ? 'active' : ''} onClick={() => setRange('180')}>6 miesięcy</button><button className={range === 'all' ? 'active' : ''} onClick={() => setRange('all')}>Całość</button></div></div>
@@ -135,7 +168,7 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
         {chartData.length ? <div className="progress-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartData} margin={{ top: 18, right: 18, left: 0, bottom: 0 }}><CartesianGrid stroke="rgba(255,255,255,.055)" strokeDasharray="3 5" vertical={false} /><XAxis dataKey="label" stroke="#6f767d" tickLine={false} axisLine={false} minTickGap={28} /><YAxis domain={yDomain} stroke="#6f767d" tickLine={false} axisLine={false} width={55} tickFormatter={(value) => formatDecimal(Number(value), metric === 'reps' ? 0 : 2)} /><Tooltip content={<ProgressTooltip metric={metric} />} cursor={{ stroke: 'rgba(255,255,255,.12)', strokeDasharray: '3 3' }} />{selectedExercise.equipmentSensitive && gymFilter === ALL_GYMS ? displayedGymSeries.map((gym, index) => <Line key={gym.key} type="monotone" dataKey={gym.key} name={gym.label} stroke={SERIES_COLORS[index % SERIES_COLORS.length]} strokeWidth={2.4} dot={{ r: 3.5, fill: SERIES_COLORS[index % SERIES_COLORS.length], strokeWidth: 0 }} connectNulls />) : <Line type="monotone" dataKey="value" stroke="#30d158" strokeWidth={2.7} dot={{ r: 3.5, fill: '#30d158', strokeWidth: 0 }} />}</LineChart></ResponsiveContainer></div> : <EmptyState icon={BarChart3} title="Brak wyników w tym zakresie" description="Zapisz serie tego ćwiczenia albo wybierz dłuższy zakres czasu." />}
       </section>
 
-      <section className="card progress-history"><div className="card-heading"><div><span className="section-kicker">SZCZEGÓŁY</span><h2>Historia ćwiczenia</h2></div><strong>{occurrences.length}</strong></div>{occurrences.length ? <div className="progress-history__list">{[...occurrences].reverse().map((occurrence) => <button type="button" key={`${occurrence.workout.id}-${occurrence.exercise.id}`} onClick={() => onOpenWorkout(occurrence.workout.id)}><div><strong>{formatLongDate(occurrence.workout.date)}</strong>{selectedExercise.equipmentSensitive && <small><MapPin size={12} /> {formatGymName(occurrence.workout.gymLocation)}</small>}</div><span>{occurrence.exercise.sets.filter(completeSet).map(formatSet).join('   ')}</span><small>Zobacz trening</small></button>)}</div> : <div className="history-empty"><Dumbbell size={22} /><p>Jeszcze brak historii</p><span>Wyniki pojawią się tutaj po zapisaniu treningu.</span></div>}</section>
+      <section className="card progress-history"><div className="card-heading"><div><span className="section-kicker">SZCZEGÓŁY</span><h2>Historia ćwiczenia</h2></div><strong>{occurrences.length}</strong></div>{occurrences.length ? <div className="progress-history__list">{[...occurrences].reverse().map((occurrence) => <button type="button" key={occurrence.workout.id} onClick={() => onOpenWorkout(occurrence.workout.id)}><div><strong>{formatLongDate(occurrence.workout.date)}</strong>{selectedExercise.equipmentSensitive && <small><MapPin size={12} /> {formatGymName(occurrence.workout.gymLocation)}</small>}</div><span>{occurrence.exercises.map((exercise) => exercise.sets.filter(completeSet).map(formatSet).join('   ')).filter(Boolean).join('   |   ')}</span><small>Zobacz trening</small></button>)}</div> : <div className="history-empty"><Dumbbell size={22} /><p>Jeszcze brak historii</p><span>Wyniki pojawią się tutaj po zapisaniu treningu.</span></div>}</section>
     </>}
   </div>
 }
@@ -143,5 +176,5 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
 function ProgressTooltip({ active, payload, metric }: { active?: boolean; payload?: Array<{ payload?: { occurrence?: ProgressOccurrence } }>; metric: ProgressMetric }) {
   const occurrence = payload?.find((item) => item.payload?.occurrence)?.payload?.occurrence
   if (!active || !occurrence) return null
-  return <div className="chart-tooltip progress-tooltip"><strong>{formatLongDate(occurrence.workout.date)}</strong><span>{occurrence.exercise.name}</span><small>{formatGymName(occurrence.workout.gymLocation)}</small><div>{occurrence.exercise.sets.filter(completeSet).map((set, index) => <p key={set.id}>{index + 1}. {formatSet(set)}</p>)}</div>{metric === 'estimated' && <em>Szacowany wynik: {formatDecimal(estimatedResult(occurrence.bestSet))}</em>}</div>
+  return <div className="chart-tooltip progress-tooltip"><strong>{formatLongDate(occurrence.workout.date)}</strong><span>{occurrence.workout.templateCode} — {occurrence.workout.templateName}</span><small>{formatGymName(occurrence.workout.gymLocation)}</small><div>{occurrence.exercises.flatMap((exercise, exerciseIndex) => exercise.sets.filter(completeSet).map((set, setIndex) => <p key={set.id}>{occurrence.exercises.length > 1 ? `${exerciseIndex + 1}.` : ''}{setIndex + 1}. {formatSet(set)}</p>))}</div>{metric === 'estimated' && <em>Szacowany wynik: {formatDecimal(estimatedResult(occurrence.bestSet))}</em>}</div>
 }

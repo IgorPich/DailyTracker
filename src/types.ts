@@ -24,6 +24,7 @@ export interface WorkoutSet {
 
 export interface WorkoutExercise {
   id: string
+  exerciseId?: string
   name: string
   prescription?: string
   sets: WorkoutSet[]
@@ -47,6 +48,7 @@ export interface Workout {
 
 export interface TemplateExercise {
   id: string
+  exerciseId?: string
   name: string
   prescription: string
   defaultSets: number
@@ -58,6 +60,13 @@ export interface TrainingTemplate {
   code: 'A' | 'B' | 'C' | 'D'
   name: string
   exercises: TemplateExercise[]
+}
+
+export interface ExerciseDefinition {
+  id: string
+  name: string
+  equipmentSensitive: boolean
+  aliases?: string[]
 }
 
 export interface Settings {
@@ -81,6 +90,7 @@ export interface AppData {
   dailyEntries: DailyEntry[]
   workouts: Workout[]
   templates: TrainingTemplate[]
+  exerciseLibrary: ExerciseDefinition[]
   settings: Settings
   coachNotes: Record<string, string>
 }

@@ -1,4 +1,5 @@
 import type { WorkoutExercise, WorkoutSet } from '../types'
+import { canonicalExerciseId } from './exerciseIdentity'
 import { formatDecimal } from './numbers'
 
 export interface ProgressResult {
@@ -41,8 +42,10 @@ const BUILTIN_EQUIPMENT_SENSITIVE_IDS = new Set([
   'cable-crunch-d',
 ])
 
-export const isEquipmentSensitive = (exercise?: WorkoutExercise) => Boolean(
-  exercise && (exercise.equipmentSensitive ?? BUILTIN_EQUIPMENT_SENSITIVE_IDS.has(exercise.id)),
+export const isEquipmentSensitive = (exercise?: Pick<WorkoutExercise, 'id' | 'exerciseId' | 'equipmentSensitive'>) => Boolean(
+  exercise && (exercise.equipmentSensitive ?? (
+    BUILTIN_EQUIPMENT_SENSITIVE_IDS.has(canonicalExerciseId(exercise)) || BUILTIN_EQUIPMENT_SENSITIVE_IDS.has(exercise.id)
+  )),
 )
 
 export const prescriptionRepRange = (prescription?: string): RepRange | undefined => {
@@ -89,9 +92,7 @@ export const equipmentComparisonIssue = (
   previousGymLocation?: string,
 ): ProgressResult | undefined => {
   if (!current || !previous) return undefined
-  const equipmentSensitive = current.equipmentSensitive
-    ?? previous.equipmentSensitive
-    ?? (isEquipmentSensitive(current) || isEquipmentSensitive(previous))
+  const equipmentSensitive = isEquipmentSensitive(current) || isEquipmentSensitive(previous)
   if (!equipmentSensitive) return undefined
   const currentGym = normalizedGymName(currentGymLocation)
   const previousGym = normalizedGymName(previousGymLocation)

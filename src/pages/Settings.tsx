@@ -22,6 +22,7 @@ import { TemplateEditor } from '../components/TemplateEditor'
 import { useApp } from '../context/AppContext'
 import { useToast } from '../context/ToastContext'
 import { confirmAction, isDesktopApp, pickJsonText } from '../services/fileService'
+import { storageService } from '../services/storageService'
 import type { Phase, TrainingTemplate } from '../types'
 import { phaseLabel } from '../utils/labels'
 import { exportCsv, exportJson, normalizeData } from '../utils/storage'
@@ -86,6 +87,7 @@ export function Settings() {
       const imported = normalizeData(JSON.parse(contents))
       const confirmed = await confirmAction(`Import zastąpi obecne dane (${data.dailyEntries.length} wpisów i ${data.workouts.length} treningów). Ponowny import nie zostanie scalony z aktualnymi danymi. Kontynuować?`, 'Import kopii zapasowej GreekGod')
       if (!confirmed) return
+      await storageService.backupBeforeImport(data)
       replaceData(imported)
       setMessage(null)
       showToast('Dane zaimportowane')
@@ -202,7 +204,7 @@ export function Settings() {
           <button className="button button--danger" onClick={resetAll}><Trash2 size={16} /> Wyczyść dane</button>
         </section>
       </div>
-      {editingTemplate && <TemplateEditor template={editingTemplate} onSave={(template) => { updateTemplate(template); showToast('Szablon zapisany') }} onClose={() => setEditingTemplate(null)} />}
+      {editingTemplate && <TemplateEditor template={editingTemplate} exerciseLibrary={data.exerciseLibrary} onSave={(template) => { updateTemplate(template); showToast('Szablon zapisany') }} onClose={() => setEditingTemplate(null)} />}
     </div>
   )
 }

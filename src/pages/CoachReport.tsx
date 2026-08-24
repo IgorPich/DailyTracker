@@ -22,7 +22,9 @@ import { useToast } from '../context/ToastContext'
 import { savePngDataUrl } from '../services/fileService'
 import { average, entriesBetween, formatInteger, formatNumber, latestMeasurement, signed, waistChange, weightChartData, windowFor, workoutsBetween } from '../utils/calculations'
 import { formatLongDate, formatShortDate, isoToday, parseDate } from '../utils/date'
+import { canonicalExerciseId, exerciseDefinitionFor } from '../utils/exerciseIdentity'
 import { phaseLabel } from '../utils/labels'
+import { exerciseOccurrencesByWorkout } from '../utils/workoutData'
 import { compareExercises, formatGymName, formatSet, getBestSet } from '../utils/workoutProgress'
 
 type Period = '7' | '14' | 'custom'
@@ -31,10 +33,10 @@ const keyExercises = [
   { label: 'Wyciskanie sztangi na ławce', short: 'Wyciskanie sztangi', ids: ['bench-press'] },
   { label: 'Wyciskanie hantli na skosie', short: 'Wyciskanie hantli', ids: ['incline-dumbbell-press'] },
   { label: 'Podciąganie', short: 'Podciąganie', ids: ['pull-up'] },
-  { label: 'Wiosło na wyciągu', short: 'Wiosło na wyciągu', ids: ['chest-supported-row', 'machine-row'] },
+  { label: 'Wiosło na wyciągu', short: 'Wiosło na wyciągu', ids: ['chest-supported-row'] },
   { label: 'Przysiad na hack-maszynie', short: 'Hack-maszyna', ids: ['hack-squat'] },
   { label: 'Martwy ciąg rumuński', short: 'Martwy ciąg rumuński', ids: ['romanian-deadlift'] },
-  { label: 'Unoszenie ramion bokiem', short: 'Unoszenie bokiem', ids: ['lateral-raise-machine', 'lateral-raise-cable'] },
+  { label: 'Unoszenie ramion bokiem', short: 'Unoszenie bokiem', ids: ['lateral-raise-machine'] },
 ]
 
 const reportRangeLabel = (from: string, to: string) => {
@@ -92,19 +94,30 @@ export function CoachReport() {
   const waistData = useMemo(() => periodEntries.filter((entry) => typeof entry.waist === 'number').map((entry) => ({ date: entry.date, label: entry.date.slice(5).replace('-', '.'), waist: entry.waist })), [periodEntries])
 
   const exerciseRows = keyExercises.map((keyExercise) => {
-    const occurrences = [...data.workouts]
-      .filter((workout) => workout.date <= range.to)
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .flatMap((workout) => workout.exercises.filter((exercise) => keyExercise.ids.includes(exercise.id) && !exercise.skipped && exercise.sets.length).map((exercise) => ({ workout, exercise })))
+    const occurrences = exerciseOccurrencesByWorkout(
+      [...data.workouts]
+        .filter((workout) => workout.date <= range.to)
+        .sort((a, b) => b.date.localeCompare(a.date)),
+      (exercise) => keyExercise.ids.includes(canonicalExerciseId(exercise)),
+      (exercise) => Boolean(exerciseDefinitionFor(data.exerciseLibrary, exercise)?.equipmentSensitive || exercise.equipmentSensitive),
+    )
     const current = occurrences[0]
     const previous = occurrences[1]
+    const currentForComparison = current ? {
+      ...current.exercise,
+      equipmentSensitive: Boolean(exerciseDefinitionFor(data.exerciseLibrary, current.exercise)?.equipmentSensitive || current.exercise.equipmentSensitive),
+    } : undefined
+    const previousForComparison = previous ? {
+      ...previous.exercise,
+      equipmentSensitive: Boolean(exerciseDefinitionFor(data.exerciseLibrary, previous.exercise)?.equipmentSensitive || previous.exercise.equipmentSensitive),
+    } : undefined
     return {
       ...keyExercise,
       current,
       previous,
       currentSet: current ? getBestSet(current.exercise) : undefined,
       previousSet: previous ? getBestSet(previous.exercise) : undefined,
-      change: compareExercises(current?.exercise, previous?.exercise, current?.workout.gymLocation, previous?.workout.gymLocation),
+      change: compareExercises(currentForComparison, previousForComparison, current?.workout.gymLocation, previous?.workout.gymLocation),
     }
   })
 

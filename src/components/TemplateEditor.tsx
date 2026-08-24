@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, Plus, Save, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
 import { confirmAction } from '../services/fileService'
-import type { TemplateExercise, TrainingTemplate } from '../types'
+import type { ExerciseDefinition, TemplateExercise, TrainingTemplate } from '../types'
+import { canonicalExerciseId, exerciseDefinitionFor, findExerciseDefinitionByName, matchingExerciseDefinitionsByName, normalizeExerciseName } from '../utils/exerciseIdentity'
 import { createId } from '../utils/id'
 import { moveExercise } from '../utils/workoutData'
 import { prescriptionRepRange } from '../utils/workoutProgress'
@@ -9,13 +10,22 @@ import { prescriptionRepRange } from '../utils/workoutProgress'
 const rangeFor = (exercise: TemplateExercise) => prescriptionRepRange(exercise.prescription) ?? { min: 6, max: 10 }
 const prescriptionFor = (sets: number, min: number, max: number) => `${sets} × ${min}–${max}`
 
-export function TemplateEditor({ template, initialExerciseId, onSave, onClose }: {
+export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, onSave, onClose }: {
   template: TrainingTemplate
+  exerciseLibrary: ExerciseDefinition[]
   initialExerciseId?: string
   onSave: (template: TrainingTemplate) => void
   onClose: () => void
 }) {
-  const [draft, setDraft] = useState<TrainingTemplate>(() => structuredClone(template))
+  const [draft, setDraft] = useState<TrainingTemplate>(() => ({
+    ...structuredClone(template),
+    exercises: template.exercises.map((exercise) => ({
+      ...structuredClone(exercise),
+      exerciseId: canonicalExerciseId(exercise),
+      equipmentSensitive: exerciseDefinitionFor(exerciseLibrary, exercise)?.equipmentSensitive ?? exercise.equipmentSensitive,
+    })),
+  }))
+  const [draftLibrary, setDraftLibrary] = useState<ExerciseDefinition[]>(() => structuredClone(exerciseLibrary))
   const [newName, setNewName] = useState('')
   const [newSets, setNewSets] = useState(3)
   const [newMin, setNewMin] = useState(8)
@@ -53,20 +63,54 @@ export function TemplateEditor({ template, initialExerciseId, onSave, onClose }:
     if (confirmed) setDraft((current) => ({ ...current, exercises: current.exercises.filter((item) => item.id !== exercise.id) }))
   }
 
+  const replaceExercise = (exercise: TemplateExercise) => {
+    const query = window.prompt('Wpisz dokładną nazwę lub ID ćwiczenia z globalnej biblioteki:', exercise.name)?.trim()
+    if (!query) return
+    const definition = findExerciseDefinitionByName(draftLibrary, query)
+      ?? draftLibrary.find((item) => item.id === query)
+    if (!definition) {
+      window.alert('Nie znaleziono jednej takiej pozycji w bibliotece. Nowe ćwiczenie dodaj w sekcji poniżej.')
+      return
+    }
+    if (definition.id === canonicalExerciseId(exercise)) return
+    updateExercise(exercise.id, {
+      exerciseId: definition.id,
+      name: definition.name,
+      equipmentSensitive: definition.equipmentSensitive,
+    })
+  }
+
   const addExercise = () => {
     const name = newName.trim()
     if (!name) return
+    const matches = matchingExerciseDefinitionsByName(draftLibrary, name)
+    if (matches.length > 1) {
+      window.alert('Ta nazwa należy do kilku odrębnych ćwiczeń. Użyj przycisku „Zamień ćwiczenie”, aby wskazać konkretną pozycję.')
+      return
+    }
     if (newMin > newMax) {
       window.alert('Dolny zakres powtórzeń nie może być większy od górnego.')
       return
     }
     const safePosition = Number.isFinite(newPosition) ? newPosition : draft.exercises.length + 1
+    const existingDefinition = matches[0]
+    const definition: ExerciseDefinition = existingDefinition ?? {
+      id: `exercise-${createId()}`,
+      name,
+      equipmentSensitive: newSensitive,
+    }
+    if (draft.exercises.some((exercise) => canonicalExerciseId(exercise) === definition.id)) {
+      window.alert('To ćwiczenie jest już w tym szablonie.')
+      return
+    }
+    if (!existingDefinition) setDraftLibrary((current) => [...current, definition])
     const exercise: TemplateExercise = {
       id: `custom-${createId()}`,
-      name,
+      exerciseId: definition.id,
+      name: definition.name,
       defaultSets: Math.max(1, Math.round(newSets)),
       prescription: prescriptionFor(Math.max(1, Math.round(newSets)), Math.max(1, Math.round(newMin)), Math.max(1, Math.round(newMax))),
-      ...(newSensitive ? { equipmentSensitive: true } : {}),
+      equipmentSensitive: definition.equipmentSensitive,
     }
     setDraft((current) => {
       const exercises = [...current.exercises]
@@ -93,6 +137,20 @@ export function TemplateEditor({ template, initialExerciseId, onSave, onClose }:
       window.alert('Dolny zakres powtórzeń nie może być większy od górnego.')
       return
     }
+    const finalNameOwners = new Map<string, string>()
+    const renameCollision = draft.exercises.find((exercise) => {
+      const exerciseId = canonicalExerciseId(exercise)
+      const normalizedName = normalizeExerciseName(exercise.name)
+      const draftOwner = finalNameOwners.get(normalizedName)
+      if (draftOwner !== undefined && draftOwner !== exerciseId) return true
+      finalNameOwners.set(normalizedName, exerciseId)
+      return matchingExerciseDefinitionsByName(draftLibrary, exercise.name)
+        .some((definition) => definition.id !== exerciseId)
+    })
+    if (renameCollision) {
+      window.alert(`Nazwa „${renameCollision.name.trim()}” należy już do innego ćwiczenia. Użyj operacji „Zamień ćwiczenie”.`)
+      return
+    }
     onSave({ ...draft, exercises: draft.exercises.map((exercise) => ({ ...exercise, name: exercise.name.trim() })) })
     onClose()
   }
@@ -110,7 +168,7 @@ export function TemplateEditor({ template, initialExerciseId, onSave, onClose }:
           <label className="field"><span>Powt. od</span><input type="number" min="1" max="100" value={range.min} onChange={(event) => updateRange(exercise, 'min', Number(event.target.value))} /></label>
           <label className="field"><span>Powt. do</span><input type="number" min="1" max="100" value={range.max} onChange={(event) => updateRange(exercise, 'max', Number(event.target.value))} /></label>
           <label className="checkbox-field template-editor__sensitive"><input type="checkbox" checked={Boolean(exercise.equipmentSensitive)} onChange={(event) => updateExercise(exercise.id, { equipmentSensitive: event.target.checked })} /><span>Wynik zależy od maszyny / siłowni</span></label>
-          <div className="template-editor__actions"><button type="button" className="icon-button" disabled={index === 0} onClick={() => reorder(exercise.id, -1)} aria-label="Przenieś wyżej"><ArrowUp size={16} /></button><button type="button" className="icon-button" disabled={index === draft.exercises.length - 1} onClick={() => reorder(exercise.id, 1)} aria-label="Przenieś niżej"><ArrowDown size={16} /></button><button type="button" className="icon-button icon-button--danger" onClick={() => void remove(exercise)} aria-label="Usuń z szablonu"><Trash2 size={16} /></button></div>
+          <div className="template-editor__actions"><button type="button" className="icon-button" onClick={() => replaceExercise(exercise)} aria-label="Zamień ćwiczenie" title="Zamień ćwiczenie"><RefreshCw size={16} /></button><button type="button" className="icon-button" disabled={index === 0} onClick={() => reorder(exercise.id, -1)} aria-label="Przenieś wyżej"><ArrowUp size={16} /></button><button type="button" className="icon-button" disabled={index === draft.exercises.length - 1} onClick={() => reorder(exercise.id, 1)} aria-label="Przenieś niżej"><ArrowDown size={16} /></button><button type="button" className="icon-button icon-button--danger" onClick={() => void remove(exercise)} aria-label="Usuń z szablonu"><Trash2 size={16} /></button></div>
         </article>
       })}</div>
 

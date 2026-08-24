@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Edit3, NotebookPen, Plus, Save, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Edit3, NotebookPen, Plus, Save, Trash2, X } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { DecimalInput } from '../components/DecimalInput'
 import { useApp } from '../context/AppContext'
@@ -21,6 +21,7 @@ const quickFields: FieldDefinition[] = [
   { key: 'calories', label: 'Kalorie', unit: 'kcal', step: '1', priority: true },
   { key: 'protein', label: 'Białko', unit: 'g', step: '1', priority: true },
   { key: 'carbs', label: 'Węglowodany', unit: 'g', step: '1', priority: true },
+  { key: 'fat', label: 'Tłuszcz', unit: 'g', step: '1', priority: true },
   { key: 'steps', label: 'Kroki', step: '1', priority: true },
 ]
 
@@ -29,7 +30,6 @@ export function Journal() {
   const { showToast } = useToast()
   const [draft, setDraft] = useState<DailyEntry>(emptyEntry)
   const [editing, setEditing] = useState(false)
-  const [moreOpen, setMoreOpen] = useState(false)
   const [sortNewest, setSortNewest] = useState(true)
 
   const sortedEntries = useMemo(() => [...data.dailyEntries].sort((a, b) => sortNewest ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)), [data.dailyEntries, sortNewest])
@@ -39,7 +39,6 @@ export function Journal() {
   const reset = () => {
     setDraft(emptyEntry())
     setEditing(false)
-    setMoreOpen(false)
   }
 
   const submit = (event: FormEvent) => {
@@ -52,7 +51,6 @@ export function Journal() {
   const editEntry = (entry: DailyEntry) => {
     setDraft({ ...entry })
     setEditing(true)
-    setMoreOpen(entry.fat !== undefined)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -91,9 +89,6 @@ export function Journal() {
             </label>
           ))}
         </div>
-
-        <button className="more-data-toggle" type="button" onClick={() => setMoreOpen((current) => !current)} aria-expanded={moreOpen}>Więcej danych {moreOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</button>
-        {moreOpen && <div className="more-data-panel"><label className="field"><span>Tłuszcz <em>opcjonalnie</em></span><div className="input-with-unit"><DecimalInput min={0} placeholder="—" value={draft.fat} onValueChange={(value) => setNumber('fat', value)} /><span>g</span></div></label></div>}
 
         <label className="field journal-note"><span>Notatka <em>opcjonalnie</em></span><textarea rows={2} placeholder="Sen, samopoczucie, późny posiłek…" value={draft.note ?? ''} onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} /></label>
         <div className="form-footer"><p>Brakujące pola nie są liczone jako zero.</p><button className="button button--primary" type="submit">{editing ? <Save size={17} /> : <Plus size={17} />} {editing ? 'Zapisz zmiany' : 'Zapisz wpis'}</button></div>

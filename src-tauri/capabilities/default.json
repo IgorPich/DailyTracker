@@ -8,6 +8,12 @@
     "store:default",
     "dialog:default",
     "fs:default",
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [
+        { "path": "$APPDATA/formlog.store.json" }
+      ]
+    },
     "fs:allow-read-text-file",
     "fs:allow-write-text-file",
     "fs:allow-write-file"

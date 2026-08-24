@@ -735,12 +735,9 @@ input:focus, select:focus, textarea:focus { background: rgba(255,255,255,.058); 
 /* Journal v2 */
 
 .daily-form-v2 { padding: 22px; }
-.quick-entry-grid { display: grid; grid-template-columns: 1.18fr repeat(6,minmax(80px,1fr)); gap: 10px; margin: 21px 0 12px; }
+.quick-entry-grid { display: grid; grid-template-columns: 1.18fr repeat(7,minmax(80px,1fr)); gap: 10px; margin: 21px 0 12px; }
 .quick-entry-grid .field--priority .input-with-unit input { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); }
 .quick-entry-grid .field--priority > span { color: #d0d5d8; }
-.more-data-toggle { min-height: 35px; display: inline-flex; align-items: center; gap: 6px; padding: 0; color: #80888f; background: transparent; border: 0; font-size: .65rem; font-weight: 620; cursor: pointer; }
-.more-data-toggle:hover { color: #c7cdd1; }
-.more-data-panel { width: min(180px,100%); padding: 12px; margin-bottom: 12px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.055); border-radius: 12px; animation: soft-reveal 150ms ease-out; }
 .journal-note { margin-top: 4px; }
 .daily-form-v2 .form-footer { margin-top: 17px; }
 .history-card { border-radius: 16px; }

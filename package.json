@@ -1,11 +1,12 @@
 {
   "name": "greekgod",
   "private": true,
-  "version": "2.5.0",
+  "version": "2.6.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
