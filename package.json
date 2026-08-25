@@ -3,35 +3,20 @@
   "private": true,
   "version": "2.6.1",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "test": "npm run test:identity && npm run test:dev-storage",
-    "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
-    "test:dev-storage": "node scripts/development-storage-config.test.mjs",
-    "audit:store": "node --experimental-strip-types scripts/live-store-audit.ts --read-only",
-    "preview": "vite preview",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
-    "tauri:build": "tauri build"
-  },
-  "dependencies": {
-    "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-dialog": "^2.7.2",
-    "@tauri-apps/plugin-fs": "^2.5.1",
-    "@tauri-apps/plugin-store": "^2.4.4",
-    "html-to-image": "^1.11.13",
-    "lucide-react": "^1.31.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "recharts": "^3.10.1"
-  },
-  "devDependencies": {
-    "@tauri-apps/cli": "^2.11.4",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^6.0.5",
-    "typescript": "^7.0.2",
-    "vite": "^8.2.1"
+    "dev": "npm run dev --workspace @greekgod/desktop --",
+    "build": "npm run build --workspace @greekgod/desktop",
+    "test": "npm test --workspace @greekgod/desktop",
+    "test:identity": "npm run test:identity --workspace @greekgod/desktop",
+    "test:dev-storage": "npm run test:dev-storage --workspace @greekgod/desktop",
+    "audit:store": "npm run audit:store --workspace @greekgod/desktop",
+    "preview": "npm run preview --workspace @greekgod/desktop --",
+    "tauri": "npm run tauri --workspace @greekgod/desktop --",
+    "tauri:dev": "npm run tauri:dev --workspace @greekgod/desktop --",
+    "tauri:build": "npm run tauri:build --workspace @greekgod/desktop --"
   }
 }

@@ -21,6 +21,7 @@ Nie ma logowania, backendu, synchronizacji ani zależności od internetu podczas
 ## Przechowywanie i migracja danych
 
 - Aplikacja Windows zapisuje dane lokalnie w Tauri Store: `%APPDATA%\com.igorpich.formlog\formlog.store.json`.
+- Tryb Tauri dev zapisuje dane osobno: `%APPDATA%\com.igorpich.formlog.dev\formlog.store.json`.
 - Wersja przeglądarkowa nadal korzysta z `localStorage` pod kluczem `formlog.data.v1`.
 - Powyższe legacy identyfikatory celowo nie zostały zmienione przy zmianie nazwy na GreekGod, dzięki czemu istniejące dane są odczytywane bez migracji i resetu.
 - Dane przeglądarki i aplikacji desktopowej są oddzielne i nie migrują automatycznie.
@@ -62,28 +63,24 @@ Build najpierw tworzy statyczny frontend Vite, osadza go w aplikacji i nie uruch
 
 Wyniki:
 
-- samodzielny plik: `src-tauri/target/release/greekgod.exe`,
-- zalecany instalator: `src-tauri/target/release/bundle/nsis/GreekGod_2.6.1_x64-setup.exe`,
-- instalatory MSI: `src-tauri/target/release/bundle/msi/GreekGod_2.6.1_x64_pl-PL.msi` i `GreekGod_2.6.1_x64_en-US.msi`.
+- samodzielny plik: `apps/desktop/src-tauri/target/release/greekgod.exe`,
+- zalecany instalator: `apps/desktop/src-tauri/target/release/bundle/nsis/GreekGod_2.6.1_x64-setup.exe`,
+- instalatory MSI: `apps/desktop/src-tauri/target/release/bundle/msi/GreekGod_2.6.1_x64_pl-PL.msi` i `GreekGod_2.6.1_x64_en-US.msi`.
 
 Do normalnej instalacji uruchom plik `GreekGod_2.6.1_x64-setup.exe`. Instalator działa dla bieżącego użytkownika i dodaje GreekGod do menu Start oraz skrót na pulpicie. Kliknięcie systemowego `X` kończy aplikację — projekt nie zawiera ikony w zasobniku, autostartu ani zadań w tle.
 
 ## Struktura
 
 ```text
-src/
-├── assets/           # logo i źródłowa ikona aplikacji
-├── components/       # współdzielone elementy UI
-├── context/          # stan aplikacji i toasty
-├── data/             # domyślne szablony treningowe A–D
-├── pages/            # Panel, Dziennik, Trening, Raport dla trenera, Ustawienia
-├── services/         # storage oraz natywne dialogi i pliki
-├── utils/            # daty, obliczenia, normalizacja i identyfikatory
-└── styles.css         # kompletny responsywny wygląd
+apps/
+└── desktop/
+    ├── src/              # React UI, stan, dane, serwisy i narzędzia wersji 2.6.1
+    ├── scripts/          # testy deterministyczne, fixture'y i audyt Store
+    └── src-tauri/
+        ├── capabilities/ # uprawnienia Store, dialogów i plików
+        ├── icons/        # ikony Windows i pozostałych targetów Tauri
+        ├── src/          # natywny punkt startowy i obsługa zamknięcia
+        └── tauri.conf.json
 
-src-tauri/
-├── capabilities/     # uprawnienia Store, dialogów i plików
-├── icons/            # ikony Windows i pozostałych targetów Tauri
-├── src/              # natywny punkt startowy i obsługa zamknięcia
-└── tauri.conf.json    # okno, metadata i bundlery NSIS/MSI
+package.json              # koordynator npm workspaces; polecenia deleguje do desktopu
 ```

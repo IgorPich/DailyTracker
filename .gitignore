@@ -7,3 +7,6 @@ dist/
 Thumbs.db
 src-tauri/target/
 src-tauri/gen/schemas/
+apps/*/dist/
+apps/*/src-tauri/target/
+apps/*/src-tauri/gen/schemas/
