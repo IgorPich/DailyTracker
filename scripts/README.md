@@ -9,3 +9,7 @@ Nie zawiera oczekiwań dotyczących prywatnych identyfikatorów, nazw siłowni a
 
 Fixture'y muszą pozostać całkowicie syntetyczne. Nie kopiujemy do repozytorium zrzutów ani rekordów
 z prawdziwego Store użytkownika.
+
+`npm run test:dev-storage` pilnuje, aby Tauri dev używał osobnego identyfikatora aplikacji.
+Oficjalnym sposobem uruchamiania desktopu w trybie developerskim jest `npm run tauri:dev`;
+bezpośrednie `tauri dev` omija nakładkę izolującą dane.

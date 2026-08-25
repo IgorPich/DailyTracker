@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "npm run test:identity",
+    "test": "npm run test:identity && npm run test:dev-storage",
     "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
+    "test:dev-storage": "node scripts/development-storage-config.test.mjs",
     "audit:store": "node --experimental-strip-types scripts/live-store-audit.ts --read-only",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
+    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "tauri build"
   },
   "dependencies": {
