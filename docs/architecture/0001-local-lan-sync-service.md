@@ -54,6 +54,22 @@ Preferowany mechanizm startu to zadanie Harmonogramu zadań Windows z triggerem 
 
 Termin „Sync Service” oznacza rolę procesu. Nie wymaga w pierwszej wersji rejestracji w Windows Service Control Manager.
 
+### Aktualizacja razem z aplikacją desktopową
+
+Sync Service jest częścią tego samego wydania i instalatora co GreekGod Desktop. Instalator nie może pozostawić starszego procesu działającego obok nowszej aplikacji.
+
+Aktualizacja wykonuje kontrolowaną sekwencję:
+
+1. zatrzymuje przyjmowanie nowych operacji i kończy aktywną transakcję;
+2. zatrzymuje dokładnie proces Sync Service należący do instalowanej wersji;
+3. podmienia binary oraz wymagane pliki w sposób możliwy do wycofania;
+4. aktualizuje definicję autostartu, jeżeli jest to wymagane;
+5. uruchamia nowy Sync Service;
+6. sprawdza health endpoint, `serviceVersion` i `protocolVersion`;
+7. w razie niepowodzenia zachowuje bazę nietkniętą i przywraca poprzedni działający binary albo zgłasza czytelny błąd instalacji.
+
+Wersja binary Sync Service jest przypisana do wydania desktopowego, ale kompatybilność synchronizacji nadal wynika z jawnego version handshake, a nie z porównania samych numerów aplikacji.
+
 ## Discovery i pairing
 
 Pierwsze parowanie:
@@ -85,6 +101,20 @@ Zmiana adresu DHCP nie wymaga ponownego parowania. Ustawienia pozwolą usunąć 
 - router nie musi mieć dostępu do Internetu.
 
 Discovery może ujawnić jedynie nazwę usługi, wersję protokołu, port i `serviceId`. Nie ujawnia danych użytkownika ani nie pozwala wykonać synchronizacji.
+
+## Version handshake
+
+Przed wysłaniem lub przyjęciem jakiejkolwiek operacji obie strony wymieniają co najmniej:
+
+- `appVersion`;
+- `serviceVersion` po stronie PC;
+- `protocolVersion`;
+- `schemaVersion` lokalnej bazy;
+- minimalny i maksymalny obsługiwany zakres protokołu/schematu, jeżeli obsługujemy więcej niż jedną wersję.
+
+Sync rozpoczyna się wyłącznie po potwierdzeniu kompatybilności. Przy niezgodności service zwraca stabilny błąd `incompatible_protocol` albo `incompatible_schema`, a aplikacja pokazuje komunikat o wymaganej aktualizacji.
+
+Niekompatybilna strona nie może częściowo wysłać, zastosować ani potwierdzić zmian. Lokalna baza oraz pending outbox pozostają nietknięte.
 
 ## Protokół synchronizacji
 
@@ -130,6 +160,23 @@ Wymagania:
 
 Wymagana jest wersja SQLite zawierająca poprawkę współbieżnego WAL-reset. Jeżeli używana biblioteka nie ma poprawki, zapis desktop UI i Sync Service musi zostać zserializowany wspólną blokadą międzyprocesową albo przeprowadzony przez jednego writera do czasu aktualizacji biblioteki.
 
+### Bramka testowa dla dwóch writerów
+
+Nie wprowadzamy prewencyjnie serializacji zapisów ani architektury single-writer.
+
+Przed dopuszczeniem dwóch procesów do produkcyjnej bazy wykonujemy test przeciążeniowy, w którym Desktop i Sync Service równolegle realizują setki lub tysiące kontrolowanych operacji:
+
+- insert nowych treningów i DailyEntry;
+- update istniejących rekordów;
+- tombstones/usunięcia;
+- retry tych samych `operationId`;
+- krótkie transakcje nakładające się w czasie;
+- restart jednego procesu w trakcie obciążenia.
+
+Po każdej serii test sprawdza `PRAGMA integrity_check`, kompletność oczekiwanych rekordów, brak duplikatów, monotoniczne revisions, poprawność tombstones i brak utraconych aktualizacji. Kontrolowane `SQLITE_BUSY` może być ponowione wewnętrznie, ale nie może powodować utraty danych ani wyciekać jako normalny błąd użytkownika.
+
+Jeżeli wspierana wersja SQLite i konfiguracja WAL przechodzą test stabilnie, pozostają dwa bezpośrednie writery. Dopiero potwierdzona porażka tej bramki uzasadnia wspólną blokadę międzyprocesową lub model pojedynczego writera.
+
 ## Mobile background sync
 
 Android zapisuje trening bez sieci do własnego SQLite. Nie wykonuje requestu po każdej serii.
@@ -140,7 +187,9 @@ Po pojawieniu się odpowiedniej sieci:
 - najpierw sprawdzany jest zapamiętany host, a mDNS jest krótkim fallbackiem;
 - retry używa exponential backoff i nie spamuje sieci;
 - job może zostać wznowiony po restarcie telefonu;
-- ręczne „Synchronizuj teraz” korzysta z tego samego sync engine;
+- WorkManager jest wyłącznie schedulerem i nie zawiera własnej logiki synchronizacji;
+- ręczne „Synchronizuj teraz” uruchamia dokładnie ten sam sync use case, kolejkę, transport, walidację i obsługę konfliktów co auto-sync;
+- ręczny sync może wykonać pełną próbę w foreground niezależnie od tego, czy Android uruchomił zaplanowany job;
 - brak PC lub błąd sieci pozostawia outbox nietknięty.
 
 ## Zachowanie desktop UI
@@ -162,6 +211,9 @@ Warunek końcowy:
 7. Później uruchomiony Desktop natychmiast widzi trening w swoim SQLite.
 8. Retry tej samej paczki nie tworzy duplikatu.
 9. Tombstone nie powoduje ponownego pojawienia się usuniętego rekordu.
+10. Niekompatybilny `protocolVersion` lub `schemaVersion` blokuje sync przed pierwszym zapisem i pozostawia pending queue nietkniętą.
+11. Ręczne „Synchronizuj teraz” przeprowadza ten sam scenariusz bez oczekiwania na WorkManager.
+12. Aktualizacja instalatora zatrzymuje starą wersję Sync Service i potwierdza uruchomienie wersji zgodnej z nowym Desktopem.
 
 ## Zakres tej korekty
 
