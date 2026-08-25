@@ -1,4 +1,13 @@
-import type { ExerciseDefinition, TemplateExercise, TrainingTemplate, Workout, WorkoutExercise, WorkoutSet } from '../src/types'
+import type { TemplateExercise, TrainingTemplate, Workout, WorkoutExercise } from '../src/types'
+import {
+  fixtureSet as set,
+  fixtureTemplateExercise as templateExercise,
+  fixtureWorkout as workout,
+  fixtureWorkoutExercise as workoutExercise,
+  legacyTemplatesFixture,
+  legacyV2Fixture,
+  legacyWorkoutsFixture,
+} from './fixtures/exercise-identity.fixture.ts'
 
 const runAssertions = async () => {
 const [exerciseIdentity, dataMigration, workoutData, workoutProgress, storage] = await Promise.all([
@@ -15,7 +24,7 @@ const {
   withRegisteredExercise,
 } = exerciseIdentity
 const { migrateExerciseIdentity } = dataMigration
-const { exerciseOccurrencesByWorkout, exercisesMatch, previousExerciseOccurrence } = workoutData
+const { exerciseOccurrencesByWorkout, exercisesMatch, previousExerciseOccurrence, replaceWorkoutById } = workoutData
 const { equipmentComparisonIssue } = workoutProgress
 const { normalizeData } = storage
 
@@ -35,107 +44,8 @@ const assertDeepEqual = (actual: unknown, expected: unknown, message: string) =>
 
 const clone = <T,>(value: T): T => structuredClone(value)
 
-const set = (id: string, weight: number, reps: number, rir?: number): WorkoutSet => ({
-  id,
-  weight,
-  reps,
-  ...(rir === undefined ? {} : { rir }),
-})
-
-const templateExercise = (
-  id: string,
-  name: string,
-  equipmentSensitive = false,
-  prescription = '1 × 6–12',
-): TemplateExercise => ({
-  id,
-  name,
-  prescription,
-  defaultSets: 1,
-  ...(equipmentSensitive ? { equipmentSensitive: true } : { equipmentSensitive: false }),
-})
-
-const workoutExercise = (
-  id: string,
-  name: string,
-  sets: WorkoutSet[],
-  equipmentSensitive = false,
-  extras: Partial<WorkoutExercise> = {},
-): WorkoutExercise => ({
-  id,
-  name,
-  prescription: '1 × 6–12',
-  sets,
-  equipmentSensitive,
-  ...extras,
-})
-
-const workout = (
-  id: string,
-  date: string,
-  templateId: string,
-  templateCode: Workout['templateCode'],
-  templateName: string,
-  gymLocation: string,
-  exercises: WorkoutExercise[],
-): Workout => ({
-  id,
-  date,
-  templateId,
-  templateCode,
-  templateName,
-  gymLocation,
-  duration: 73,
-  note: `Notatka ${id}`,
-  exercises,
-})
-
-const legacyTemplates: TrainingTemplate[] = [
-  {
-    id: 'push',
-    code: 'A',
-    name: 'PUSH',
-    exercises: [
-      templateExercise('a-xyz', '  XYZ  '),
-      templateExercise('chest-supported-row', 'Wiosło na wyciągu', true),
-      templateExercise('rear-delt-machine', 'Odwrotne rozpiętki na maszynie', true),
-      templateExercise('overhead-triceps-extension', 'Prostowanie ramion nad głową z sztangą na leżąco'),
-    ],
-  },
-  {
-    id: 'greek-upper',
-    code: 'D',
-    name: 'GRECKA GÓRA',
-    exercises: [
-      templateExercise('d-xyz', 'xYz'),
-      templateExercise('machine-row', 'Wiosło   na wyciągu', true),
-      templateExercise('reverse-fly', 'Odwrotne rozpiętki na maszynie', true),
-      templateExercise('lateral-raise-cable', 'Unoszenie bokiem na wyciągu / maszynie', true),
-      templateExercise('overhead-triceps-extension-d', 'Prostowanie ramion nad głową z sztangą na leżąco', true),
-    ],
-  },
-]
-
-const legacyWorkouts: Workout[] = [
-  workout('workout-a-1', '2026-01-01', 'push', 'A', 'PUSH', 'Siłownia Alfa', [
-    workoutExercise('a-xyz', 'XYZ', [set('a-xyz-set-1', 10, 10, 2)], false, { note: 'Pierwsze XYZ' }),
-    workoutExercise('custom-cable-row', 'Wiosło na wyciągu', [set('a-row-set-1', 80, 8)], true, { isCustom: true }),
-    workoutExercise('overhead-triceps-extension', 'Prostowanie ramion nad głową z sztangą na leżąco', [set('a-triceps-set-1', 25, 15)]),
-  ]),
-  workout('workout-d-2', '2026-01-02', 'greek-upper', 'D', 'GRECKA GÓRA', 'Siłownia Beta', [
-    workoutExercise('d-xyz', ' xyz ', [set('d-xyz-set-1', 10, 12)], false, { note: 'Najnowsze XYZ' }),
-    workoutExercise('machine-row', 'Wiosło na wyciągu', [set('d-row-set-1', 60, 10)], true),
-    workoutExercise('reverse-fly', 'Odwrotne rozpiętki na maszynie', [set('d-rear-set-1', 49.5, 14)], true),
-    workoutExercise('overhead-triceps-extension-d', 'Prostowanie ramion nad głową z sztangą na leżąco', [set('d-triceps-set-1', 35, 6)]),
-  ]),
-  workout('workout-d-3', '2026-01-03', 'greek-upper', 'D', 'GRECKA GÓRA', 'Siłownia Alfa', [
-    workoutExercise('machine-row', 'Wiosło na maszynie', [set('machine-row-set-1', 100, 9)], true),
-    workoutExercise('lateral-raise-cable', 'Unoszenie bokiem z hantalmi', [
-      set('dumbbell-set-1', 12.5, 14),
-      set('dumbbell-set-2', 14, 12),
-    ], false, { note: 'Snapshot z literówką' }),
-  ]),
-]
+const legacyTemplates = clone(legacyTemplatesFixture)
+const legacyWorkouts = clone(legacyWorkoutsFixture)
 
 const templatesBefore = clone(legacyTemplates)
 const workoutsBefore = clone(legacyWorkouts)
@@ -190,23 +100,14 @@ assert(
   'różne nazwy pod tym samym legacy ID muszą pozostać rozdzielone',
 )
 
-const legacyV2 = normalizeData({
-  version: 2,
-  dailyEntries: [{ id: 'entry-v2', date: '2026-01-01', fat: 71, note: 'zachowaj' }],
-  workouts: legacyWorkouts,
-  templates: legacyTemplates,
-  settings: {
-    phase: 'Maintenance',
-    calorieTarget: 2800,
-    proteinTarget: 160,
-    trendThresholds: { lossBelow: -0.15, stableUpper: 0.05, slowGainUpper: 0.2 },
-  },
-  coachNotes: { old: 'zachowaj' },
-})
+const legacyV2 = normalizeData(clone(legacyV2Fixture))
 assertDeepEqual(withoutExerciseIds(legacyV2.templates), legacyTemplates, 'import v2 nie może przywracać domyślnych szablonów')
 assertDeepEqual(withoutExerciseIds(legacyV2.workouts), legacyWorkouts, 'import v2 nie może zmieniać zapisanych treningów')
+assertEqual(legacyV2.dailyEntries.length, 1, 'import v2 nie może duplikować wpisu Dziennika')
+assertEqual(legacyV2.dailyEntries[0].id, 'fixture-daily-entry-1', 'import v2 zachowuje ID wpisu Dziennika')
+assertEqual(legacyV2.dailyEntries[0].date, '2026-01-01', 'import v2 zachowuje datę wpisu Dziennika')
 assertEqual(legacyV2.dailyEntries[0].fat, 71, 'import v2 zachowuje tłuszcz')
-assertEqual(legacyV2.coachNotes.old, 'zachowaj', 'import v2 zachowuje notatki trenera')
+assertEqual(legacyV2.coachNotes.fixture, 'Synthetic coach note', 'import v2 zachowuje notatki trenera')
 
 const definition = (name: string) => {
   const found = findExerciseDefinitionByName(migrated.exerciseLibrary, name)
@@ -220,7 +121,7 @@ const rearDelt = definition('Odwrotne rozpiętki na maszynie')
 const dumbbellRaise = definition('Unoszenie bokiem z hantlami')
 const cableRaise = definition('Unoszenie bokiem na wyciągu / maszynie')
 const triceps = definition('Prostowanie ramion nad głową z sztangą na leżąco')
-const xyz = definition('xyz')
+const sharedPress = definition('Wyciskanie testowe')
 
 assertEqual(cableRow.id, 'chest-supported-row', 'Wiosło na wyciągu ma stabilny canonical ID')
 assertEqual(machineRow.id, 'machine-row', 'Wiosło na maszynie ma oddzielny canonical ID')
@@ -232,17 +133,17 @@ assertEqual(dumbbellRaise.equipmentSensitive, false, 'unoszenie hantli nie zale�
 assertEqual(triceps.id, 'overhead-triceps-extension', 'identyczne ćwiczenie tricepsa musi mieć wspólną historię')
 assertEqual(triceps.equipmentSensitive, false, 'ćwiczenie ze sztangą nie powinno zależeć od siłowni')
 
-const migratedTemplateA = migrated.templates.find((item) => item.id === 'push')!
-const migratedTemplateD = migrated.templates.find((item) => item.id === 'greek-upper')!
-const xyzA = migratedTemplateA.exercises.find((item) => item.id === 'a-xyz')!
-const xyzD = migratedTemplateD.exercises.find((item) => item.id === 'd-xyz')!
+const migratedTemplateA = migrated.templates.find((item) => item.id === 'fixture-push')!
+const migratedTemplateD = migrated.templates.find((item) => item.id === 'fixture-upper')!
+const sharedPressA = migratedTemplateA.exercises.find((item) => item.id === 'a-shared-press')!
+const sharedPressD = migratedTemplateD.exercises.find((item) => item.id === 'd-shared-press')!
 const cableRowA = migratedTemplateA.exercises.find((item) => item.id === 'chest-supported-row')!
 const cableRowD = migratedTemplateD.exercises.find((item) => item.id === 'machine-row')!
 const rearA = migratedTemplateA.exercises.find((item) => item.id === 'rear-delt-machine')!
 const rearD = migratedTemplateD.exercises.find((item) => item.id === 'reverse-fly')!
 const cableRaiseTemplate = migratedTemplateD.exercises.find((item) => item.id === 'lateral-raise-cable')!
 
-assertEqual(xyzA.exerciseId, xyzD.exerciseId, 'XYZ w A i D musi mieć jeden exerciseId')
+assertEqual(sharedPressA.exerciseId, sharedPressD.exerciseId, 'to samo ćwiczenie w A i D musi mieć jeden exerciseId')
 assertEqual(cableRowA.exerciseId, cableRowD.exerciseId, 'Wiosło na wyciągu w różnych template musi mieć jeden exerciseId')
 assertEqual(rearA.exerciseId, rearD.exerciseId, 'Odwrotne rozpiętki w różnych template muszą mieć jeden exerciseId')
 
@@ -262,54 +163,54 @@ const activeReference = (exercise: TemplateExercise): WorkoutExercise => ({
   sets: [],
 })
 
-const xyzPrevious = previousExerciseOccurrence(
+const sharedPressPrevious = previousExerciseOccurrence(
   migrated.workouts,
-  activeReference(xyzA),
+  activeReference(sharedPressA),
   '2026-01-04',
-  'Siłownia Alfa',
+  'Klub Północ',
 )
-assertEqual(xyzPrevious.latest?.workout.id, 'workout-d-2', 'A→D→A: najnowszy wynik ma pochodzić z D')
-assertEqual(xyzPrevious.comparable?.workout.id, 'workout-d-2', 'wolny ciężar porównuje wynik między siłowniami')
-assertEqual(xyzPrevious.comparable?.exercise.sets[0].reps, 12, 'A→D→A zwraca 10×12, nie starsze 10×10')
+assertEqual(sharedPressPrevious.latest?.workout.id, 'fixture-workout-d-2', 'A→D→A: najnowszy wynik ma pochodzić z D')
+assertEqual(sharedPressPrevious.comparable?.workout.id, 'fixture-workout-d-2', 'wolny ciężar porównuje wynik między siłowniami')
+assertEqual(sharedPressPrevious.comparable?.exercise.sets[0].reps, 12, 'A→D→A zwraca 10×12, nie starsze 10×10')
 
 const cablePrevious = previousExerciseOccurrence(
   migrated.workouts,
   activeReference(cableRowA),
   '2026-01-04',
-  'Siłownia Alfa',
+  'Klub Północ',
 )
-assertEqual(cablePrevious.latest?.workout.id, 'workout-d-2', 'latest pokazuje najnowsze wykonanie canonical exercise')
-assertEqual(cablePrevious.comparable?.workout.id, 'workout-a-1', 'maszyna/wyciąg wybiera ostatni wynik z tej samej siłowni')
-assertEqual(cablePrevious.comparable?.exercise.sets[0].weight, 80, 'powrót na siłownię Alfa zwraca 80×8')
+assertEqual(cablePrevious.latest?.workout.id, 'fixture-workout-d-2', 'latest pokazuje najnowsze wykonanie canonical exercise')
+assertEqual(cablePrevious.comparable?.workout.id, 'fixture-workout-a-1', 'maszyna/wyciąg wybiera ostatni wynik z tej samej siłowni')
+assertEqual(cablePrevious.comparable?.exercise.sets[0].weight, 80, 'powrót do Klubu Północ zwraca 80×8')
 assert(!exercisesMatch(machineWorkoutExercise, activeReference(cableRowA)), '100×9 z Wiosła na maszynie nie może wejść do historii wyciągu')
 assert(
   equipmentComparisonIssue(
     { ...activeReference(cableRowA), equipmentSensitive: false },
     { ...activeReference(cableRowA), equipmentSensitive: true },
-    'Siłownia Alfa',
-    'Siłownia Beta',
+    'Klub Północ',
+    'Klub Południe',
   )?.incomparable,
   'jawne false jednego wystąpienia nie może wyłączyć ochrony true drugiego',
 )
 
-const duplicateCanonicalSession = workout('workout-duplicate-canonical', '2026-01-05', 'push', 'A', 'PUSH', 'Siłownia Alfa', [
-  workoutExercise('xyz-copy-1', 'XYZ', [set('xyz-copy-set-1', 20, 8)], false, { exerciseId: xyz.id }),
-  workoutExercise('xyz-copy-2', 'XYZ', [set('xyz-copy-set-2', 22.5, 7)], false, { exerciseId: xyz.id }),
-  workoutExercise('xyz-skipped', 'XYZ', [set('xyz-skipped-set', 100, 1)], false, { exerciseId: xyz.id, skipped: true }),
-  workoutExercise('xyz-empty', 'XYZ', [], false, { exerciseId: xyz.id }),
-  workoutExercise('xyz-other-identity', 'XYZ', [set('xyz-other-set', 999, 1)], false, { exerciseId: 'different-xyz' }),
+const duplicateCanonicalSession = workout('fixture-workout-duplicate-canonical', '2026-01-05', 'fixture-push', 'A', 'PUSH', 'Klub Północ', [
+  workoutExercise('shared-copy-1', 'Wyciskanie testowe', [set('shared-copy-set-1', 20, 8)], false, { exerciseId: sharedPress.id }),
+  workoutExercise('shared-copy-2', 'Wyciskanie testowe', [set('shared-copy-set-2', 22.5, 7)], false, { exerciseId: sharedPress.id }),
+  workoutExercise('shared-skipped', 'Wyciskanie testowe', [set('shared-skipped-set', 100, 1)], false, { exerciseId: sharedPress.id, skipped: true }),
+  workoutExercise('shared-empty', 'Wyciskanie testowe', [], false, { exerciseId: sharedPress.id }),
+  workoutExercise('shared-other-identity', 'Wyciskanie testowe', [set('shared-other-set', 999, 1)], false, { exerciseId: 'different-shared-press' }),
 ])
 const duplicateSessionSnapshot = JSON.stringify(duplicateCanonicalSession)
-const groupedXyzOccurrences = exerciseOccurrencesByWorkout(
+const groupedSharedOccurrences = exerciseOccurrencesByWorkout(
   [...migrated.workouts, duplicateCanonicalSession].sort((a, b) => b.date.localeCompare(a.date)),
-  (exercise) => canonicalExerciseId(exercise) === xyz.id,
+  (exercise) => canonicalExerciseId(exercise) === sharedPress.id,
 )
-assertEqual(groupedXyzOccurrences.length, 3, 'dwa refy canonical w jednej sesji liczą się jako jedna occurrence')
-assertEqual(groupedXyzOccurrences[0].workout.id, duplicateCanonicalSession.id, 'agregat zachowuje najnowszą sesję jako current')
-assertEqual(groupedXyzOccurrences[1].workout.id, 'workout-d-2', 'previous po agregacji pochodzi z wcześniejszej sesji')
+assertEqual(groupedSharedOccurrences.length, 3, 'dwa refy canonical w jednej sesji liczą się jako jedna occurrence')
+assertEqual(groupedSharedOccurrences[0].workout.id, duplicateCanonicalSession.id, 'agregat zachowuje najnowszą sesję jako current')
+assertEqual(groupedSharedOccurrences[1].workout.id, 'fixture-workout-d-2', 'previous po agregacji pochodzi z wcześniejszej sesji')
 assertDeepEqual(
-  groupedXyzOccurrences[0].exercise.sets.map((item) => item.id),
-  ['xyz-copy-set-1', 'xyz-copy-set-2'],
+  groupedSharedOccurrences[0].exercise.sets.map((item) => item.id),
+  ['shared-copy-set-1', 'shared-copy-set-2'],
   'agregat zachowuje wszystkie widoczne serie i ich kolejność, pomijając skipped/puste refy',
 )
 assertEqual(JSON.stringify(duplicateCanonicalSession), duplicateSessionSnapshot, 'agregacja nie może mutować treningu wejściowego')
@@ -344,127 +245,49 @@ const newExercise = withRegisteredExercise(
 assertEqual(newExercise.definition.id, 'single-arm-cable-row', 'rzeczywiście nowe ćwiczenie dostaje nowy ID')
 assertEqual(newExercise.library.length, migrated.exerciseLibrary.length + 1, 'nowa definicja trafia do globalnej biblioteki')
 
-const auditLiveStore = async () => {
-  const [{ existsSync, readFileSync }, { join }, { createHash }] = await Promise.all([
-    import('node:fs'),
-    import('node:path'),
-    import('node:crypto'),
-  ])
-  const appDataDirectory = process.env.APPDATA
-  if (!appDataDirectory) {
-    console.log('SKIP live Store: brak zmiennej APPDATA')
-    return
-  }
-  const storePath = join(appDataDirectory, 'com.igorpich.formlog', 'formlog.store.json')
-  if (!existsSync(storePath)) {
-    console.log(`SKIP live Store: plik nie istnieje (${storePath})`)
-    return
-  }
+const customDefinition = definition('Unoszenie bokiem z hantlami')
+const progressReferenceIds = new Set([
+  ...migrated.templates.flatMap((template) => template.exercises.map(canonicalExerciseId)),
+  ...migrated.workouts.flatMap((item) => item.exercises.map(canonicalExerciseId)),
+])
+const progressLibrary = migrated.exerciseLibrary.filter((item) => progressReferenceIds.has(item.id))
+assert(
+  progressLibrary.some((item) => item.id === customDefinition.id),
+  'custom exercise musi być widoczne w bibliotece ćwiczeń referencjonowanych przez Progres',
+)
+const customProgressOccurrences = exerciseOccurrencesByWorkout(
+  migrated.workouts,
+  (exercise) => canonicalExerciseId(exercise) === customDefinition.id,
+)
+assertEqual(customProgressOccurrences.length, 1, 'custom exercise musi pozostać dostępne dla danych Progresu')
+assertEqual(
+  customProgressOccurrences[0].exercise.exerciseId,
+  customDefinition.id,
+  'custom exercise w historii musi wskazywać definicję widoczną w bibliotece Progresu',
+)
 
-  const rawBefore = readFileSync(storePath, 'utf8')
-  const parsed = JSON.parse(rawBefore) as { appData?: Record<string, unknown> }
-  const liveData = parsed.appData
-  assert(liveData, 'live Store nie zawiera appData')
-  assert(Array.isArray(liveData.templates), 'live Store nie zawiera templates')
-  assert(Array.isArray(liveData.workouts), 'live Store nie zawiera workouts')
-  const liveTemplates = liveData.templates as TrainingTemplate[]
-  const liveWorkouts = liveData.workouts as Workout[]
-  const liveLibrary = Array.isArray(liveData.exerciseLibrary)
-    ? liveData.exerciseLibrary as ExerciseDefinition[]
-    : []
-  const liveSnapshot = clone(liveData)
-  const liveInputJson = JSON.stringify({ templates: liveTemplates, workouts: liveWorkouts, exerciseLibrary: liveLibrary })
-
-  const liveMigrated = migrateExerciseIdentity(liveTemplates, liveWorkouts, liveLibrary)
-  assertEqual(
-    JSON.stringify({ templates: liveTemplates, workouts: liveWorkouts, exerciseLibrary: liveLibrary }),
-    liveInputJson,
-    'audyt live Store: migracja nie może mutować obiektu wejściowego',
-  )
-  assertDeepEqual(
-    withoutExerciseIds(liveMigrated.templates),
-    withoutExerciseIds(liveSnapshot.templates as TrainingTemplate[]),
-    'audyt live Store: wszystkie istniejące pola szablonów muszą zostać zachowane',
-  )
-  assertDeepEqual(
-    withoutExerciseIds(liveMigrated.workouts),
-    withoutExerciseIds(liveSnapshot.workouts as Workout[]),
-    'audyt live Store: wszystkie workout/set IDs, serie, daty, siłownie, notatki i snapshoty muszą zostać zachowane',
-  )
-  if (Number(liveData.version) >= 4) {
-    assertDeepEqual(liveMigrated.templates, liveSnapshot.templates, 'audyt live Store v4: szablony są idempotentne')
-    assertDeepEqual(liveMigrated.workouts, liveSnapshot.workouts, 'audyt live Store v4: treningi są idempotentne')
-  }
-  const liveMigratedAgain = migrateExerciseIdentity(
-    liveMigrated.templates,
-    liveMigrated.workouts,
-    liveMigrated.exerciseLibrary,
-  )
-  assertDeepEqual(liveMigratedAgain, liveMigrated, 'audyt live Store: migracja musi być idempotentna')
-  const liveLibraryNames = liveMigrated.exerciseLibrary.map((item) => normalizeExerciseName(item.name))
-  assertEqual(
-    new Set(liveLibraryNames).size,
-    liveLibraryNames.length,
-    'audyt live Store: dropdown nie może dostać identycznych nazw z kilku definicji',
-  )
-
-  const requiredWorkout = (id: string) => {
-    const found = liveMigrated.workouts.find((item) => item.id === id)
-    assert(found, `audyt live Store: brak workout ${id}`)
-    return found
-  }
-  const requiredExercise = (sourceWorkout: Workout, id: string, name: string) => {
-    const found = sourceWorkout.exercises.find((item) => item.id === id && item.name === name)
-    assert(found, `audyt live Store: brak ${id} / ${name} w ${sourceWorkout.id}`)
-    return found
-  }
-  const setValues = (exercise: WorkoutExercise) => exercise.sets.map((item) => [item.weight, item.reps])
-
-  const pullWorkout = requiredWorkout('4ddd80c2-80f0-4d63-9ca6-a19d3ae71d82')
-  assertEqual(pullWorkout.gymLocation, 'Warszawianka', 'audyt live Store: siłownia PULL 18.08')
-  const cableRowLive = requiredExercise(
-    pullWorkout,
-    'custom-7f5e8423-911a-4de0-8388-ef2e31f06d9f',
-    'Wiosło na wyciągu',
-  )
-  assertEqual(cableRowLive.exerciseId, 'chest-supported-row', 'audyt live Store: canonical Wiosła na wyciągu')
-  assertDeepEqual(setValues(cableRowLive), [[80, 7], [80, 8], [80, 7]], 'audyt live Store: serie Wiosła na wyciągu')
-
-  const greekWorkout = requiredWorkout('2072188f-d3f5-4edf-949e-0d79b4b13b5f')
-  assertEqual(greekWorkout.gymLocation, 'Warszawianka', 'audyt live Store: siłownia GRECKA GÓRA 22.08')
-  const machineRowLive = requiredExercise(greekWorkout, 'machine-row', 'Wiosło na maszynie')
-  assertEqual(machineRowLive.exerciseId, 'machine-row', 'audyt live Store: canonical Wiosła na maszynie')
-  assertDeepEqual(setValues(machineRowLive), [[76.5, 14], [91, 13], [100, 9]], 'audyt live Store: serie Wiosła na maszynie')
-  assert(
-    cableRowLive.exerciseId !== machineRowLive.exerciseId,
-    'audyt live Store: Wiosło na wyciągu i na maszynie muszą pozostać rozdzielone',
-  )
-
-  const dumbbellLive = requiredExercise(greekWorkout, 'lateral-raise-cable', 'Unoszenie bokiem z hantalmi')
-  assertEqual(dumbbellLive.exerciseId, 'dumbbell-lateral-raise', 'audyt live Store: canonical własnego ćwiczenia z hantlami')
-  assertEqual(dumbbellLive.equipmentSensitive, false, 'audyt live Store: hantle nie zależą od siłowni')
-  assertDeepEqual(
-    setValues(dumbbellLive),
-    [[12.5, 14], [14, 12], [14, 12], [12, 17]],
-    'audyt live Store: serie unoszenia bokiem z hantlami',
-  )
-
-  const reverseFlyLive = requiredExercise(greekWorkout, 'reverse-fly', 'Odwrotne rozpiętki na maszynie')
-  assertEqual(reverseFlyLive.exerciseId, 'rear-delt-machine', 'audyt live Store: canonical odwrotnych rozpiętek')
-  assertDeepEqual(setValues(reverseFlyLive), [[49.5, 14], [49.5, 15]], 'audyt live Store: serie odwrotnych rozpiętek')
-  const rearDeltLive = requiredExercise(pullWorkout, 'rear-delt-machine', 'Rear Delt Machine')
-  assertEqual(rearDeltLive.exerciseId, reverseFlyLive.exerciseId, 'audyt live Store: oba legacy ID odwrotnych rozpiętek łączą historię')
-  assertDeepEqual(setValues(rearDeltLive), [[50, 12], [45, 11], [40, 9]], 'audyt live Store: starsze serie Rear Delt Machine')
-
-  const rawAfter = readFileSync(storePath, 'utf8')
-  assertEqual(rawAfter, rawBefore, 'audyt live Store musi pozostawić plik identyczny bajt w bajt')
-  const hash = createHash('sha256').update(rawAfter).digest('hex').toUpperCase()
-  console.log(`PASS live Store v${String(liveData.version)} read-only: ${liveWorkouts.length} workouts, SHA256 ${hash}`)
+const workoutsBeforeEdit = clone(migrated.workouts)
+const editedWorkout = {
+  ...clone(migrated.workouts[1]),
+  duration: 81,
+  note: 'Synthetic edited workout',
 }
+const workoutsAfterEdit = replaceWorkoutById(migrated.workouts, editedWorkout)
+assertEqual(workoutsAfterEdit.length, migrated.workouts.length, 'edycja treningu nie może zmienić liczby treningów')
+assertEqual(
+  workoutsAfterEdit.filter((item) => item.id === editedWorkout.id).length,
+  1,
+  'edycja historycznego treningu nie może utworzyć duplikatu ID',
+)
+assertDeepEqual(
+  workoutsAfterEdit.map((item) => item.id),
+  migrated.workouts.map((item) => item.id),
+  'edycja treningu musi zachować kolejność i identyfikatory sesji',
+)
+assertEqual(workoutsAfterEdit[1].duration, 81, 'edycja treningu musi zastąpić wskazany rekord')
+assertDeepEqual(migrated.workouts, workoutsBeforeEdit, 'edycja treningu nie może mutować wejściowej tablicy')
 
-await auditLiveStore()
-
-console.log('PASS exercise identity: migration, preservation, A→D→A and gym comparability')
+console.log('PASS deterministic regressions: identity, migration, history, gym comparison, custom exercise and workout edit')
 }
 
 if (process.env.GREEKGOD_IDENTITY_TEST_VITE === '1') {

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "npm run test:identity",
     "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
+    "audit:store": "node --experimental-strip-types scripts/live-store-audit.ts --read-only",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
