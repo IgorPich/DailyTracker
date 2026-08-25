@@ -83,4 +83,7 @@ apps/
         └── tauri.conf.json
 
 package.json              # koordynator npm workspaces; polecenia deleguje do desktopu
+
+packages/
+└── core/                   # współdzielone, niezależne od platformy typy domenowe
 ```

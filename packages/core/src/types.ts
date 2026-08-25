@@ -1,0 +1,96 @@
+export type Phase = 'Maintenance' | 'Lean Gain' | 'Mini Cut' | 'Redukcja'
+
+export interface DailyEntry {
+  id: string
+  date: string
+  weight?: number
+  calories?: number
+  protein?: number
+  fat?: number
+  carbs?: number
+  steps?: number
+  waist?: number
+  sleep?: number
+  recovery?: number
+  note?: string
+}
+
+export interface WorkoutSet {
+  id: string
+  weight?: number
+  reps?: number
+  rir?: number
+}
+
+export interface WorkoutExercise {
+  id: string
+  exerciseId?: string
+  name: string
+  prescription?: string
+  sets: WorkoutSet[]
+  skipped?: boolean
+  isCustom?: boolean
+  equipmentSensitive?: boolean
+  note?: string
+}
+
+export interface Workout {
+  id: string
+  date: string
+  templateId: string
+  templateCode: string
+  templateName: string
+  exercises: WorkoutExercise[]
+  duration?: number
+  gymLocation?: string
+  note?: string
+}
+
+export interface TemplateExercise {
+  id: string
+  exerciseId?: string
+  name: string
+  prescription: string
+  defaultSets: number
+  equipmentSensitive?: boolean
+}
+
+export interface TrainingTemplate {
+  id: string
+  code: 'A' | 'B' | 'C' | 'D'
+  name: string
+  exercises: TemplateExercise[]
+}
+
+export interface ExerciseDefinition {
+  id: string
+  name: string
+  equipmentSensitive: boolean
+  aliases?: string[]
+}
+
+export interface Settings {
+  phase: Phase
+  calorieTarget: number
+  proteinTarget: number
+  weightTarget?: number
+  gymLocations?: string[]
+  lastGymLocation?: string
+  trendThresholds: TrendThresholds
+}
+
+export interface TrendThresholds {
+  lossBelow: number
+  stableUpper: number
+  slowGainUpper: number
+}
+
+export interface AppData {
+  version: number
+  dailyEntries: DailyEntry[]
+  workouts: Workout[]
+  templates: TrainingTemplate[]
+  exerciseLibrary: ExerciseDefinition[]
+  settings: Settings
+  coachNotes: Record<string, string>
+}

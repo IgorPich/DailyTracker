@@ -10,4 +10,4 @@ export type {
   Workout,
   WorkoutExercise,
   WorkoutSet,
-} from '@greekgod/core'
+} from './types'
