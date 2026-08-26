@@ -11,3 +11,5 @@ export type {
   WorkoutExercise,
   WorkoutSet,
 } from './types'
+
+export { upsertDailyEntry } from './dailyEntryOperations'

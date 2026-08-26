@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { upsertDailyEntry as upsertDailyEntryInList } from '@greekgod/core'
 import type { AppData, DailyEntry, ExerciseDefinition, Settings, TrainingTemplate, Workout, WorkoutExercise } from '../types'
 import { storageService } from '../services/storageService'
 import { canonicalExerciseId, normalizeExerciseName, renameExerciseDefinition, withRegisteredExercise } from '../utils/exerciseIdentity'
@@ -153,12 +154,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(() => ({
     data,
     upsertDailyEntry: (entry) => {
-      setData((current) => {
-        const withoutExistingDate = current.dailyEntries.filter(
-          (item) => item.id !== entry.id && item.date !== entry.date,
-        )
-        return { ...current, dailyEntries: [...withoutExistingDate, entry] }
-      })
+      setData((current) => ({
+        ...current,
+        dailyEntries: upsertDailyEntryInList(current.dailyEntries, entry),
+      }))
     },
     deleteDailyEntry: (id) => {
       setData((current) => ({ ...current, dailyEntries: current.dailyEntries.filter((entry) => entry.id !== id) }))
