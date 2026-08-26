@@ -10,3 +10,6 @@ src-tauri/gen/schemas/
 apps/*/dist/
 apps/*/src-tauri/target/
 apps/*/src-tauri/gen/schemas/
+greekgod-v3.sqlite
+greekgod-v3.sqlite-*
+greekgod-v3.sqlite.pre-import-*.backup.sqlite

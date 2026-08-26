@@ -10,7 +10,7 @@
     "test": "npm run test:identity && npm run test:dev-storage && npm run test:storage",
     "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
     "test:dev-storage": "node scripts/development-storage-config.test.mjs",
-    "test:storage": "node --experimental-strip-types scripts/storage/run-storage-tests.ts",
+    "test:storage": "node --experimental-strip-types --experimental-sqlite scripts/storage/run-storage-tests.ts",
     "audit:store": "node --experimental-strip-types scripts/live-store-audit.ts --read-only",
     "preview": "vite preview",
     "tauri": "tauri",
