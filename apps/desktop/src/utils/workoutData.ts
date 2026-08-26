@@ -1,8 +1,7 @@
 import type { Workout, WorkoutExercise } from '../types'
 import { canonicalExerciseId } from './exerciseIdentity'
 
-export const replaceWorkoutById = (workouts: Workout[], updated: Workout) =>
-  workouts.map((workout) => workout.id === updated.id ? updated : workout)
+export { updateWorkout as replaceWorkoutById } from '@greekgod/core'
 
 export const exercisesMatch = (candidate: WorkoutExercise, reference: WorkoutExercise) =>
   canonicalExerciseId(candidate) === canonicalExerciseId(reference)

@@ -13,3 +13,4 @@ export type {
 } from './types'
 
 export { upsertDailyEntry } from './dailyEntryOperations'
+export { addWorkout, updateWorkout } from './workoutOperations'

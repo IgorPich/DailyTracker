@@ -1,11 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { upsertDailyEntry as upsertDailyEntryInList } from '@greekgod/core'
+import {
+  addWorkout as addWorkoutToHistory,
+  updateWorkout as updateWorkoutInHistory,
+  upsertDailyEntry as upsertDailyEntryInList,
+} from '@greekgod/core'
 import type { AppData, DailyEntry, ExerciseDefinition, Settings, TrainingTemplate, Workout, WorkoutExercise } from '../types'
 import { storageService } from '../services/storageService'
 import { canonicalExerciseId, normalizeExerciseName, renameExerciseDefinition, withRegisteredExercise } from '../utils/exerciseIdentity'
 import { createId } from '../utils/id'
 import { createInitialData } from '../utils/storage'
-import { replaceWorkoutById } from '../utils/workoutData'
 
 interface AppContextValue {
   data: AppData
@@ -168,7 +171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return {
           ...current,
           exerciseLibrary: attached.library,
-          workouts: [...current.workouts, { ...workout, exercises: attached.exercises }],
+          workouts: addWorkoutToHistory(current.workouts, { ...workout, exercises: attached.exercises }),
         }
       })
     },
@@ -179,7 +182,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return {
           ...current,
           exerciseLibrary: attached.library,
-          workouts: replaceWorkoutById(current.workouts, { ...workout, exercises: attached.exercises }),
+          workouts: updateWorkoutInHistory(current.workouts, { ...workout, exercises: attached.exercises }),
         }
       })
     },
