@@ -5,12 +5,20 @@ import { AppProvider } from './context/AppContext'
 import { ToastProvider } from './context/ToastContext'
 import './styles.css'
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <AppProvider>
-      <ToastProvider>
-        <App />
-      </ToastProvider>
-    </AppProvider>
-  </React.StrictMode>,
-)
+const root = ReactDOM.createRoot(document.getElementById('root')!)
+
+if (import.meta.env.MODE === 'sqlite-smoke') {
+  void import('./services/NativeSqliteWebViewSmoke').then(({ NativeSqliteWebViewSmoke }) => {
+    root.render(<NativeSqliteWebViewSmoke />)
+  })
+} else {
+  root.render(
+    <React.StrictMode>
+      <AppProvider>
+        <ToastProvider>
+          <App />
+        </ToastProvider>
+      </AppProvider>
+    </React.StrictMode>,
+  )
+}

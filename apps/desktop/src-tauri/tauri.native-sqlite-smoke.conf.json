@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "GreekGod SQLite Smoke",
+  "identifier": "com.igorpich.formlog.sqlitesmoke",
+  "build": {
+    "beforeBuildCommand": "npm run build -- --mode sqlite-smoke"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "GreekGod SQLite Smoke"
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

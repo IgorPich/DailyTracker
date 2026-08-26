@@ -9,6 +9,7 @@ const server = await createServer({
 
 try {
   await server.ssrLoadModule('/scripts/storage/legacyAppDataStore.test.ts')
+  await server.ssrLoadModule('/scripts/storage/nativeShadowAppDataStore.test.ts')
   await server.ssrLoadModule('/scripts/storage/sqliteAppDataStore.test.ts')
   await server.ssrLoadModule('/scripts/storage/storageMigration.test.ts')
 } finally {
