@@ -11,6 +11,7 @@ export type {
   WorkoutExercise,
   WorkoutSet,
 } from './types'
+export type { AppDataStore } from './appDataStore'
 
 export { deleteDailyEntry, findDailyEntryByDate, upsertDailyEntry } from './dailyEntryOperations'
 export { addGymLocation, deleteGymLocation, renameGymLocation } from './gymOperations'

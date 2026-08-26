@@ -12,7 +12,7 @@ import {
   upsertDailyEntry as upsertDailyEntryInList,
 } from '@greekgod/core'
 import type { AppData, DailyEntry, ExerciseDefinition, Settings, TrainingTemplate, Workout, WorkoutExercise } from '../types'
-import { storageService } from '../services/storageService'
+import { appDataStore } from '../services/appDataStore'
 import { canonicalExerciseId, normalizeExerciseName, renameExerciseDefinition, withRegisteredExercise } from '../utils/exerciseIdentity'
 import { createId } from '../utils/id'
 import { createInitialData } from '../utils/storage'
@@ -145,7 +145,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true
-    void storageService.load()
+    void appDataStore.load()
       .then((stored) => {
         if (!active) return
         setData(stored)
@@ -159,7 +159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return
-    void storageService.save(data).catch((error) => console.error('Nie udało się zapisać danych GreekGod.', error))
+    void appDataStore.save(data).catch((error) => console.error('Nie udało się zapisać danych GreekGod.', error))
   }, [data, hydrated])
 
   const value = useMemo<AppContextValue>(() => ({
