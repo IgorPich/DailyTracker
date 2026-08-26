@@ -1,6 +1,6 @@
 import { deepStrictEqual, equal, notStrictEqual, strictEqual } from 'node:assert/strict'
 import test from 'node:test'
-import { upsertDailyEntry } from '../src/dailyEntryOperations.ts'
+import { deleteDailyEntry, findDailyEntryByDate, upsertDailyEntry } from '../src/dailyEntryOperations.ts'
 import { dailyEntryFixture as entry } from './fixtures/dailyEntry.fixture.ts'
 
 test('adds a new day at the end without sorting existing entries', () => {
@@ -114,4 +114,34 @@ test('does not mutate the input array or its entries', () => {
 
   deepStrictEqual(entries, snapshot)
   notStrictEqual(result, entries)
+})
+
+test('deletes every DailyEntry with the exact id and preserves remaining order', () => {
+  const first = entry('duplicate-id', '2026-08-21')
+  const untouched = entry('untouched-id', '2026-08-22')
+  const duplicate = entry('duplicate-id', '2026-08-23')
+  const entries = [first, untouched, duplicate]
+
+  const result = deleteDailyEntry(entries, 'duplicate-id')
+
+  deepStrictEqual(result, [untouched])
+  deepStrictEqual(entries, [first, untouched, duplicate])
+  notStrictEqual(result, entries)
+})
+
+test('DailyEntry delete returns a new list when the id is missing', () => {
+  const entries = [entry('entry-a', '2026-08-21')]
+
+  const result = deleteDailyEntry(entries, 'missing-id')
+
+  deepStrictEqual(result, entries)
+  notStrictEqual(result, entries)
+})
+
+test('DailyEntry lookup returns the first exact date match', () => {
+  const first = entry('first-id', '2026-08-21')
+  const duplicateDate = entry('second-id', '2026-08-21')
+
+  strictEqual(findDailyEntryByDate([first, duplicateDate], '2026-08-21'), first)
+  strictEqual(findDailyEntryByDate([first], '2026-08-22'), undefined)
 })

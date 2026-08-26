@@ -1,6 +1,6 @@
 import { deepStrictEqual, equal, notStrictEqual, strictEqual } from 'node:assert/strict'
 import test from 'node:test'
-import { addWorkout, updateWorkout } from '../src/workoutOperations.ts'
+import { addWorkout, deleteWorkout, findWorkoutById, updateWorkout } from '../src/workoutOperations.ts'
 import {
   workoutExerciseFixture as exercise,
   workoutFixture as workout,
@@ -139,4 +139,34 @@ test('replaces all pre-existing duplicate ids without silently deduplicating his
   equal(result.filter((item) => item.id === updated.id).length, 2)
   strictEqual(result[0], updated)
   strictEqual(result[1], updated)
+})
+
+test('deletes every workout with the exact id and preserves remaining snapshots', () => {
+  const duplicateA = workout('duplicate-id', { note: 'First duplicate' })
+  const untouched = workout('untouched-id', { note: 'Untouched snapshot' })
+  const duplicateB = workout('duplicate-id', { note: 'Second duplicate' })
+  const workouts = [duplicateA, untouched, duplicateB]
+
+  const result = deleteWorkout(workouts, 'duplicate-id')
+
+  deepStrictEqual(result, [untouched])
+  strictEqual(result[0], untouched)
+  deepStrictEqual(workouts, [duplicateA, untouched, duplicateB])
+})
+
+test('workout delete returns a new list when the id is missing', () => {
+  const workouts = [workout('workout-a')]
+
+  const result = deleteWorkout(workouts, 'missing-id')
+
+  deepStrictEqual(result, workouts)
+  notStrictEqual(result, workouts)
+})
+
+test('workout lookup returns the first exact id match', () => {
+  const first = workout('workout-x', { note: 'First duplicate' })
+  const duplicate = workout('workout-x', { note: 'Second duplicate' })
+
+  strictEqual(findWorkoutById([first, duplicate], 'workout-x'), first)
+  strictEqual(findWorkoutById([first], 'WORKOUT-X'), undefined)
 })

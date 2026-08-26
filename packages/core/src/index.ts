@@ -12,5 +12,7 @@ export type {
   WorkoutSet,
 } from './types'
 
-export { upsertDailyEntry } from './dailyEntryOperations'
-export { addWorkout, updateWorkout } from './workoutOperations'
+export { deleteDailyEntry, findDailyEntryByDate, upsertDailyEntry } from './dailyEntryOperations'
+export { addGymLocation, deleteGymLocation, renameGymLocation } from './gymOperations'
+export { insertTemplateExercise, moveItem, removeTemplateExercise, replaceTrainingTemplate } from './templateOperations'
+export { addWorkout, deleteWorkout, findWorkoutById, updateWorkout } from './workoutOperations'
