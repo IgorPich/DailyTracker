@@ -4,6 +4,15 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.77.2"
 
+[features]
+default = []
+stress-harness = []
+
+[[bin]]
+name = "greekgod-storage-stress-writer"
+path = "src/bin/stress_writer.rs"
+required-features = ["stress-harness"]
+
 [dependencies]
 rusqlite = { version = "=0.40.1", default-features = false, features = ["backup", "bundled"] }
 serde = { version = "1", features = ["derive"] }

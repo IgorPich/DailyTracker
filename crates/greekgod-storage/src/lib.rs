@@ -200,6 +200,22 @@ impl NativeAppDataStore {
     }
 }
 
+#[cfg(feature = "stress-harness")]
+#[doc(hidden)]
+pub fn open_stress_harness_connection(database_path: &Path) -> StorageResult<Connection> {
+    if database_path.file_name().and_then(|value| value.to_str()) != Some(DATABASE_FILENAME) {
+        return Err(StorageError::DatabaseUnavailable(format!(
+            "stress database filename must be {DATABASE_FILENAME}"
+        )));
+    }
+    let mut connection = Connection::open(database_path)
+        .map_err(|error| StorageError::DatabaseUnavailable(error.to_string()))?;
+    configure_connection(&mut connection)?;
+    apply_migrations(&mut connection)?;
+    connection.busy_timeout(Duration::from_millis(1))?;
+    Ok(connection)
+}
+
 fn configure_connection(connection: &mut Connection) -> StorageResult<()> {
     connection.busy_timeout(Duration::from_secs(5))?;
     connection.pragma_update(None, "foreign_keys", "ON")?;
@@ -225,7 +241,7 @@ fn sqlite_version(connection: &Connection) -> StorageResult<String> {
     Ok(connection.query_row("SELECT sqlite_version()", [], |row| row.get(0))?)
 }
 
-fn sqlite_version_is_safe_for_multiple_writers(version: &str) -> bool {
+pub fn sqlite_version_is_safe_for_multiple_writers(version: &str) -> bool {
     let parsed = parse_version(version);
     parsed >= parse_version(MINIMUM_SAFE_WAL_SQLITE_VERSION)
         || parsed == [3, 50, 7]
