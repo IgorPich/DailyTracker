@@ -96,4 +96,14 @@ export const registerAppDataStoreContract = (
       deepStrictEqual(await (await harness.reopen()).load(), normalizedStoredValue(fixture))
     })
   })
+
+  test(`${implementationName}: backup accepts the loaded snapshot before the first save`, async () => {
+    await withHarness(createHarness, async (harness) => {
+      const initialSnapshot = await harness.store.load()
+
+      await harness.store.backupBeforeImport(initialSnapshot)
+
+      deepStrictEqual(await (await harness.reopen()).load(), harness.expectedInitialData)
+    })
+  })
 }

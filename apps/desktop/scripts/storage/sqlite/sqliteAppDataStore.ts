@@ -19,6 +19,18 @@ interface AppDataRow {
   payload_json: string
 }
 
+const upsertAppDataRow = (
+  database: DatabaseSync,
+  dataVersion: number,
+  payload: string,
+) => database.prepare(`
+  INSERT INTO app_data (singleton_id, data_version, payload_json)
+  VALUES (1, ?, ?)
+  ON CONFLICT(singleton_id) DO UPDATE SET
+    data_version = excluded.data_version,
+    payload_json = excluded.payload_json
+`).run(dataVersion, payload)
+
 const pathIsInside = (candidate: string, root: string) => {
   const pathFromRoot = relative(root, candidate)
   return pathFromRoot === '' || (!pathFromRoot.startsWith('..') && !isAbsolute(pathFromRoot))
@@ -76,8 +88,15 @@ export class SqliteAppDataStore implements AppDataStore {
     }
   }
 
+  private assertOpen() {
+    if (this.closed || !this.database.isOpen) {
+      throw new SqliteStoreError('database-unavailable', 'SQLite development Store is closed.')
+    }
+  }
+
   async load(): Promise<AppData> {
     try {
+      this.assertOpen()
       const row = this.database.prepare(`
         SELECT data_version, payload_json
         FROM app_data
@@ -88,11 +107,13 @@ export class SqliteAppDataStore implements AppDataStore {
         throw new SqliteStoreError('invalid-or-corrupt-data', 'SQLite AppData row has invalid columns.')
       }
       const parsed = JSON.parse(row.payload_json) as unknown
-      const normalized = normalizeData(parsed)
-      if (normalized.version !== row.data_version) {
+      const payloadVersion = parsed && typeof parsed === 'object'
+        ? (parsed as { version?: unknown }).version
+        : undefined
+      if (payloadVersion !== row.data_version) {
         throw new SqliteStoreError('invalid-or-corrupt-data', 'SQLite data_version does not match the AppData payload.')
       }
-      return normalized
+      return normalizeData(parsed)
     } catch (error) {
       throw mapSqliteError(error, 'invalid-or-corrupt-data', 'Could not read valid AppData from SQLite.')
     }
@@ -100,16 +121,11 @@ export class SqliteAppDataStore implements AppDataStore {
 
   save(data: AppData): Promise<void> {
     this.operationQueue = this.operationQueue.catch(() => undefined).then(() => {
-      const payload = JSON.stringify(data)
       try {
+        this.assertOpen()
+        const payload = JSON.stringify(data)
         this.database.exec('BEGIN IMMEDIATE')
-        this.database.prepare(`
-          INSERT INTO app_data (singleton_id, data_version, payload_json)
-          VALUES (1, ?, ?)
-          ON CONFLICT(singleton_id) DO UPDATE SET
-            data_version = excluded.data_version,
-            payload_json = excluded.payload_json
-        `).run(data.version, payload)
+        upsertAppDataRow(this.database, data.version, payload)
         this.database.exec('COMMIT')
       } catch (error) {
         this.rollbackIfActive()
@@ -121,26 +137,33 @@ export class SqliteAppDataStore implements AppDataStore {
 
   backupBeforeImport(data: AppData): Promise<void> {
     this.operationQueue = this.operationQueue.catch(() => undefined).then(async () => {
-      const active = this.database.prepare(`
-        SELECT payload_json
-        FROM app_data
-        WHERE singleton_id = 1
-      `).get() as unknown as { payload_json?: unknown } | undefined
-      const expectedPayload = JSON.stringify(data)
-      if (active?.payload_json !== expectedPayload) {
-        throw new SqliteStoreError('write-failed', 'SQLite backup source does not match the active AppData aggregate.')
-      }
-      const backupPath = `${this.databasePath}.pre-import-${fingerprint(data)}.backup.sqlite`
       try {
-        if (!existsSync(backupPath)) await backup(this.database, backupPath)
+        this.assertOpen()
+        const expectedPayload = JSON.stringify(data)
+        const backupPath = `${this.databasePath}.pre-import-${fingerprint(data)}.backup.sqlite`
+        if (!existsSync(backupPath)) {
+          const snapshotDatabase = new DatabaseSync(':memory:')
+          try {
+            applySqliteMigrations(snapshotDatabase)
+            snapshotDatabase.exec('BEGIN IMMEDIATE')
+            upsertAppDataRow(snapshotDatabase, data.version, expectedPayload)
+            snapshotDatabase.exec('COMMIT')
+            await backup(snapshotDatabase, backupPath)
+          } catch (error) {
+            if (snapshotDatabase.isTransaction) snapshotDatabase.exec('ROLLBACK')
+            throw error
+          } finally {
+            snapshotDatabase.close()
+          }
+        }
         const verificationDatabase = new DatabaseSync(backupPath, { readOnly: true })
         try {
           const verified = verificationDatabase.prepare(`
-            SELECT payload_json
+            SELECT data_version, payload_json
             FROM app_data
             WHERE singleton_id = 1
-          `).get() as unknown as { payload_json?: unknown } | undefined
-          if (verified?.payload_json !== expectedPayload) {
+          `).get() as unknown as AppDataRow | undefined
+          if (verified?.data_version !== data.version || verified.payload_json !== expectedPayload) {
             throw new SqliteStoreError('write-failed', 'SQLite backup verification failed.')
           }
         } finally {

@@ -1,4 +1,4 @@
-import { deepStrictEqual, equal } from 'node:assert/strict'
+import { deepStrictEqual, equal, rejects } from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -115,6 +115,27 @@ test('legacy migration is deterministic on fresh databases and repeatable on the
     await first.cleanup()
     await second.cleanup()
   }
+})
+
+test('legacy migration fails closed when the target Store returns a different aggregate', async () => {
+  const legacyData = fullAppDataFixture()
+  const divergentData = fullAppDataFixture()
+  divergentData.coachNotes.mismatch = 'target changed the aggregate'
+  const legacyStore: AppDataStore = {
+    load: async () => legacyData,
+    save: async () => undefined,
+    backupBeforeImport: async () => undefined,
+  }
+  const divergentStore: AppDataStore = {
+    load: async () => divergentData,
+    save: async () => undefined,
+    backupBeforeImport: async () => undefined,
+  }
+
+  await rejects(
+    migrateLegacyAppDataToSqlite(legacyStore, divergentStore),
+    /did not preserve the complete AppData aggregate/,
+  )
 })
 
 const applyDifferentialOperations = (source: AppData): AppData => {

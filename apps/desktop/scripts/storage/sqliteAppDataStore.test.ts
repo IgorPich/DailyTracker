@@ -1,5 +1,5 @@
 import { deepStrictEqual, equal, rejects, strictEqual } from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
@@ -142,6 +142,54 @@ test('SQLite reports semantically invalid payload as corrupt data', async () => 
   }
 })
 
+test('SQLite rejects a raw payload version that differs from data_version', async () => {
+  const harness = await createSqliteHarness()
+  try {
+    const store = harness.createStore()
+    await store.save(fullAppDataFixture())
+    await store.close()
+    const olderPayload = fullAppDataFixture()
+    olderPayload.version = 3
+    const database = new DatabaseSync(harness.databasePath)
+    database.prepare(`
+      UPDATE app_data
+      SET data_version = 4, payload_json = ?
+      WHERE singleton_id = 1
+    `).run(JSON.stringify(olderPayload))
+    database.close()
+    const reopened = harness.createStore()
+
+    await rejects(reopened.load(), (error: unknown) => (
+      error instanceof SqliteStoreError && error.kind === 'invalid-or-corrupt-data'
+    ))
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('SQLite accepts an aligned older payload version and normalizes it after validation', async () => {
+  const harness = await createSqliteHarness()
+  try {
+    const store = harness.createStore()
+    await store.save(fullAppDataFixture())
+    await store.close()
+    const olderPayload = fullAppDataFixture()
+    olderPayload.version = 3
+    const database = new DatabaseSync(harness.databasePath)
+    database.prepare(`
+      UPDATE app_data
+      SET data_version = 3, payload_json = ?
+      WHERE singleton_id = 1
+    `).run(JSON.stringify(olderPayload))
+    database.close()
+    const reopened = harness.createStore()
+
+    equal((await reopened.load()).version, 4)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
 test('SQLite keeps exactly one AppData row after repeated full aggregate writes', async () => {
   const harness = await createSqliteHarness()
   try {
@@ -186,15 +234,63 @@ test('SQLite reports constraint violations separately from generic write failure
   }
 })
 
-test('SQLite reports writes attempted on a closed database as write failures', async () => {
+test('SQLite reports every operation on a closed database as unavailable', async () => {
   const harness = await createSqliteHarness()
   try {
     const store = harness.createStore()
     await store.close()
+    const unavailable = (error: unknown) => (
+      error instanceof SqliteStoreError && error.kind === 'database-unavailable'
+    )
 
-    await rejects(store.save(fullAppDataFixture()), (error: unknown) => (
+    await rejects(store.load(), unavailable)
+    await rejects(store.save(fullAppDataFixture()), unavailable)
+    await rejects(store.backupBeforeImport(fullAppDataFixture()), unavailable)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('SQLite maps save and backup serialization failures to typed write errors', async () => {
+  const harness = await createSqliteHarness()
+  try {
+    const store = harness.createStore()
+    const circular = fullAppDataFixture()
+    ;(circular as unknown as { self: unknown }).self = circular
+    const writeFailure = (error: unknown) => (
       error instanceof SqliteStoreError && error.kind === 'write-failed'
-    ))
+    )
+
+    await rejects(store.save(circular), writeFailure)
+    await rejects(store.backupBeforeImport(circular), writeFailure)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('SQLite backs up a supplied snapshot before the active Store has been saved', async () => {
+  const harness = await createSqliteHarness()
+  try {
+    const store = harness.createStore()
+    const fixture = fullAppDataFixture()
+
+    await store.backupBeforeImport(fixture)
+
+    deepStrictEqual(await store.load(), createInitialData())
+    const backupFiles = (await readdir(harness.directory)).filter((name) => name.endsWith('.backup.sqlite'))
+    equal(backupFiles.length, 1)
+    const backupDatabase = new DatabaseSync(join(harness.directory, backupFiles[0]), { readOnly: true })
+    try {
+      const stored = backupDatabase.prepare(`
+        SELECT data_version, payload_json
+        FROM app_data
+        WHERE singleton_id = 1
+      `).get() as { data_version: number; payload_json: string }
+      equal(stored.data_version, fixture.version)
+      equal(stored.payload_json, JSON.stringify(fixture))
+    } finally {
+      backupDatabase.close()
+    }
   } finally {
     await harness.cleanup()
   }

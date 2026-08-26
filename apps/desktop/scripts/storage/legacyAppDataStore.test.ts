@@ -91,6 +91,17 @@ const desktopEnvironment = (options: {
   }
 }
 
+registerAppDataStoreContract('Legacy Tauri adapter', async () => {
+  const stores = new Map<string, MemoryKeyValueStore>()
+  const createStore = () => new LegacyAppDataStore(desktopEnvironment({ fileExists: false, stores }))
+  return {
+    store: createStore(),
+    reopen: async () => createStore(),
+    cleanup: async () => stores.clear(),
+    expectedInitialData: createInitialData(),
+  }
+})
+
 test('Legacy desktop adapter checks file existence before loading the exact main Store', async () => {
   const calls: string[] = []
   const store = new LegacyAppDataStore(desktopEnvironment({ fileExists: false, calls }))
