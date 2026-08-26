@@ -81,6 +81,7 @@ pub struct SyncMutationRequest {
     pub entity_type: SyncEntityType,
     pub entity_id: String,
     pub base_revision: i64,
+    pub order_position: Option<i64>,
     pub operation_type: SyncOperationType,
     pub payload: Option<Value>,
 }
@@ -108,6 +109,7 @@ pub struct SyncEntityRecord {
     pub updated_at: String,
     pub updated_by_device_id: String,
     pub deleted_at: Option<String>,
+    pub order_position: Option<i64>,
     pub payload: Option<Value>,
 }
 
@@ -122,6 +124,7 @@ pub struct OutboxOperation {
     pub base_revision: i64,
     pub result_revision: i64,
     pub operation_type: SyncOperationType,
+    pub order_position: Option<i64>,
     pub payload: Option<Value>,
     pub request_hash: String,
     pub created_at: String,
@@ -156,6 +159,7 @@ struct RawEntityRow {
     updated_by_device_id: String,
     deleted_at: Option<String>,
     payload_json: Option<String>,
+    order_position: Option<i64>,
 }
 
 impl RawEntityRow {
@@ -171,6 +175,7 @@ impl RawEntityRow {
             updated_by_device_id: row.get(7)?,
             deleted_at: row.get(8)?,
             payload_json: row.get(9)?,
+            order_position: row.get(10)?,
         })
     }
 
@@ -185,6 +190,7 @@ impl RawEntityRow {
             updated_at: self.updated_at,
             updated_by_device_id: self.updated_by_device_id,
             deleted_at: self.deleted_at,
+            order_position: self.order_position,
             payload: self
                 .payload_json
                 .map(|payload| serde_json::from_str(&payload))
@@ -203,6 +209,7 @@ struct RawOutboxRow {
     result_revision: i64,
     operation_type: String,
     payload_json: Option<String>,
+    order_position: Option<i64>,
     request_hash: String,
     created_at: String,
     attempt_count: i64,
@@ -222,11 +229,12 @@ impl RawOutboxRow {
             result_revision: row.get(6)?,
             operation_type: row.get(7)?,
             payload_json: row.get(8)?,
-            request_hash: row.get(9)?,
-            created_at: row.get(10)?,
-            attempt_count: row.get(11)?,
-            last_attempt_at: row.get(12)?,
-            acknowledged_at: row.get(13)?,
+            order_position: row.get(9)?,
+            request_hash: row.get(10)?,
+            created_at: row.get(11)?,
+            attempt_count: row.get(12)?,
+            last_attempt_at: row.get(13)?,
+            acknowledged_at: row.get(14)?,
         })
     }
 
@@ -240,6 +248,7 @@ impl RawOutboxRow {
             base_revision: self.base_revision,
             result_revision: self.result_revision,
             operation_type: SyncOperationType::from_database(&self.operation_type)?,
+            order_position: self.order_position,
             payload: self
                 .payload_json
                 .map(|payload| serde_json::from_str(&payload))
@@ -390,6 +399,53 @@ impl NativeAppDataStore {
                 }
             }
 
+            if request.operation_type == SyncOperationType::Upsert {
+                if let Some(position) = request.order_position {
+                    transaction.execute(
+                        r#"
+                        INSERT INTO sync_entity_order (
+                          entity_type,
+                          entity_id,
+                          position,
+                          updated_revision
+                        )
+                        VALUES (?1, ?2, ?3, ?4)
+                        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+                          position = excluded.position,
+                          updated_revision = excluded.updated_revision
+                        "#,
+                        params![
+                            request.entity_type.as_str(),
+                            &request.entity_id,
+                            position,
+                            revision,
+                        ],
+                    )?;
+                } else {
+                    transaction.execute(
+                        r#"
+                        INSERT OR IGNORE INTO sync_entity_order (
+                          entity_type,
+                          entity_id,
+                          position,
+                          updated_revision
+                        )
+                        VALUES (
+                          ?1,
+                          ?2,
+                          COALESCE((
+                            SELECT MAX(position) + 1
+                            FROM sync_entity_order
+                            WHERE entity_type = ?1
+                          ), 0),
+                          ?3
+                        )
+                        "#,
+                        params![request.entity_type.as_str(), &request.entity_id, revision],
+                    )?;
+                }
+            }
+
             let result = SyncMutationResult {
                 operation_id: request.operation_id.clone(),
                 entity_type: request.entity_type,
@@ -437,9 +493,10 @@ impl NativeAppDataStore {
                       result_revision,
                       operation_type,
                       payload_json,
+                      order_position,
                       request_hash
                     )
-                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                     "#,
                     params![
                         &request.operation_id,
@@ -451,6 +508,7 @@ impl NativeAppDataStore {
                         revision,
                         request.operation_type.as_str(),
                         payload_json.as_deref(),
+                        request.order_position,
                         &request_hash,
                     ],
                 )?;
@@ -481,18 +539,22 @@ impl NativeAppDataStore {
                 .query_row(
                     r#"
                     SELECT
-                      entity_type,
-                      entity_id,
-                      revision,
-                      created_revision,
-                      created_at,
-                      created_by_device_id,
-                      updated_at,
-                      updated_by_device_id,
-                      deleted_at,
-                      payload_json
-                    FROM sync_entities
-                    WHERE entity_type = ?1 AND entity_id = ?2
+                      entities.entity_type,
+                      entities.entity_id,
+                      entities.revision,
+                      entities.created_revision,
+                      entities.created_at,
+                      entities.created_by_device_id,
+                      entities.updated_at,
+                      entities.updated_by_device_id,
+                      entities.deleted_at,
+                      entities.payload_json,
+                      entity_order.position
+                    FROM sync_entities AS entities
+                    LEFT JOIN sync_entity_order AS entity_order
+                      ON entity_order.entity_type = entities.entity_type
+                     AND entity_order.entity_id = entities.entity_id
+                    WHERE entities.entity_type = ?1 AND entities.entity_id = ?2
                     "#,
                     params![entity_type.as_str(), entity_id],
                     RawEntityRow::from_row,
@@ -517,19 +579,23 @@ impl NativeAppDataStore {
             let mut statement = connection.prepare(
                 r#"
                 SELECT
-                  entity_type,
-                  entity_id,
-                  revision,
-                  created_revision,
-                  created_at,
-                  created_by_device_id,
-                  updated_at,
-                  updated_by_device_id,
-                  deleted_at,
-                  payload_json
-                FROM sync_entities
-                WHERE revision > ?1
-                ORDER BY revision ASC
+                  entities.entity_type,
+                  entities.entity_id,
+                  entities.revision,
+                  entities.created_revision,
+                  entities.created_at,
+                  entities.created_by_device_id,
+                  entities.updated_at,
+                  entities.updated_by_device_id,
+                  entities.deleted_at,
+                  entities.payload_json,
+                  entity_order.position
+                FROM sync_entities AS entities
+                LEFT JOIN sync_entity_order AS entity_order
+                  ON entity_order.entity_type = entities.entity_type
+                 AND entity_order.entity_id = entities.entity_id
+                WHERE entities.revision > ?1
+                ORDER BY entities.revision ASC
                 LIMIT ?2
                 "#,
             )?;
@@ -562,6 +628,7 @@ impl NativeAppDataStore {
                   result_revision,
                   operation_type,
                   payload_json,
+                  order_position,
                   request_hash,
                   created_at,
                   attempt_count,
@@ -634,6 +701,11 @@ fn validate_request(request: &SyncMutationRequest) -> StorageResult<()> {
     if request.base_revision < 0 {
         return Err(StorageError::InvalidMutation(
             "baseRevision cannot be negative".into(),
+        ));
+    }
+    if request.order_position.is_some_and(|position| position < 0) {
+        return Err(StorageError::InvalidMutation(
+            "orderPosition cannot be negative".into(),
         ));
     }
     match request.operation_type {
@@ -718,7 +790,7 @@ fn request_hash(request: &SyncMutationRequest, origin: MutationOrigin) -> Storag
     ))
 }
 
-fn canonical_json(value: &Value) -> Value {
+pub(crate) fn canonical_json(value: &Value) -> Value {
     match value {
         Value::Array(values) => Value::Array(values.iter().map(canonical_json).collect()),
         Value::Object(object) => {
@@ -756,6 +828,7 @@ mod tests {
             entity_type: SyncEntityType::Workout,
             entity_id: "workout-existing-id".into(),
             base_revision,
+            order_position: Some(0),
             operation_type: SyncOperationType::Upsert,
             payload: Some(json!({
                 "id": "workout-existing-id",
@@ -799,6 +872,7 @@ mod tests {
         assert_eq!(outbox.len(), 1);
         assert_eq!(outbox[0].operation_id, request.operation_id);
         assert_eq!(outbox[0].result_revision, 1);
+        assert_eq!(outbox[0].order_position, Some(0));
     }
 
     #[test]
@@ -838,6 +912,7 @@ mod tests {
             entity_type: SyncEntityType::Workout,
             entity_id: "workout-existing-id".into(),
             base_revision: created.revision,
+            order_position: None,
             operation_type: SyncOperationType::Delete,
             payload: None,
         };
@@ -940,6 +1015,7 @@ mod tests {
             entity_type: SyncEntityType::DailyEntry,
             entity_id: "2026-08-26".into(),
             base_revision: 0,
+            order_position: Some(0),
             operation_type: SyncOperationType::Upsert,
             payload: Some(json!({ "id": "legacy-daily-id", "date": "2026-08-25" })),
         };

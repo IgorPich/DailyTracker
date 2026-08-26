@@ -7,8 +7,10 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use thiserror::Error;
 
+mod legacy_bootstrap;
 mod sync_repository;
 
+pub use legacy_bootstrap::*;
 pub use sync_repository::*;
 
 pub const DATABASE_FILENAME: &str = "greekgod-v3.sqlite";
@@ -125,6 +127,29 @@ const MIGRATION_2_SQL: &str = r#"
     PRAGMA user_version = 2;
   "#;
 
+const MIGRATION_3_SQL: &str = r#"
+    CREATE TABLE sync_entity_order (
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      position INTEGER NOT NULL CHECK (position >= 0),
+      updated_revision INTEGER NOT NULL CHECK (updated_revision > 0),
+      PRIMARY KEY (entity_type, entity_id),
+      FOREIGN KEY (entity_type, entity_id)
+        REFERENCES sync_entities (entity_type, entity_id)
+    ) STRICT;
+
+    CREATE INDEX sync_entity_order_position_idx
+      ON sync_entity_order (entity_type, position, entity_id);
+
+    ALTER TABLE sync_outbox
+      ADD COLUMN order_position INTEGER CHECK (order_position IS NULL OR order_position >= 0);
+
+    CREATE INDEX sync_outbox_revision_idx
+      ON sync_outbox (acknowledged_at, result_revision);
+
+    PRAGMA user_version = 3;
+  "#;
+
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("SQLite database is unavailable: {0}")]
@@ -146,6 +171,8 @@ pub enum StorageError {
     },
     #[error("Sync operation ID was reused with different content: {0}")]
     OperationIdReuse(String),
+    #[error("Legacy sync bootstrap mismatch: {0}")]
+    BootstrapMismatch(String),
     #[error("SQLite operation failed: {0}")]
     Sqlite(#[from] rusqlite::Error),
     #[error("Storage filesystem operation failed: {0}")]
@@ -163,6 +190,7 @@ impl StorageError {
             Self::InvalidMutation(_) => "invalid-mutation",
             Self::Conflict { .. } => "revision-conflict",
             Self::OperationIdReuse(_) => "operation-id-reuse",
+            Self::BootstrapMismatch(_) => "bootstrap-mismatch",
             Self::Sqlite(_) => "sqlite-operation-failed",
             Self::Io(_) => "filesystem-operation-failed",
             Self::Json(_) => "json-serialization-failed",
@@ -202,6 +230,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 2,
         name: "sync-ready-entity-metadata",
         sql: MIGRATION_2_SQL,
+    },
+    Migration {
+        version: 3,
+        name: "preserve-entity-order",
+        sql: MIGRATION_3_SQL,
     },
 ];
 
@@ -582,6 +615,14 @@ mod tests {
     }
 
     #[test]
+    fn entity_order_migration_checksum_is_preserved_exactly() {
+        assert_eq!(
+            migration_checksum(MIGRATION_3_SQL),
+            "e749f770e7180dabd722782a51a4f87b2e4af834ba785ad2ed6873ca621739ee"
+        );
+    }
+
+    #[test]
     fn sync_ready_schema_is_additive_and_starts_without_projected_entities() {
         let (_directory, store) = store();
         store
@@ -593,6 +634,7 @@ mod tests {
                     "sync_outbox",
                     "applied_operations",
                     "gym_sync_identities",
+                    "sync_entity_order",
                 ];
                 for table in tables {
                     let exists: i64 = connection.query_row(
@@ -625,7 +667,7 @@ mod tests {
         assert!(sqlite_version_is_safe_for_multiple_writers(
             &probe.sqlite_version
         ));
-        assert_eq!(probe.schema_version, 2);
+        assert_eq!(probe.schema_version, 3);
         assert_eq!(probe.journal_mode.to_ascii_lowercase(), "wal");
     }
 
