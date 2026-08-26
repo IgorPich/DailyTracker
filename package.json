@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "npm run dev --workspace @greekgod/desktop --",
     "build": "npm run build --workspace @greekgod/core && npm run build --workspace @greekgod/desktop",
-    "test": "npm test --workspace @greekgod/core && npm test --workspace @greekgod/desktop",
+    "typecheck": "npm run typecheck --workspace @greekgod/core && npm run typecheck --workspace @greekgod/desktop",
+    "test": "npm run typecheck && npm test --workspace @greekgod/core && npm test --workspace @greekgod/desktop",
     "test:identity": "npm run test:identity --workspace @greekgod/desktop",
     "test:dev-storage": "npm run test:dev-storage --workspace @greekgod/desktop",
     "audit:store": "npm run audit:store --workspace @greekgod/desktop",
@@ -18,5 +19,8 @@
     "tauri": "npm run tauri --workspace @greekgod/desktop --",
     "tauri:dev": "npm run tauri:dev --workspace @greekgod/desktop --",
     "tauri:build": "npm run tauri:build --workspace @greekgod/desktop --"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
   }
 }

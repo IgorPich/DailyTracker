@@ -16,7 +16,7 @@ const runAudit = async () => {
   const { migrateExerciseIdentity } = dataMigration
   const { normalizeExerciseName } = exerciseIdentity
 
-  const assert = (condition: unknown, message: string): asserts condition => {
+  const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
     if (!condition) throw new Error(`FAIL live Store audit: ${message}`)
   }
   const assertDeepEqual = (actual: unknown, expected: unknown, message: string) => {

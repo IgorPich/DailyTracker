@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "npm run test:identity && npm run test:dev-storage",
     "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
     "test:dev-storage": "node scripts/development-storage-config.test.mjs",

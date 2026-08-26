@@ -28,7 +28,7 @@ const { exerciseOccurrencesByWorkout, exercisesMatch, previousExerciseOccurrence
 const { equipmentComparisonIssue } = workoutProgress
 const { normalizeData } = storage
 
-const assert = (condition: unknown, message: string): asserts condition => {
+const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(`FAIL: ${message}`)
 }
 

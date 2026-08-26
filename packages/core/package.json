@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
     "test": "npm run build && npm run test:daily-entry && npm run test:workout",
     "test:daily-entry": "node --experimental-strip-types --test tests/dailyEntryOperations.test.ts",
     "test:workout": "node --experimental-strip-types --test tests/workoutOperations.test.ts"
