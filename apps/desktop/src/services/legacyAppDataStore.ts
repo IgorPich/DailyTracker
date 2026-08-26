@@ -72,8 +72,11 @@ const verifyBackup = (source: unknown, backup: unknown) => {
 export class LegacyAppDataStore implements AppDataStore {
   private desktopStorePromise: Promise<LegacyKeyValueStore> | null = null
   private saveQueue = Promise.resolve()
+  private readonly environment: LegacyAppDataStoreEnvironment
 
-  constructor(private readonly environment: LegacyAppDataStoreEnvironment = defaultEnvironment) {}
+  constructor(environment: LegacyAppDataStoreEnvironment = defaultEnvironment) {
+    this.environment = environment
+  }
 
   mode(): 'tauri-store' | 'browser-local-storage' {
     return this.environment.isTauri() ? 'tauri-store' : 'browser-local-storage'
