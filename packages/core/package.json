@@ -9,7 +9,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsc -p tsconfig.json"
+    "test": "npm run build && npm run test:daily-entry",
+    "test:daily-entry": "node --experimental-strip-types --test tests/dailyEntryOperations.test.ts"
   },
   "devDependencies": {
     "typescript": "^7.0.2"
