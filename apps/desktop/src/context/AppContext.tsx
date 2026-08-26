@@ -1,6 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
+  addGymLocation as addGymLocationToData,
   addWorkout as addWorkoutToHistory,
+  deleteDailyEntry as deleteDailyEntryFromList,
+  deleteGymLocation as deleteGymLocationFromData,
+  deleteWorkout as deleteWorkoutFromHistory,
+  findWorkoutById,
+  renameGymLocation as renameGymLocationInData,
+  replaceTrainingTemplate,
   updateWorkout as updateWorkoutInHistory,
   upsertDailyEntry as upsertDailyEntryInList,
 } from '@greekgod/core'
@@ -115,9 +122,10 @@ const updateTemplateAndLibrary = (current: AppData, template: TrainingTemplate) 
     }
   })
 
-  const replacedTemplates = current.templates.map((item) => item.id === template.id
-    ? { ...structuredClone(template), exercises }
-    : item)
+  const replacedTemplates = replaceTrainingTemplate(
+    current.templates,
+    { ...structuredClone(template), exercises },
+  )
   const templates = replacedTemplates.map((item) => ({
     ...item,
     exercises: item.exercises.map((exercise) => {
@@ -163,7 +171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }))
     },
     deleteDailyEntry: (id) => {
-      setData((current) => ({ ...current, dailyEntries: current.dailyEntries.filter((entry) => entry.id !== id) }))
+      setData((current) => ({ ...current, dailyEntries: deleteDailyEntryFromList(current.dailyEntries, id) }))
     },
     addWorkout: (workout) => {
       setData((current) => {
@@ -177,7 +185,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     updateWorkout: (workout) => {
       setData((current) => {
-        const previous = current.workouts.find((item) => item.id === workout.id)
+        const previous = findWorkoutById(current.workouts, workout.id)
         const attached = attachWorkoutExerciseIdentities(current.exerciseLibrary, workout.exercises, previous?.exercises)
         return {
           ...current,
@@ -187,7 +195,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })
     },
     deleteWorkout: (id) => {
-      setData((current) => ({ ...current, workouts: current.workouts.filter((workout) => workout.id !== id) }))
+      setData((current) => ({ ...current, workouts: deleteWorkoutFromHistory(current.workouts, id) }))
     },
     updateTemplate: (template) => {
       setData((current) => {
@@ -199,40 +207,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setData((current) => ({ ...current, settings: { ...current.settings, ...settings } }))
     },
     addGymLocation: (name) => {
-      const trimmed = name.trim()
-      if (!trimmed) return
-      setData((current) => {
-        const locations = current.settings.gymLocations ?? []
-        if (locations.some((item) => item.localeCompare(trimmed, 'pl', { sensitivity: 'accent' }) === 0)) return current
-        return { ...current, settings: { ...current.settings, gymLocations: [...locations, trimmed] } }
-      })
+      setData((current) => addGymLocationToData(current, name))
     },
     renameGymLocation: (currentName, nextName) => {
-      const trimmed = nextName.trim()
-      if (!trimmed || currentName === trimmed) return
-      setData((current) => {
-        const locations = current.settings.gymLocations ?? []
-        if (locations.some((item) => item !== currentName && item.localeCompare(trimmed, 'pl', { sensitivity: 'accent' }) === 0)) return current
-        return {
-          ...current,
-          settings: {
-            ...current.settings,
-            gymLocations: locations.map((item) => item === currentName ? trimmed : item),
-            lastGymLocation: current.settings.lastGymLocation === currentName ? trimmed : current.settings.lastGymLocation,
-          },
-          workouts: current.workouts.map((workout) => workout.gymLocation === currentName ? { ...workout, gymLocation: trimmed } : workout),
-        }
-      })
+      setData((current) => renameGymLocationInData(current, currentName, nextName))
     },
     deleteGymLocation: (name) => {
-      setData((current) => ({
-        ...current,
-        settings: {
-          ...current.settings,
-          gymLocations: (current.settings.gymLocations ?? []).filter((item) => item !== name),
-          lastGymLocation: current.settings.lastGymLocation === name ? undefined : current.settings.lastGymLocation,
-        },
-      }))
+      setData((current) => deleteGymLocationFromData(current, name))
     },
     updateCoachNote: (rangeKey, note) => {
       setData((current) => ({ ...current, coachNotes: { ...current.coachNotes, [rangeKey]: note } }))

@@ -1,18 +1,10 @@
 import type { Workout, WorkoutExercise } from '../types'
 import { canonicalExerciseId } from './exerciseIdentity'
 
-export { updateWorkout as replaceWorkoutById } from '@greekgod/core'
+export { moveItem as moveExercise, updateWorkout as replaceWorkoutById } from '@greekgod/core'
 
 export const exercisesMatch = (candidate: WorkoutExercise, reference: WorkoutExercise) =>
   canonicalExerciseId(candidate) === canonicalExerciseId(reference)
-
-export const moveExercise = <T,>(items: T[], fromIndex: number, toIndex: number): T[] => {
-  if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex >= items.length || fromIndex === toIndex) return items
-  const next = [...items]
-  const [moved] = next.splice(fromIndex, 1)
-  next.splice(toIndex, 0, moved)
-  return next
-}
 
 export interface ExerciseOccurrence {
   workout: Workout

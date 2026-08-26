@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ArrowDown, ArrowUp, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
+import { insertTemplateExercise, removeTemplateExercise } from '@greekgod/core'
 import { confirmAction } from '../services/fileService'
 import type { ExerciseDefinition, TemplateExercise, TrainingTemplate } from '../types'
 import { canonicalExerciseId, exerciseDefinitionFor, findExerciseDefinitionByName, matchingExerciseDefinitionsByName, normalizeExerciseName } from '../utils/exerciseIdentity'
@@ -60,7 +61,10 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
       `Usunąć „${exercise.name}” z przyszłych treningów ${draft.name}? Zapisane wcześniejsze treningi nie zostaną zmienione.`,
       'Usuń ćwiczenie z szablonu',
     )
-    if (confirmed) setDraft((current) => ({ ...current, exercises: current.exercises.filter((item) => item.id !== exercise.id) }))
+    if (confirmed) setDraft((current) => ({
+      ...current,
+      exercises: removeTemplateExercise(current.exercises, exercise.id),
+    }))
   }
 
   const replaceExercise = (exercise: TemplateExercise) => {
@@ -113,9 +117,10 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
       equipmentSensitive: definition.equipmentSensitive,
     }
     setDraft((current) => {
-      const exercises = [...current.exercises]
-      exercises.splice(Math.max(0, Math.min(exercises.length, safePosition - 1)), 0, exercise)
-      return { ...current, exercises }
+      return {
+        ...current,
+        exercises: insertTemplateExercise(current.exercises, exercise, safePosition),
+      }
     })
     setNewName('')
     setNewPosition(draft.exercises.length + 2)
