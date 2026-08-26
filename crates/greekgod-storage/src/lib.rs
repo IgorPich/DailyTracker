@@ -8,9 +8,11 @@ use std::time::Duration;
 use thiserror::Error;
 
 mod legacy_bootstrap;
+mod security_repository;
 mod sync_repository;
 
 pub use legacy_bootstrap::*;
+pub use security_repository::*;
 pub use sync_repository::*;
 
 pub const DATABASE_FILENAME: &str = "greekgod-v3.sqlite";
@@ -150,6 +152,32 @@ const MIGRATION_3_SQL: &str = r#"
     PRAGMA user_version = 3;
   "#;
 
+const MIGRATION_4_SQL: &str = r#"
+    CREATE TABLE pairing_windows (
+      nonce_hash TEXT PRIMARY KEY CHECK (length(nonce_hash) = 64),
+      expires_at_epoch INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      consumed_at TEXT
+    ) STRICT;
+
+    CREATE INDEX pairing_windows_active_idx
+      ON pairing_windows (consumed_at, expires_at_epoch);
+
+    CREATE TABLE paired_devices (
+      device_id TEXT PRIMARY KEY CHECK (length(trim(device_id)) > 0),
+      display_name TEXT NOT NULL CHECK (length(trim(display_name)) > 0),
+      token_hash TEXT NOT NULL CHECK (length(token_hash) = 64),
+      paired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at TEXT,
+      revoked_at TEXT
+    ) STRICT;
+
+    CREATE INDEX paired_devices_active_idx
+      ON paired_devices (revoked_at, device_id);
+
+    PRAGMA user_version = 4;
+  "#;
+
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("SQLite database is unavailable: {0}")]
@@ -173,6 +201,12 @@ pub enum StorageError {
     OperationIdReuse(String),
     #[error("Legacy sync bootstrap mismatch: {0}")]
     BootstrapMismatch(String),
+    #[error("Pairing window is unavailable, expired or already consumed")]
+    PairingWindowClosed,
+    #[error("Device authentication failed")]
+    UnauthorizedDevice,
+    #[error("Secure random generation failed: {0}")]
+    EntropyUnavailable(String),
     #[error("SQLite operation failed: {0}")]
     Sqlite(#[from] rusqlite::Error),
     #[error("Storage filesystem operation failed: {0}")]
@@ -191,6 +225,9 @@ impl StorageError {
             Self::Conflict { .. } => "revision-conflict",
             Self::OperationIdReuse(_) => "operation-id-reuse",
             Self::BootstrapMismatch(_) => "bootstrap-mismatch",
+            Self::PairingWindowClosed => "pairing_window_closed",
+            Self::UnauthorizedDevice => "unauthorized_device",
+            Self::EntropyUnavailable(_) => "entropy_unavailable",
             Self::Sqlite(_) => "sqlite-operation-failed",
             Self::Io(_) => "filesystem-operation-failed",
             Self::Json(_) => "json-serialization-failed",
@@ -235,6 +272,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 3,
         name: "preserve-entity-order",
         sql: MIGRATION_3_SQL,
+    },
+    Migration {
+        version: 4,
+        name: "pairing-and-device-authentication",
+        sql: MIGRATION_4_SQL,
     },
 ];
 
@@ -623,6 +665,14 @@ mod tests {
     }
 
     #[test]
+    fn pairing_migration_checksum_is_preserved_exactly() {
+        assert_eq!(
+            migration_checksum(MIGRATION_4_SQL),
+            "c06937379acaf4c7467b5b290e129c019904ca894a0ac1221110a2c6fb14a995"
+        );
+    }
+
+    #[test]
     fn sync_ready_schema_is_additive_and_starts_without_projected_entities() {
         let (_directory, store) = store();
         store
@@ -635,6 +685,8 @@ mod tests {
                     "applied_operations",
                     "gym_sync_identities",
                     "sync_entity_order",
+                    "pairing_windows",
+                    "paired_devices",
                 ];
                 for table in tables {
                     let exists: i64 = connection.query_row(
@@ -667,7 +719,7 @@ mod tests {
         assert!(sqlite_version_is_safe_for_multiple_writers(
             &probe.sqlite_version
         ));
-        assert_eq!(probe.schema_version, 3);
+        assert_eq!(probe.schema_version, 4);
         assert_eq!(probe.journal_mode.to_ascii_lowercase(), "wal");
     }
 

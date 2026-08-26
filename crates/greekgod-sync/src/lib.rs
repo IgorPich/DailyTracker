@@ -276,8 +276,8 @@ mod tests {
             app_version: "3.0.0-test".into(),
             protocol_min: PROTOCOL_VERSION,
             protocol_max: PROTOCOL_VERSION,
-            schema_min: 3,
-            schema_max: 3,
+            schema_min: 4,
+            schema_max: 4,
             device_id: "mobile-test".into(),
             last_server_revision: 0,
         }
@@ -321,8 +321,8 @@ mod tests {
         ));
 
         let mut incompatible_schema = compatibility();
-        incompatible_schema.schema_min = 4;
-        incompatible_schema.schema_max = 4;
+        incompatible_schema.schema_min = 5;
+        incompatible_schema.schema_max = 5;
         let request = PushRequest {
             compatibility: incompatible_schema,
             operations: vec![operation("30000000-0000-4000-8000-000000000001", 0, 6)],
