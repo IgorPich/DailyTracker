@@ -7,6 +7,10 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use thiserror::Error;
 
+mod sync_repository;
+
+pub use sync_repository::*;
+
 pub const DATABASE_FILENAME: &str = "greekgod-v3.sqlite";
 pub const MINIMUM_SAFE_WAL_SQLITE_VERSION: &str = "3.51.3";
 
@@ -129,6 +133,19 @@ pub enum StorageError {
     MigrationFailed(String),
     #[error("SQLite data is invalid or corrupt: {0}")]
     InvalidData(String),
+    #[error("Invalid sync mutation: {0}")]
+    InvalidMutation(String),
+    #[error(
+        "Sync conflict for {entity_type}/{entity_id}: base revision {base_revision}, current revision {current_revision}"
+    )]
+    Conflict {
+        entity_type: String,
+        entity_id: String,
+        base_revision: i64,
+        current_revision: i64,
+    },
+    #[error("Sync operation ID was reused with different content: {0}")]
+    OperationIdReuse(String),
     #[error("SQLite operation failed: {0}")]
     Sqlite(#[from] rusqlite::Error),
     #[error("Storage filesystem operation failed: {0}")]
@@ -143,6 +160,9 @@ impl StorageError {
             Self::DatabaseUnavailable(_) => "database-unavailable",
             Self::MigrationFailed(_) => "migration-failed",
             Self::InvalidData(_) => "invalid-or-corrupt-data",
+            Self::InvalidMutation(_) => "invalid-mutation",
+            Self::Conflict { .. } => "revision-conflict",
+            Self::OperationIdReuse(_) => "operation-id-reuse",
             Self::Sqlite(_) => "sqlite-operation-failed",
             Self::Io(_) => "filesystem-operation-failed",
             Self::Json(_) => "json-serialization-failed",
