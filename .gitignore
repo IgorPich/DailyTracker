@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .vite/
+.artifacts/
 *.local
 *.log
 .DS_Store
@@ -8,6 +9,7 @@ Thumbs.db
 src-tauri/target/
 src-tauri/gen/schemas/
 apps/*/dist/
+apps/*/target/
 apps/*/src-tauri/target/
 apps/*/src-tauri/gen/schemas/
 crates/*/target/
