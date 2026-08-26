@@ -27,6 +27,100 @@ const MIGRATION_1_SQL: &str = r#"
     PRAGMA user_version = 1;
   "#;
 
+const MIGRATION_2_SQL: &str = r#"
+    CREATE TABLE sync_meta (
+      singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+      global_revision INTEGER NOT NULL DEFAULT 0 CHECK (global_revision >= 0),
+      bootstrap_state TEXT NOT NULL DEFAULT 'pending' CHECK (bootstrap_state IN ('pending', 'complete')),
+      bootstrap_source_hash TEXT,
+      bootstrap_completed_at TEXT
+    ) STRICT;
+
+    INSERT INTO sync_meta (singleton_id, global_revision, bootstrap_state)
+    VALUES (1, 0, 'pending');
+
+    CREATE TABLE sync_entities (
+      entity_type TEXT NOT NULL CHECK (entity_type IN (
+        'workout',
+        'daily_entry',
+        'training_template',
+        'gym',
+        'exercise_definition',
+        'settings',
+        'coach_note'
+      )),
+      entity_id TEXT NOT NULL CHECK (length(trim(entity_id)) > 0),
+      revision INTEGER NOT NULL UNIQUE CHECK (revision > 0),
+      created_revision INTEGER NOT NULL CHECK (created_revision > 0 AND created_revision <= revision),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_by_device_id TEXT NOT NULL CHECK (length(trim(created_by_device_id)) > 0),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_by_device_id TEXT NOT NULL CHECK (length(trim(updated_by_device_id)) > 0),
+      deleted_at TEXT,
+      payload_json TEXT CHECK (payload_json IS NULL OR json_valid(payload_json)),
+      CHECK (
+        (deleted_at IS NULL AND payload_json IS NOT NULL)
+        OR (deleted_at IS NOT NULL AND payload_json IS NULL)
+      ),
+      PRIMARY KEY (entity_type, entity_id)
+    ) STRICT;
+
+    CREATE INDEX sync_entities_revision_idx
+      ON sync_entities (revision, entity_type, entity_id);
+
+    CREATE TABLE sync_outbox (
+      operation_id TEXT PRIMARY KEY CHECK (length(trim(operation_id)) > 0),
+      change_set_id TEXT NOT NULL CHECK (length(trim(change_set_id)) > 0),
+      device_id TEXT NOT NULL CHECK (length(trim(device_id)) > 0),
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      base_revision INTEGER NOT NULL CHECK (base_revision >= 0),
+      result_revision INTEGER NOT NULL CHECK (result_revision > 0),
+      operation_type TEXT NOT NULL CHECK (operation_type IN ('upsert', 'delete')),
+      payload_json TEXT CHECK (payload_json IS NULL OR json_valid(payload_json)),
+      request_hash TEXT NOT NULL CHECK (length(request_hash) = 64),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+      last_attempt_at TEXT,
+      acknowledged_at TEXT,
+      CHECK (
+        (operation_type = 'upsert' AND payload_json IS NOT NULL)
+        OR (operation_type = 'delete' AND payload_json IS NULL)
+      ),
+      FOREIGN KEY (entity_type, entity_id)
+        REFERENCES sync_entities (entity_type, entity_id)
+    ) STRICT;
+
+    CREATE INDEX sync_outbox_pending_idx
+      ON sync_outbox (acknowledged_at, created_at, operation_id);
+
+    CREATE TABLE applied_operations (
+      operation_id TEXT PRIMARY KEY CHECK (length(trim(operation_id)) > 0),
+      request_hash TEXT NOT NULL CHECK (length(request_hash) = 64),
+      device_id TEXT NOT NULL CHECK (length(trim(device_id)) > 0),
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      result_revision INTEGER NOT NULL CHECK (result_revision > 0),
+      result_json TEXT NOT NULL CHECK (json_valid(result_json)),
+      applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) STRICT;
+
+    CREATE INDEX applied_operations_entity_idx
+      ON applied_operations (entity_type, entity_id, result_revision);
+
+    CREATE TABLE gym_sync_identities (
+      gym_id TEXT PRIMARY KEY CHECK (length(trim(gym_id)) > 0),
+      legacy_name TEXT NOT NULL CHECK (length(trim(legacy_name)) > 0),
+      legacy_ordinal INTEGER NOT NULL CHECK (legacy_ordinal >= 0),
+      current_name TEXT NOT NULL CHECK (length(trim(current_name)) > 0),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (legacy_name, legacy_ordinal)
+    ) STRICT;
+
+    PRAGMA user_version = 2;
+  "#;
+
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("SQLite database is unavailable: {0}")]
@@ -78,11 +172,18 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "mirror-current-app-data",
-    sql: MIGRATION_1_SQL,
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "mirror-current-app-data",
+        sql: MIGRATION_1_SQL,
+    },
+    Migration {
+        version: 2,
+        name: "sync-ready-entity-metadata",
+        sql: MIGRATION_2_SQL,
+    },
+];
 
 impl NativeAppDataStore {
     pub fn new(database_path: impl Into<PathBuf>) -> StorageResult<Self> {
@@ -453,6 +554,50 @@ mod tests {
     }
 
     #[test]
+    fn sync_ready_migration_checksum_is_preserved_exactly() {
+        assert_eq!(
+            migration_checksum(MIGRATION_2_SQL),
+            "98727da50f74fe43aed0d509aa500c44729b59100eb11ca255b668ac43175ae1"
+        );
+    }
+
+    #[test]
+    fn sync_ready_schema_is_additive_and_starts_without_projected_entities() {
+        let (_directory, store) = store();
+        store
+            .with_connection(|connection| {
+                let tables = [
+                    "app_data",
+                    "sync_meta",
+                    "sync_entities",
+                    "sync_outbox",
+                    "applied_operations",
+                    "gym_sync_identities",
+                ];
+                for table in tables {
+                    let exists: i64 = connection.query_row(
+                        "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = ?1",
+                        [table],
+                        |row| row.get(0),
+                    )?;
+                    assert_eq!(exists, 1, "missing table {table}");
+                }
+                let meta: (i64, String) = connection.query_row(
+                    "SELECT global_revision, bootstrap_state FROM sync_meta WHERE singleton_id = 1",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )?;
+                let entity_count: i64 =
+                    connection
+                        .query_row("SELECT COUNT(*) FROM sync_entities", [], |row| row.get(0))?;
+                assert_eq!(meta, (0, "pending".into()));
+                assert_eq!(entity_count, 0);
+                Ok(())
+            })
+            .expect("inspect sync-ready schema");
+    }
+
+    #[test]
     fn native_runtime_uses_wal_safe_bundled_sqlite() {
         let (_directory, store) = store();
         let probe = store.probe().expect("probe");
@@ -460,7 +605,7 @@ mod tests {
         assert!(sqlite_version_is_safe_for_multiple_writers(
             &probe.sqlite_version
         ));
-        assert_eq!(probe.schema_version, 1);
+        assert_eq!(probe.schema_version, 2);
         assert_eq!(probe.journal_mode.to_ascii_lowercase(), "wal");
     }
 
