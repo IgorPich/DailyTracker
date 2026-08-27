@@ -7,20 +7,32 @@ use sha2::{Digest, Sha256};
 use std::env;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::net::{IpAddr, SocketAddr, TcpListener};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Duration;
 
 mod discovery;
 
 use discovery::MdnsAdvertisement;
 
+const DEFAULT_SYNC_PORT: u16 = 39173;
+
 #[derive(Debug)]
 struct Config {
     database_path: PathBuf,
-    bind: SocketAddr,
+    bind: BindSelection,
     service_id: Option<String>,
     pairing: Option<PairingConfig>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BindSelection {
+    Explicit(SocketAddr),
+    PrivateLan,
 }
 
 #[derive(Debug)]
@@ -36,9 +48,12 @@ impl Config {
 
     fn parse_from(arguments: impl IntoIterator<Item = String>) -> Result<Self, String> {
         let mut database_path = None;
-        let mut bind = "127.0.0.1:39173"
-            .parse::<SocketAddr>()
-            .expect("default bind");
+        let mut bind = BindSelection::Explicit(
+            format!("127.0.0.1:{DEFAULT_SYNC_PORT}")
+                .parse::<SocketAddr>()
+                .expect("default bind"),
+        );
+        let mut bind_was_configured = false;
         let mut service_id = None;
         let mut pairing_window_seconds = None;
         let mut pairing_nonce_output = None;
@@ -47,11 +62,24 @@ impl Config {
             match argument.as_str() {
                 "--database" => database_path = arguments.next().map(PathBuf::from),
                 "--bind" => {
-                    bind = arguments
-                        .next()
-                        .ok_or_else(|| "--bind requires an address".to_string())?
-                        .parse()
-                        .map_err(|error| format!("invalid --bind address: {error}"))?;
+                    if bind_was_configured {
+                        return Err("--bind and --bind-private-lan are mutually exclusive".into());
+                    }
+                    bind = BindSelection::Explicit(
+                        arguments
+                            .next()
+                            .ok_or_else(|| "--bind requires an address".to_string())?
+                            .parse()
+                            .map_err(|error| format!("invalid --bind address: {error}"))?,
+                    );
+                    bind_was_configured = true;
+                }
+                "--bind-private-lan" => {
+                    if bind_was_configured {
+                        return Err("--bind and --bind-private-lan are mutually exclusive".into());
+                    }
+                    bind = BindSelection::PrivateLan;
+                    bind_was_configured = true;
                 }
                 "--service-id" => service_id = arguments.next(),
                 "--pairing-window-seconds" => {
@@ -80,7 +108,8 @@ impl Config {
         {
             return Err("--service-id cannot be blank".into());
         }
-        if !is_local_network_address(bind.ip()) {
+        if matches!(bind, BindSelection::Explicit(address) if !is_local_network_address(address.ip()))
+        {
             return Err(
                 "Sync Service must bind to an explicit loopback or private LAN address".into(),
             );
@@ -164,6 +193,7 @@ async fn main() {
 async fn run() -> Result<(), String> {
     ensure_crypto_provider();
     let config = Config::parse()?;
+    let bind = resolve_bind(config.bind)?;
     let store =
         NativeAppDataStore::new(&config.database_path).map_err(|error| error.to_string())?;
     let canonical_database_path = std::fs::canonicalize(store.database_path())
@@ -178,8 +208,8 @@ async fn run() -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let router =
         build_router(store.clone(), public_identity.clone()).map_err(|error| error.to_string())?;
-    let listener = TcpListener::bind(config.bind)
-        .map_err(|error| format!("could not bind {}: {error}", config.bind))?;
+    let listener =
+        TcpListener::bind(bind).map_err(|error| format!("could not bind {bind}: {error}"))?;
     listener
         .set_nonblocking(true)
         .map_err(|error| format!("could not configure TLS listener: {error}"))?;
@@ -191,12 +221,9 @@ async fn run() -> Result<(), String> {
         eprintln!("GreekGod pairing window opened; nonce written to the configured output file");
     }
 
-    let discovery = MdnsAdvertisement::register(&public_identity.service_id, config.bind)?;
+    let discovery = MdnsAdvertisement::register(&public_identity.service_id, bind)?;
 
-    eprintln!(
-        "GreekGod Sync Service listening with HTTPS on {}",
-        config.bind
-    );
+    eprintln!("GreekGod Sync Service listening with HTTPS on {}", bind);
     let handle = axum_server::Handle::new();
     let shutdown_handle = handle.clone();
     tokio::spawn(async move {
@@ -204,6 +231,23 @@ async fn run() -> Result<(), String> {
             shutdown_handle.graceful_shutdown(Some(Duration::from_secs(15)));
         }
     });
+    let network_address_lost = Arc::new(AtomicBool::new(false));
+    if !bind.ip().is_loopback() {
+        let network_handle = handle.clone();
+        let network_address_lost = network_address_lost.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            interval.tick().await;
+            loop {
+                interval.tick().await;
+                if !local_address_is_available(bind.ip()) {
+                    network_address_lost.store(true, Ordering::Release);
+                    network_handle.graceful_shutdown(Some(Duration::from_secs(15)));
+                    break;
+                }
+            }
+        });
+    }
     let server_result = axum_server::from_tcp_rustls(listener, tls_config)
         .map_err(|error| format!("could not create HTTPS listener: {error}"))?
         .handle(handle)
@@ -213,7 +257,98 @@ async fn run() -> Result<(), String> {
     if let Some(discovery) = discovery {
         discovery.shutdown()?;
     }
+    if network_address_lost.load(Ordering::Acquire) {
+        return Err("private LAN address changed; Sync Service restart required".into());
+    }
     server_result
+}
+
+fn resolve_bind(selection: BindSelection) -> Result<SocketAddr, String> {
+    match selection {
+        BindSelection::Explicit(bind) => Ok(bind),
+        BindSelection::PrivateLan => select_private_lan_address(DEFAULT_SYNC_PORT),
+    }
+}
+
+fn select_private_lan_address(port: u16) -> Result<SocketAddr, String> {
+    let interfaces = if_addrs::get_if_addrs()
+        .map_err(|error| format!("could not enumerate local network interfaces: {error}"))?;
+    let candidates = interfaces
+        .into_iter()
+        .map(|interface| {
+            let address = interface.ip();
+            (interface.name, address)
+        })
+        .collect::<Vec<_>>();
+    select_private_lan_address_from(candidates, port).ok_or_else(|| {
+        "no active private IPv4 LAN interface is available; connect to a private LAN and retry"
+            .into()
+    })
+}
+
+fn select_private_lan_address_from(
+    interfaces: impl IntoIterator<Item = (String, IpAddr)>,
+    port: u16,
+) -> Option<SocketAddr> {
+    let mut candidates = interfaces
+        .into_iter()
+        .filter_map(|(name, address)| match address {
+            IpAddr::V4(address) if is_private_ipv4(address) && !is_virtual_interface(&name) => {
+                Some((physical_interface_score(&name), name, address))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| left.1.cmp(&right.1))
+            .then_with(|| left.2.octets().cmp(&right.2.octets()))
+    });
+    candidates
+        .first()
+        .map(|(_, _, address)| SocketAddr::new(IpAddr::V4(*address), port))
+}
+
+fn is_private_ipv4(address: Ipv4Addr) -> bool {
+    address.is_private() && !address.is_loopback() && !address.is_link_local()
+}
+
+fn is_virtual_interface(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    [
+        "vethernet",
+        "virtualbox",
+        "vmware",
+        "docker",
+        "wsl",
+        "tailscale",
+        "zerotier",
+        "tunnel",
+    ]
+    .iter()
+    .any(|marker| name.contains(marker))
+}
+
+fn physical_interface_score(name: &str) -> u8 {
+    let name = name.to_ascii_lowercase();
+    if ["ethernet", "wi-fi", "wifi", "wlan"]
+        .iter()
+        .any(|marker| name.contains(marker))
+    {
+        1
+    } else {
+        0
+    }
+}
+
+fn local_address_is_available(expected: IpAddr) -> bool {
+    if_addrs::get_if_addrs().is_ok_and(|interfaces| {
+        interfaces
+            .into_iter()
+            .any(|interface| interface.ip() == expected)
+    })
 }
 
 #[derive(Serialize)]
@@ -281,6 +416,40 @@ mod tests {
         let mut private_arguments = required_arguments();
         private_arguments.extend(["--bind".into(), "192.168.1.25:39173".into()]);
         assert!(Config::parse_from(private_arguments).is_ok());
+    }
+
+    #[test]
+    fn installed_mode_selects_a_physical_private_lan_and_fixed_port() {
+        let selected = select_private_lan_address_from(
+            [
+                ("vEthernet (WSL)".into(), "172.20.16.1".parse().unwrap()),
+                ("Ethernet".into(), "192.168.1.110".parse().unwrap()),
+                ("Wi-Fi".into(), "8.8.8.8".parse().unwrap()),
+            ],
+            DEFAULT_SYNC_PORT,
+        );
+        assert_eq!(selected, "192.168.1.110:39173".parse().ok());
+
+        let mut arguments = required_arguments();
+        arguments.push("--bind-private-lan".into());
+        assert_eq!(
+            Config::parse_from(arguments)
+                .expect("private LAN mode")
+                .bind,
+            BindSelection::PrivateLan
+        );
+    }
+
+    #[test]
+    fn bind_modes_are_mutually_exclusive() {
+        let mut arguments = required_arguments();
+        arguments.extend([
+            "--bind-private-lan".into(),
+            "--bind".into(),
+            "192.168.1.25:39173".into(),
+        ]);
+        let error = Config::parse_from(arguments).expect_err("duplicate bind mode");
+        assert!(error.contains("mutually exclusive"));
     }
 
     #[test]
