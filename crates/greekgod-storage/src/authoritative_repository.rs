@@ -8,7 +8,9 @@ use crate::{
     app_data_version, NativeAppDataStore, StorageError, StorageResult, SyncEntityType,
     SyncMutationRequest, SyncOperationType,
 };
-use rusqlite::{OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{
+    Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior, MAIN_DB,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
@@ -239,6 +241,26 @@ impl NativeAppDataStore {
             })
         })
     }
+
+    pub fn backup_authoritative_before_import(
+        &self,
+        expected: &Value,
+    ) -> StorageResult<std::path::PathBuf> {
+        let current = self.load_authoritative_snapshot()?;
+        if current.data != *expected {
+            return Err(StorageError::InvalidData(
+                "requested import backup differs from current authoritative AppData".into(),
+            ));
+        }
+        let backup_path = self.backup_path_for(expected)?;
+        self.with_connection(|connection| {
+            if !backup_path.exists() {
+                connection.backup(MAIN_DB, &backup_path, None)?;
+            }
+            verify_authoritative_backup(&backup_path, expected)?;
+            Ok(backup_path.clone())
+        })
+    }
 }
 
 fn entity_key(entity: &ProjectedEntity) -> (String, String) {
@@ -400,6 +422,34 @@ fn verify_materialized_snapshot(
     Ok(())
 }
 
+fn verify_authoritative_backup(path: &std::path::Path, expected: &Value) -> StorageResult<()> {
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    let integrity: String = connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+    if integrity != "ok" {
+        return Err(StorageError::InvalidData(format!(
+            "authoritative backup integrity_check returned {integrity}"
+        )));
+    }
+    let (global_revision, materialized_revision): (i64, i64) = connection.query_row(
+        "SELECT global_revision, materialized_revision FROM sync_meta WHERE singleton_id = 1 AND bootstrap_state = 'complete'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let reconstructed = reconstruct_with_connection(&connection)?;
+    verify_materialized_snapshot(
+        &connection,
+        &reconstructed,
+        global_revision,
+        materialized_revision,
+    )?;
+    if reconstructed != *expected {
+        return Err(StorageError::InvalidData(
+            "verified authoritative backup differs from requested AppData".into(),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -493,6 +543,40 @@ mod tests {
         assert_eq!(status.materialized_revision, revision);
         assert_eq!(loaded.data, fixture());
         assert_eq!(loaded.revision, revision);
+    }
+
+    #[test]
+    fn bootstrap_preserves_absent_optional_gym_locations_in_fresh_app_data() {
+        let directory = tempdir().expect("temporary fresh-data directory");
+        let store = NativeAppDataStore::new(directory.path().join(DATABASE_FILENAME))
+            .expect("native store");
+        let fresh = json!({
+            "version": 4,
+            "dailyEntries": [],
+            "workouts": [],
+            "templates": [{ "id": "template-a", "code": "A", "name": "PUSH", "exercises": [] }],
+            "exerciseLibrary": [],
+            "settings": {
+                "phase": "Maintenance",
+                "calorieTarget": 2800,
+                "proteinTarget": 160,
+                "trendThresholds": {
+                    "lossBelow": -0.15,
+                    "stableUpper": 0.05,
+                    "slowGainUpper": 0.2
+                }
+            },
+            "coachNotes": {}
+        });
+
+        store
+            .bootstrap_from_legacy_snapshot(&fresh, "desktop-bootstrap")
+            .expect("fresh bootstrap");
+
+        assert_eq!(
+            store.load_authoritative_snapshot().expect("load").data,
+            fresh
+        );
     }
 
     #[test]
@@ -631,6 +715,27 @@ mod tests {
     }
 
     #[test]
+    fn authoritative_backup_is_verified_idempotent_and_does_not_change_active_data() {
+        let (_directory, store, revision) = bootstrapped_store();
+        let before = store.load_authoritative_snapshot().expect("before backup");
+
+        let first = store
+            .backup_authoritative_before_import(&before.data)
+            .expect("first backup");
+        let second = store
+            .backup_authoritative_before_import(&before.data)
+            .expect("second backup");
+
+        assert_eq!(first, second);
+        assert!(first.exists());
+        assert_eq!(
+            store.load_authoritative_snapshot().expect("after backup"),
+            before
+        );
+        assert_eq!(store.current_sync_revision().expect("revision"), revision);
+    }
+
+    #[test]
     fn stale_snapshot_revision_cannot_overwrite_newer_authority() {
         let (_directory, store, revision) = bootstrapped_store();
         let mut first = fixture();
@@ -651,6 +756,24 @@ mod tests {
         assert_eq!(
             store.load_authoritative_snapshot().expect("load").data,
             first
+        );
+    }
+
+    #[test]
+    fn identical_snapshot_is_a_true_noop_without_revision_or_outbox_growth() {
+        let (_directory, store, revision) = bootstrapped_store();
+        let outbox_before = store.pending_outbox(100).expect("outbox before").len();
+
+        let result = store
+            .replace_authoritative_snapshot(&fixture(), "desktop-test", revision)
+            .expect("no-op replacement");
+
+        assert_eq!(result.applied_operations, 0);
+        assert_eq!(result.revision, revision);
+        assert_eq!(store.current_sync_revision().expect("revision"), revision);
+        assert_eq!(
+            store.pending_outbox(100).expect("outbox after").len(),
+            outbox_before
         );
     }
 

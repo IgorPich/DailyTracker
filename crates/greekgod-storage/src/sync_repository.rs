@@ -591,19 +591,13 @@ pub(crate) fn apply_mutation_in_transaction(
                     revision,
                 ],
             )?;
-        } else {
+        } else if matches!(
+            request.entity_type,
+            SyncEntityType::Settings | SyncEntityType::CoachNote
+        ) {
             transaction.execute(
-                r#"
-                INSERT OR IGNORE INTO sync_entity_order (
-                  entity_type, entity_id, position, updated_revision
-                )
-                VALUES (
-                  ?1, ?2,
-                  COALESCE((SELECT MAX(position) + 1 FROM sync_entity_order WHERE entity_type = ?1), 0),
-                  ?3
-                )
-                "#,
-                params![request.entity_type.as_str(), &request.entity_id, revision],
+                "DELETE FROM sync_entity_order WHERE entity_type = ?1 AND entity_id = ?2",
+                params![request.entity_type.as_str(), &request.entity_id],
             )?;
         }
     }

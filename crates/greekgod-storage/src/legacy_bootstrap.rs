@@ -433,27 +433,25 @@ pub(crate) fn reconstruct_with_connection(connection: &Connection) -> StorageRes
     let settings_object = settings.as_object_mut().ok_or_else(|| {
         StorageError::InvalidData("settings entity payload is not an object".into())
     })?;
-    settings_object.insert(
-        "gymLocations".into(),
-        Value::Array(
-            active_payloads(connection, SyncEntityType::Gym)?
-                .into_iter()
-                .map(|payload| {
-                    payload
-                        .as_object()
-                        .and_then(|object| object.get("name"))
-                        .and_then(Value::as_str)
-                        .filter(|name| !name.trim().is_empty())
-                        .map(|name| Value::String(name.into()))
-                        .ok_or_else(|| {
-                            StorageError::InvalidData(
-                                "active gym payload is missing a non-blank name".into(),
-                            )
-                        })
+    let gym_locations = active_payloads(connection, SyncEntityType::Gym)?
+        .into_iter()
+        .map(|payload| {
+            payload
+                .as_object()
+                .and_then(|object| object.get("name"))
+                .and_then(Value::as_str)
+                .filter(|name| !name.trim().is_empty())
+                .map(|name| Value::String(name.into()))
+                .ok_or_else(|| {
+                    StorageError::InvalidData(
+                        "active gym payload is missing a non-blank name".into(),
+                    )
                 })
-                .collect::<StorageResult<Vec<_>>>()?,
-        ),
-    );
+        })
+        .collect::<StorageResult<Vec<_>>>()?;
+    if settings_object.contains_key("gymLocations") || !gym_locations.is_empty() {
+        settings_object.insert("gymLocations".into(), Value::Array(gym_locations));
+    }
 
     let mut root = Map::new();
     root.insert("version".into(), Value::from(data_version));
