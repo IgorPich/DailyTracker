@@ -6,7 +6,9 @@ use rustls::{DigitallySignedStruct, Error as RustlsError, SignatureScheme};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::env;
+use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 struct FingerprintVerifier {
@@ -116,8 +118,11 @@ async fn main() {
 
 async fn run() -> Result<(), String> {
     let arguments = env::args().skip(1).collect::<Vec<_>>();
-    if arguments.len() != 4 {
-        return Err("expected: <expired|full> <base-url> <fingerprint> <nonce>".into());
+    if arguments.len() < 4 {
+        return Err(
+            "expected: <expired|full|shared-authority> <base-url> <fingerprint> <nonce> [desktop-edit-ack] [desktop-closed-ack]"
+                .into(),
+        );
     }
     let mode = &arguments[0];
     let base_url = arguments[1].trim_end_matches('/');
@@ -128,8 +133,161 @@ async fn run() -> Result<(), String> {
     match mode.as_str() {
         "expired" => run_expired(&client, base_url, nonce).await,
         "full" => run_full(&client, base_url, fingerprint, nonce).await,
+        "shared-authority" if arguments.len() == 6 => {
+            run_shared_authority(
+                &client,
+                base_url,
+                nonce,
+                Path::new(&arguments[4]),
+                Path::new(&arguments[5]),
+            )
+            .await
+        }
         _ => Err("unknown smoke mode".into()),
     }
+}
+
+async fn run_shared_authority(
+    client: &Client,
+    base_url: &str,
+    nonce: &str,
+    desktop_edit_ack: &Path,
+    desktop_closed_ack: &Path,
+) -> Result<(), String> {
+    let pair_body = json!({
+        "nonce": nonce,
+        "deviceId": "mobile-tls-smoke",
+        "displayName": "Shared authority smoke phone"
+    });
+    let paired = client
+        .post(format!("{base_url}/v1/pair"))
+        .json(&pair_body)
+        .send()
+        .await
+        .map_err(|error| format!("shared authority pair failed: {error}"))?;
+    require_status(&paired, StatusCode::OK, "shared authority pair")?;
+    let paired: Value = paired
+        .json()
+        .await
+        .map_err(|error| format!("shared authority pair JSON failed: {error}"))?;
+    let token = paired["credentials"]["deviceToken"]
+        .as_str()
+        .ok_or_else(|| "shared authority pairing token is missing".to_string())?
+        .to_owned();
+    let compatibility = compatibility();
+    let handshake =
+        authenticated_json(client, base_url, "/v1/handshake", &compatibility, &token).await?;
+    let initial_revision = handshake["serverRevision"]
+        .as_i64()
+        .ok_or_else(|| "shared authority handshake revision is missing".to_string())?;
+
+    let create = json!({
+        "operationId": "42000000-0000-4000-8000-000000000001",
+        "changeSetId": "43000000-0000-4000-8000-000000000001",
+        "deviceId": "mobile-tls-smoke",
+        "entityType": "workout",
+        "entityId": "live-service-workout",
+        "baseRevision": 0,
+        "orderPosition": 1,
+        "operationType": "upsert",
+        "payload": {
+            "id": "live-service-workout",
+            "date": "2026-08-27",
+            "templateId": "push",
+            "templateCode": "A",
+            "templateName": "PUSH",
+            "note": "Service live mutation",
+            "exercises": []
+        }
+    });
+    let create_body = json!({ "compatibility": compatibility, "operations": [create] });
+    let created =
+        authenticated_json(client, base_url, "/v1/sync/push", &create_body, &token).await?;
+    let create_revision = created["outcomes"][0]["result"]["revision"]
+        .as_i64()
+        .ok_or_else(|| "shared authority create was not accepted".to_string())?;
+    if create_revision <= initial_revision {
+        return Err("shared authority create revision is not monotonic".into());
+    }
+    let replay =
+        authenticated_json(client, base_url, "/v1/sync/push", &create_body, &token).await?;
+    if replay["serverRevision"] != create_revision
+        || replay["outcomes"][0]["result"]["idempotentReplay"] != true
+    {
+        return Err("shared authority create retry was not idempotent".into());
+    }
+
+    wait_for_path(desktop_edit_ack, Duration::from_secs(30)).await?;
+    let delete = json!({
+        "operationId": "42000000-0000-4000-8000-000000000002",
+        "changeSetId": "43000000-0000-4000-8000-000000000002",
+        "deviceId": "mobile-tls-smoke",
+        "entityType": "workout",
+        "entityId": "live-service-workout",
+        "baseRevision": create_revision,
+        "orderPosition": null,
+        "operationType": "delete",
+        "payload": null
+    });
+    let deleted = authenticated_json(
+        client,
+        base_url,
+        "/v1/sync/push",
+        &json!({ "compatibility": compatibility, "operations": [delete] }),
+        &token,
+    )
+    .await?;
+    let delete_revision = deleted["outcomes"][0]["result"]["revision"]
+        .as_i64()
+        .ok_or_else(|| "shared authority tombstone was not accepted".to_string())?;
+    if delete_revision <= create_revision {
+        return Err("shared authority tombstone revision is not monotonic".into());
+    }
+
+    wait_for_path(desktop_closed_ack, Duration::from_secs(30)).await?;
+    let closed_create = json!({
+        "operationId": "42000000-0000-4000-8000-000000000003",
+        "changeSetId": "43000000-0000-4000-8000-000000000003",
+        "deviceId": "mobile-tls-smoke",
+        "entityType": "workout",
+        "entityId": "live-closed-workout",
+        "baseRevision": 0,
+        "orderPosition": 1,
+        "operationType": "upsert",
+        "payload": {
+            "id": "live-closed-workout",
+            "date": "2026-08-28",
+            "templateId": "push",
+            "templateCode": "A",
+            "templateName": "PUSH",
+            "note": "Committed while Desktop was closed",
+            "exercises": []
+        }
+    });
+    let closed = authenticated_json(
+        client,
+        base_url,
+        "/v1/sync/push",
+        &json!({ "compatibility": compatibility, "operations": [closed_create] }),
+        &token,
+    )
+    .await?;
+    if closed["outcomes"][0]["status"] != "accepted" {
+        return Err("closed-Desktop service mutation was not accepted".into());
+    }
+    println!("PASS shared Desktop + Sync Service authority client gate");
+    Ok(())
+}
+
+async fn wait_for_path(path: &Path, timeout: Duration) -> Result<(), String> {
+    let started = Instant::now();
+    while started.elapsed() < timeout {
+        if path.exists() {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    Err(format!("timed out waiting for {}", path.display()))
 }
 
 async fn run_expired(client: &Client, base_url: &str, nonce: &str) -> Result<(), String> {

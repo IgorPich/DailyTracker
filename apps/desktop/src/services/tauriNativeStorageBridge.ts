@@ -13,7 +13,9 @@ import type {
 
 const nativeShadowRequested = import.meta.env.VITE_NATIVE_SQLITE_SHADOW === '1'
 const nativeAuthorityRequested = import.meta.env.VITE_NATIVE_SQLITE_AUTHORITY === '1'
-const nativeRuntimeRequested = nativeShadowRequested || nativeAuthorityRequested
+const productionAuthorityRequested = import.meta.env.VITE_NATIVE_SQLITE_PRODUCTION_AUTHORITY === '1'
+const anyAuthorityRequested = nativeAuthorityRequested || productionAuthorityRequested
+const nativeRuntimeRequested = nativeShadowRequested || anyAuthorityRequested
 
 export class TauriNativeStorageBridge implements NativeStorageBridge, NativeAuthorityBridge {
   async probe(): Promise<NativeStorageProbeResponse> {
@@ -37,27 +39,27 @@ export class TauriNativeStorageBridge implements NativeStorageBridge, NativeAuth
   }
 
   async authorityStatus(): Promise<NativeAuthorityStatusResponse> {
-    if (!nativeAuthorityRequested || !isTauri()) return { enabled: false }
+    if (!anyAuthorityRequested || !isTauri()) return { enabled: false }
     return invoke<NativeAuthorityStatusResponse>('native_authority_status')
   }
 
   async bootstrapAuthority(data: AppData): Promise<NativeAuthorityResponse> {
-    if (!nativeAuthorityRequested || !isTauri()) return { enabled: false }
+    if (!anyAuthorityRequested || !isTauri()) return { enabled: false }
     return invoke<NativeAuthorityResponse>('native_authority_bootstrap', { data })
   }
 
   async loadAuthority(): Promise<NativeAuthorityResponse> {
-    if (!nativeAuthorityRequested || !isTauri()) return { enabled: false }
+    if (!anyAuthorityRequested || !isTauri()) return { enabled: false }
     return invoke<NativeAuthorityResponse>('native_authority_load')
   }
 
   async replaceAuthority(data: AppData, expectedRevision: number): Promise<NativeAuthorityResponse> {
-    if (!nativeAuthorityRequested || !isTauri()) return { enabled: false }
+    if (!anyAuthorityRequested || !isTauri()) return { enabled: false }
     return invoke<NativeAuthorityResponse>('native_authority_replace', { data, expectedRevision })
   }
 
   async backupAuthorityBeforeImport(data: AppData): Promise<NativeAuthorityResponse> {
-    if (!nativeAuthorityRequested || !isTauri()) return { enabled: false }
+    if (!anyAuthorityRequested || !isTauri()) return { enabled: false }
     return invoke<NativeAuthorityResponse>('native_authority_backup_before_import', { data })
   }
 }

@@ -21,6 +21,8 @@
     "tauri:dev": "npm run tauri:dev --workspace @greekgod/desktop --",
     "tauri:sqlite-smoke:build": "npm run tauri:sqlite-smoke:build --workspace @greekgod/desktop --",
     "tauri:authority-smoke:build": "npm run tauri:authority-smoke:build --workspace @greekgod/desktop --",
+    "tauri:authority-live-smoke:build": "npm run tauri:authority-live-smoke:build --workspace @greekgod/desktop --",
+    "tauri:production-authority:build": "npm run tauri:production-authority:build --workspace @greekgod/desktop --",
     "tauri:build": "npm run tauri:build --workspace @greekgod/desktop --"
   },
   "devDependencies": {

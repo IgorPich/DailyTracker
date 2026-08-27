@@ -14,6 +14,7 @@ mod native_storage_shadow {
     const DEVELOPMENT_IDENTIFIER: &str = "com.igorpich.formlog.dev";
     const SQLITE_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.sqlitesmoke";
     const AUTHORITY_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.authoritysmoke";
+    const AUTHORITY_LIVE_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.authoritylivesmoke";
     #[cfg(feature = "native-sqlite-production-authority")]
     const PRODUCTION_IDENTIFIER: &str = "com.igorpich.formlog";
 
@@ -78,7 +79,8 @@ mod native_storage_shadow {
         let identifier = app.config().identifier.as_str();
         let isolated_development = identifier == DEVELOPMENT_IDENTIFIER
             || identifier == SQLITE_SMOKE_IDENTIFIER
-            || identifier == AUTHORITY_SMOKE_IDENTIFIER;
+            || identifier == AUTHORITY_SMOKE_IDENTIFIER
+            || identifier == AUTHORITY_LIVE_SMOKE_IDENTIFIER;
         #[cfg(feature = "native-sqlite-production-authority")]
         let allowed = isolated_development || identifier == PRODUCTION_IDENTIFIER;
         #[cfg(not(feature = "native-sqlite-production-authority"))]
@@ -192,6 +194,7 @@ mod native_storage_shadow {
     pub(super) fn native_sqlite_smoke_exit(app: AppHandle) -> CommandResult<()> {
         if app.config().identifier != SQLITE_SMOKE_IDENTIFIER
             && app.config().identifier != AUTHORITY_SMOKE_IDENTIFIER
+            && app.config().identifier != AUTHORITY_LIVE_SMOKE_IDENTIFIER
         {
             return Err(NativeCommandError::new(
                 "storage-isolation-violation",

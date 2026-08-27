@@ -63,10 +63,12 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
   private revision: number | undefined
   private initialization: Promise<AppData> | undefined
   private saveQueue: Promise<void> = Promise.resolve()
+  private legacyFallback = false
 
   constructor(
     private readonly legacy: LegacyAuthorityMigrationSource,
     private readonly nativeBridge: NativeAuthorityBridge,
+    private readonly options: { fallbackToLegacyOnBootstrapFailure?: boolean } = {},
   ) {}
 
   private verifyExpected(expected: AppData, actual: AppData, operation: string) {
@@ -78,14 +80,20 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
     const status = requiredStatus(await this.nativeBridge.authorityStatus())
     if (!status.bootstrapped) {
       const legacy = await this.legacy.loadForAuthorityMigration()
-      const response = await this.nativeBridge.bootstrapAuthority(legacy)
-      const snapshot = requiredSnapshot(response)
-      this.verifyExpected(legacy, snapshot.data, 'legacy bootstrap')
-      if (!response.backupPath) {
-        throw new Error('Native SQLite bootstrap did not return its verified pre-migration backup.')
+      try {
+        const response = await this.nativeBridge.bootstrapAuthority(legacy)
+        const snapshot = requiredSnapshot(response)
+        this.verifyExpected(legacy, snapshot.data, 'legacy bootstrap')
+        if (!response.backupPath) {
+          throw new Error('Native SQLite bootstrap did not return its verified pre-migration backup.')
+        }
+        this.revision = snapshot.revision
+        return snapshot.data
+      } catch (error) {
+        if (!this.options.fallbackToLegacyOnBootstrapFailure) throw error
+        this.legacyFallback = true
+        return legacy
       }
-      this.revision = snapshot.revision
-      return snapshot.data
     }
     const snapshot = requiredSnapshot(await this.nativeBridge.loadAuthority())
     this.revision = snapshot.revision
@@ -102,7 +110,10 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
 
   async load(): Promise<AppData> {
     await this.saveQueue.catch(() => undefined)
-    if (this.revision === undefined) return structuredClone(await this.ensureInitialized())
+    if (this.revision === undefined) {
+      const initialized = await this.ensureInitialized()
+      return this.legacyFallback ? this.legacy.load() : structuredClone(initialized)
+    }
     const snapshot = requiredSnapshot(await this.nativeBridge.loadAuthority())
     this.revision = snapshot.revision
     return snapshot.data
@@ -112,6 +123,10 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
     const desired = structuredClone(data)
     const operation = this.saveQueue.catch(() => undefined).then(async () => {
       await this.ensureInitialized()
+      if (this.legacyFallback) {
+        await this.legacy.save(desired)
+        return
+      }
       if (this.revision === undefined) throw new Error('Native SQLite authority revision is unavailable.')
       const snapshot = requiredSnapshot(
         await this.nativeBridge.replaceAuthority(desired, this.revision),
@@ -127,6 +142,10 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
     const expected = structuredClone(data)
     const operation = this.saveQueue.catch(() => undefined).then(async () => {
       await this.ensureInitialized()
+      if (this.legacyFallback) {
+        await this.legacy.backupBeforeImport(expected)
+        return
+      }
       const response = await this.nativeBridge.backupAuthorityBeforeImport(expected)
       const snapshot = requiredSnapshot(response)
       this.verifyExpected(expected, snapshot.data, 'pre-import backup')
@@ -142,10 +161,17 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
   async loadIfChanged(): Promise<AppData | undefined> {
     await this.saveQueue.catch(() => undefined)
     await this.ensureInitialized()
+    if (this.legacyFallback) return undefined
     const status = requiredStatus(await this.nativeBridge.authorityStatus())
     if (status.globalRevision === this.revision) return undefined
     const snapshot = requiredSnapshot(await this.nativeBridge.loadAuthority())
     this.revision = snapshot.revision
     return snapshot.data
+  }
+}
+
+export class ProductionSafeAuthoritativeAppDataStore extends DevelopmentAuthoritativeAppDataStore {
+  constructor(legacy: LegacyAuthorityMigrationSource, nativeBridge: NativeAuthorityBridge) {
+    super(legacy, nativeBridge, { fallbackToLegacyOnBootstrapFailure: true })
   }
 }

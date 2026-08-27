@@ -24,6 +24,11 @@ for (const forbidden of [
   'native_shadow_replace',
   'native_shadow_load',
   'native_shadow_backup_before_import',
+  'native_authority_status',
+  'native_authority_bootstrap',
+  'native_authority_load',
+  'native_authority_replace',
+  'native_authority_backup_before_import',
   'native_sqlite_smoke_exit',
   'SQLITE_WEBVIEW_SMOKE_PASS',
 ]) {

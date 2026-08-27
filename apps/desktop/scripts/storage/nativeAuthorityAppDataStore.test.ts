@@ -3,6 +3,7 @@ import test from 'node:test'
 import type { AppData } from '@greekgod/core'
 import {
   DevelopmentAuthoritativeAppDataStore,
+  ProductionSafeAuthoritativeAppDataStore,
   type LegacyAuthorityMigrationSource,
   type NativeAuthorityBridge,
 } from '../../src/services/nativeAuthorityBridge.ts'
@@ -17,7 +18,7 @@ class LegacyMigrationSource implements LegacyAuthorityMigrationSource {
   saves = 0
   imports = 0
 
-  constructor(private readonly data = fullAppDataFixture()) {}
+  constructor(private data = fullAppDataFixture()) {}
 
   async loadForAuthorityMigration() {
     this.migrationLoads += 1
@@ -29,8 +30,9 @@ class LegacyMigrationSource implements LegacyAuthorityMigrationSource {
     return clone(this.data)
   }
 
-  async save() {
+  async save(data: AppData) {
     this.saves += 1
+    this.data = clone(data)
   }
 
   async backupBeforeImport() {
@@ -46,6 +48,7 @@ class FakeAuthorityBridge implements NativeAuthorityBridge {
   replacements = 0
   backups = 0
   bootstrapBackupPath = 'C:\\isolated\\greekgod-v3.sqlite.pre-import.backup.sqlite'
+  bootstrapFailure = false
 
   async authorityStatus() {
     return {
@@ -61,6 +64,7 @@ class FakeAuthorityBridge implements NativeAuthorityBridge {
   }
 
   async bootstrapAuthority(data: AppData) {
+    if (this.bootstrapFailure) throw new Error('synthetic-bootstrap-mismatch')
     this.bootstraps += 1
     this.bootstrapped = true
     this.revision = 9
@@ -172,4 +176,22 @@ test('missing verified bootstrap backup blocks the cutover', async () => {
   const store = new DevelopmentAuthoritativeAppDataStore(legacy, bridge)
 
   await rejects(store.load(), /verified pre-migration backup/)
+})
+
+test('production cutover falls back to live Legacy only when initial bootstrap comparison fails', async () => {
+  const legacy = new LegacyMigrationSource()
+  const bridge = new FakeAuthorityBridge()
+  bridge.bootstrapFailure = true
+  const store = new ProductionSafeAuthoritativeAppDataStore(legacy, bridge)
+
+  const loaded = await store.load()
+  loaded.coachNotes.fallback = 'legacy remains active'
+  await store.save(loaded)
+  await store.backupBeforeImport(loaded)
+
+  equal(legacy.migrationLoads, 1)
+  equal(legacy.saves, 1)
+  equal(legacy.imports, 1)
+  equal(bridge.bootstrapped, false)
+  deepStrictEqual(await store.load(), clone(loaded))
 })

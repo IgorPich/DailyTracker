@@ -1,0 +1,7 @@
+{
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
+  "identifier": "com.igorpich.formlog",
+  "build": {
+    "beforeBuildCommand": "npm run build:bundle:production-authority"
+  }
+}

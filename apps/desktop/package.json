@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:bundle": "node scripts/prepare-sync-service.mjs && npm run build",
+    "build:bundle:production-authority": "node scripts/prepare-sync-service.mjs && npm run build -- --mode production-authority",
     "prepare:sync-service": "node scripts/prepare-sync-service.mjs",
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "npm run test:identity && npm run test:dev-storage && npm run test:storage && npm run test:windows-lifecycle",
@@ -21,6 +22,8 @@
     "tauri:dev": "tauri dev --features native-sqlite-authority --config src-tauri/tauri.dev.conf.json",
     "tauri:sqlite-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-shadow --config src-tauri/tauri.native-sqlite-smoke.conf.json",
     "tauri:authority-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-authority --config src-tauri/tauri.native-authority-smoke.conf.json",
+    "tauri:authority-live-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-authority --config src-tauri/tauri.native-authority-live-smoke.conf.json",
+    "tauri:production-authority:build": "tauri build --features native-sqlite-production-authority --config src-tauri/tauri.production-authority.conf.json",
     "tauri:build": "tauri build"
   },
   "dependencies": {
