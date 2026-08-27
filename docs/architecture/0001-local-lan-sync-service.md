@@ -102,6 +102,14 @@ Zmiana adresu DHCP nie wymaga ponownego parowania. Ustawienia pozwolą usunąć 
 
 Discovery może ujawnić jedynie nazwę usługi, wersję protokołu, port i `serviceId`. Nie ujawnia danych użytkownika ani nie pozwala wykonać synchronizacji.
 
+Implementacja DNS-SD publikuje `_greekgod-sync._tcp.local.` dopiero po poprawnym
+wczytaniu tożsamości TLS i zajęciu prywatnego adresu listenera. Rekord TXT zawiera
+wyłącznie `protocolVersion` oraz `serviceId`; port pochodzi z rekordu SRV.
+Fingerprint certyfikatu nie jest ogłaszany przez mDNS — telefon zachowuje go z
+jawnego parowania i sprawdza niezależnie przed każdym sync. Listener loopback nie
+jest ogłaszany do LAN. Przy zamknięciu procesu rejestracja jest wycofywana przed
+zatrzymaniem demona mDNS.
+
 ## Version handshake
 
 Przed wysłaniem lub przyjęciem jakiejkolwiek operacji obie strony wymieniają co najmniej:

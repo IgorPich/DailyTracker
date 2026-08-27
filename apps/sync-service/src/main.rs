@@ -11,6 +11,10 @@ use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+mod discovery;
+
+use discovery::MdnsAdvertisement;
+
 #[derive(Debug)]
 struct Config {
     database_path: PathBuf,
@@ -187,6 +191,8 @@ async fn run() -> Result<(), String> {
         eprintln!("GreekGod pairing window opened; nonce written to the configured output file");
     }
 
+    let discovery = MdnsAdvertisement::register(&public_identity.service_id, config.bind)?;
+
     eprintln!(
         "GreekGod Sync Service listening with HTTPS on {}",
         config.bind
@@ -198,12 +204,16 @@ async fn run() -> Result<(), String> {
             shutdown_handle.graceful_shutdown(Some(Duration::from_secs(15)));
         }
     });
-    axum_server::from_tcp_rustls(listener, tls_config)
+    let server_result = axum_server::from_tcp_rustls(listener, tls_config)
         .map_err(|error| format!("could not create HTTPS listener: {error}"))?
         .handle(handle)
         .serve(router.into_make_service())
         .await
-        .map_err(|error| format!("HTTPS server failed: {error}"))
+        .map_err(|error| format!("HTTPS server failed: {error}"));
+    if let Some(discovery) = discovery {
+        discovery.shutdown()?;
+    }
+    server_result
 }
 
 #[derive(Serialize)]

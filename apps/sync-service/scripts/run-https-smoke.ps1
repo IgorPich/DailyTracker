@@ -1,9 +1,14 @@
+param(
+  [string]$BindAddress = '127.0.0.1'
+)
+
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..\..')
 $serviceExecutable = Join-Path $repoRoot 'apps\sync-service\target\debug\greekgod-sync-service.exe'
 $clientExecutable = Join-Path $repoRoot 'apps\sync-service\target\debug\examples\pinned_https_client.exe'
-foreach ($executable in @($serviceExecutable, $clientExecutable)) {
+$discoveryExecutable = Join-Path $repoRoot 'apps\sync-service\target\debug\examples\discover_service.exe'
+foreach ($executable in @($serviceExecutable, $clientExecutable, $discoveryExecutable)) {
   if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "Required TLS smoke executable does not exist: $executable"
   }
@@ -12,6 +17,12 @@ foreach ($executable in @($serviceExecutable, $clientExecutable)) {
 $artifactRoot = Join-Path $repoRoot ".artifacts\sync-service-tls-smoke-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff'))"
 New-Item -ItemType Directory -Path $artifactRoot | Out-Null
 $databasePath = Join-Path $artifactRoot 'greekgod-v3.sqlite'
+
+function Get-FreeBindPort {
+  $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Parse($BindAddress), 0)
+  $listener.Start()
+  try { return ([Net.IPEndPoint]$listener.LocalEndpoint).Port } finally { $listener.Stop() }
+}
 
 function Get-FreeLoopbackPort {
   $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
@@ -79,8 +90,8 @@ try {
 $pairingPath = Join-Path $artifactRoot 'pairing.json'
 $stdoutPath = Join-Path $artifactRoot 'service.stdout.log'
 $stderrPath = Join-Path $artifactRoot 'service.stderr.log'
-$port = Get-FreeLoopbackPort
-$bind = "127.0.0.1:$port"
+$port = Get-FreeBindPort
+$bind = "${BindAddress}:$port"
 $service = Start-Process -FilePath $serviceExecutable -ArgumentList @(
   '--database', $databasePath,
   '--bind', $bind,
@@ -97,13 +108,18 @@ try {
     throw 'Service restart changed the persisted serviceId or certificate fingerprint.'
   }
 
+  if (-not [Net.IPAddress]::IsLoopback([Net.IPAddress]::Parse($BindAddress))) {
+    & $discoveryExecutable $pairingBootstrap.serviceId $BindAddress $port
+    if ($LASTEXITCODE -ne 0) { throw 'mDNS service discovery gate failed.' }
+  }
+
   & $clientExecutable 'full' "https://$bind" $pairingBootstrap.certificateFingerprintSha256 $pairingBootstrap.nonce
   if ($LASTEXITCODE -ne 0) { throw 'Full pinned HTTPS client gate failed.' }
 
-  $secondPort = Get-FreeLoopbackPort
+  $secondPort = Get-FreeBindPort
   $second = Start-Process -FilePath $serviceExecutable -ArgumentList @(
     '--database', $databasePath,
-    '--bind', "127.0.0.1:$secondPort",
+    '--bind', "${BindAddress}:$secondPort",
     '--service-id', 'service-tls-smoke'
   ) -RedirectStandardOutput (Join-Path $artifactRoot 'second.stdout.log') -RedirectStandardError (Join-Path $artifactRoot 'second.stderr.log') -PassThru -WindowStyle Hidden
   if (-not $second.WaitForExit(5000)) {
@@ -113,7 +129,7 @@ try {
   if ($second.ExitCode -eq 0) { throw 'Second service instance unexpectedly succeeded.' }
 
   Assert-SecretsNotLogged -Paths @($stdoutPath, $stderrPath) -Secrets @($pairingBootstrap.nonce)
-  Write-Output 'PASS Sync Service HTTPS smoke — DPAPI identity persistence, stable pin after restart, wrong-pin rejection, expired/one-time pairing, authenticated idempotent sync, token revocation, single-instance, secret-safe logs'
+  Write-Output 'PASS Sync Service HTTPS smoke — DPAPI identity persistence, stable pin after restart, wrong-pin rejection, expired/one-time pairing, authenticated idempotent sync, token revocation, single-instance, optional LAN mDNS discovery, secret-safe logs'
   Write-Output "Artifacts: $artifactRoot"
 } finally {
   Stop-ServiceProcess -Process $service
