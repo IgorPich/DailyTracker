@@ -24,7 +24,7 @@ export interface NativeStorageBridge {
   backupShadowBeforeImport(data: AppData): Promise<NativeShadowResponse>
 }
 
-const jsonBoundaryValue = (value: unknown): unknown => JSON.parse(JSON.stringify(value)) as unknown
+export const jsonBoundaryValue = (value: unknown): unknown => JSON.parse(JSON.stringify(value)) as unknown
 
 export const semanticJsonDifference = (
   expected: unknown,

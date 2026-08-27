@@ -11,6 +11,10 @@ if (import.meta.env.MODE === 'sqlite-smoke') {
   void import('./services/NativeSqliteWebViewSmoke').then(({ NativeSqliteWebViewSmoke }) => {
     root.render(<NativeSqliteWebViewSmoke />)
   })
+} else if (import.meta.env.MODE === 'authority-smoke') {
+  void import('./services/NativeAuthorityWebViewSmoke').then(({ NativeAuthorityWebViewSmoke }) => {
+    root.render(<NativeAuthorityWebViewSmoke />)
+  })
 } else {
   root.render(
     <React.StrictMode>

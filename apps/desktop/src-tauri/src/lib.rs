@@ -1,9 +1,10 @@
 use tauri::{RunEvent, WindowEvent};
 
-#[cfg(feature = "native-sqlite-shadow")]
+#[cfg(any(feature = "native-sqlite-shadow", feature = "native-sqlite-authority"))]
 mod native_storage_shadow {
     use greekgod_storage::{
-        NativeAppDataStore, NativeStorageProbe, StorageError, DATABASE_FILENAME,
+        AuthoritativeStorageStatus, NativeAppDataStore, NativeStorageProbe, StorageError,
+        DATABASE_FILENAME,
     };
     use serde::Serialize;
     use serde_json::Value;
@@ -12,6 +13,9 @@ mod native_storage_shadow {
 
     const DEVELOPMENT_IDENTIFIER: &str = "com.igorpich.formlog.dev";
     const SQLITE_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.sqlitesmoke";
+    const AUTHORITY_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.authoritysmoke";
+    #[cfg(feature = "native-sqlite-production-authority")]
+    const PRODUCTION_IDENTIFIER: &str = "com.igorpich.formlog";
 
     #[derive(Debug, Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -53,9 +57,33 @@ mod native_storage_shadow {
         backup_path: Option<PathBuf>,
     }
 
-    fn development_database_path(app: &AppHandle) -> CommandResult<PathBuf> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub(super) struct NativeAuthorityStatusResponse {
+        enabled: bool,
+        status: AuthoritativeStorageStatus,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub(super) struct NativeAuthorityResponse {
+        enabled: bool,
+        data: Value,
+        revision: i64,
+        applied_operations: usize,
+        backup_path: Option<PathBuf>,
+    }
+
+    fn isolated_database_path(app: &AppHandle) -> CommandResult<PathBuf> {
         let identifier = app.config().identifier.as_str();
-        if identifier != DEVELOPMENT_IDENTIFIER && identifier != SQLITE_SMOKE_IDENTIFIER {
+        let isolated_development = identifier == DEVELOPMENT_IDENTIFIER
+            || identifier == SQLITE_SMOKE_IDENTIFIER
+            || identifier == AUTHORITY_SMOKE_IDENTIFIER;
+        #[cfg(feature = "native-sqlite-production-authority")]
+        let allowed = isolated_development || identifier == PRODUCTION_IDENTIFIER;
+        #[cfg(not(feature = "native-sqlite-production-authority"))]
+        let allowed = isolated_development;
+        if !allowed {
             return Err(NativeCommandError::new(
                 "storage-isolation-violation",
                 format!("native SQLite is forbidden for application identifier {identifier}"),
@@ -67,7 +95,7 @@ mod native_storage_shadow {
         if app_data_dir.file_name().and_then(|value| value.to_str()) != Some(identifier) {
             return Err(NativeCommandError::new(
                 "storage-isolation-violation",
-                "development SQLite path is outside the exact isolated application directory",
+                "native SQLite path is outside the exact application directory",
             ));
         }
         Ok(app_data_dir.join(DATABASE_FILENAME))
@@ -89,7 +117,7 @@ mod native_storage_shadow {
     pub(super) async fn native_storage_probe(
         app: AppHandle,
     ) -> CommandResult<NativeStorageProbeResponse> {
-        let database_path = development_database_path(&app)?;
+        let database_path = isolated_database_path(&app)?;
         let probe = run_native(move || NativeAppDataStore::new(database_path)?.probe()).await?;
         Ok(NativeStorageProbeResponse {
             enabled: true,
@@ -102,7 +130,7 @@ mod native_storage_shadow {
         app: AppHandle,
         data: Value,
     ) -> CommandResult<NativeShadowResponse> {
-        let database_path = development_database_path(&app)?;
+        let database_path = isolated_database_path(&app)?;
         let (data, probe) = run_native(move || {
             let store = NativeAppDataStore::new(database_path)?;
             let data = store.replace_snapshot(&data)?;
@@ -120,7 +148,7 @@ mod native_storage_shadow {
 
     #[tauri::command]
     pub(super) async fn native_shadow_load(app: AppHandle) -> CommandResult<NativeShadowResponse> {
-        let database_path = development_database_path(&app)?;
+        let database_path = isolated_database_path(&app)?;
         let (data, probe) = run_native(move || {
             let store = NativeAppDataStore::new(database_path)?;
             let data = store.load()?;
@@ -141,7 +169,7 @@ mod native_storage_shadow {
         app: AppHandle,
         data: Value,
     ) -> CommandResult<NativeShadowResponse> {
-        let database_path = development_database_path(&app)?;
+        let database_path = isolated_database_path(&app)?;
         let (data, probe, backup_path) = run_native(move || {
             let store = NativeAppDataStore::new(database_path)?;
             let backup_path = store.backup_snapshot_before_import(&data)?;
@@ -162,7 +190,9 @@ mod native_storage_shadow {
 
     #[tauri::command]
     pub(super) fn native_sqlite_smoke_exit(app: AppHandle) -> CommandResult<()> {
-        if app.config().identifier != SQLITE_SMOKE_IDENTIFIER {
+        if app.config().identifier != SQLITE_SMOKE_IDENTIFIER
+            && app.config().identifier != AUTHORITY_SMOKE_IDENTIFIER
+        {
             return Err(NativeCommandError::new(
                 "storage-isolation-violation",
                 "the SQLite smoke exit command is restricted to the exact smoke identifier",
@@ -170,6 +200,112 @@ mod native_storage_shadow {
         }
         app.exit(0);
         Ok(())
+    }
+
+    #[tauri::command]
+    pub(super) async fn native_authority_status(
+        app: AppHandle,
+    ) -> CommandResult<NativeAuthorityStatusResponse> {
+        let database_path = isolated_database_path(&app)?;
+        let status =
+            run_native(move || NativeAppDataStore::new(database_path)?.authoritative_status())
+                .await?;
+        Ok(NativeAuthorityStatusResponse {
+            enabled: true,
+            status,
+        })
+    }
+
+    #[tauri::command]
+    pub(super) async fn native_authority_bootstrap(
+        app: AppHandle,
+        data: Value,
+    ) -> CommandResult<NativeAuthorityResponse> {
+        let database_path = isolated_database_path(&app)?;
+        let device_id = format!("desktop-bootstrap:{}", app.config().identifier);
+        let (snapshot, backup_path) = run_native(move || {
+            let store = NativeAppDataStore::new(database_path)?;
+            let status = store.authoritative_status()?;
+            let backup_path = if status.bootstrapped {
+                None
+            } else {
+                Some(store.backup_snapshot_before_import(&data)?)
+            };
+            store.bootstrap_from_legacy_snapshot(&data, &device_id)?;
+            Ok::<_, StorageError>((store.load_authoritative_snapshot()?, backup_path))
+        })
+        .await?;
+        Ok(NativeAuthorityResponse {
+            enabled: true,
+            data: snapshot.data,
+            revision: snapshot.revision,
+            applied_operations: 0,
+            backup_path,
+        })
+    }
+
+    #[tauri::command]
+    pub(super) async fn native_authority_load(
+        app: AppHandle,
+    ) -> CommandResult<NativeAuthorityResponse> {
+        let database_path = isolated_database_path(&app)?;
+        let snapshot = run_native(move || {
+            NativeAppDataStore::new(database_path)?.load_authoritative_snapshot()
+        })
+        .await?;
+        Ok(NativeAuthorityResponse {
+            enabled: true,
+            data: snapshot.data,
+            revision: snapshot.revision,
+            applied_operations: 0,
+            backup_path: None,
+        })
+    }
+
+    #[tauri::command]
+    pub(super) async fn native_authority_replace(
+        app: AppHandle,
+        data: Value,
+        expected_revision: i64,
+    ) -> CommandResult<NativeAuthorityResponse> {
+        let database_path = isolated_database_path(&app)?;
+        let device_id = format!("desktop:{}", app.config().identifier);
+        let replaced = run_native(move || {
+            NativeAppDataStore::new(database_path)?.replace_authoritative_snapshot(
+                &data,
+                &device_id,
+                expected_revision,
+            )
+        })
+        .await?;
+        Ok(NativeAuthorityResponse {
+            enabled: true,
+            data: replaced.data,
+            revision: replaced.revision,
+            applied_operations: replaced.applied_operations,
+            backup_path: None,
+        })
+    }
+
+    #[tauri::command]
+    pub(super) async fn native_authority_backup_before_import(
+        app: AppHandle,
+        data: Value,
+    ) -> CommandResult<NativeAuthorityResponse> {
+        let database_path = isolated_database_path(&app)?;
+        let (snapshot, backup_path) = run_native(move || {
+            let store = NativeAppDataStore::new(database_path)?;
+            let backup_path = store.backup_authoritative_before_import(&data)?;
+            Ok::<_, StorageError>((store.load_authoritative_snapshot()?, backup_path))
+        })
+        .await?;
+        Ok(NativeAuthorityResponse {
+            enabled: true,
+            data: snapshot.data,
+            revision: snapshot.revision,
+            applied_operations: 0,
+            backup_path: Some(backup_path),
+        })
     }
 }
 
@@ -179,13 +315,18 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init());
-    #[cfg(feature = "native-sqlite-shadow")]
+    #[cfg(any(feature = "native-sqlite-shadow", feature = "native-sqlite-authority"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
         native_storage_shadow::native_storage_probe,
         native_storage_shadow::native_shadow_replace,
         native_storage_shadow::native_shadow_load,
         native_storage_shadow::native_shadow_backup_before_import,
-        native_storage_shadow::native_sqlite_smoke_exit
+        native_storage_shadow::native_sqlite_smoke_exit,
+        native_storage_shadow::native_authority_status,
+        native_storage_shadow::native_authority_bootstrap,
+        native_storage_shadow::native_authority_load,
+        native_storage_shadow::native_authority_replace,
+        native_storage_shadow::native_authority_backup_before_import
     ]);
     let app = builder
         .build(tauri::generate_context!())

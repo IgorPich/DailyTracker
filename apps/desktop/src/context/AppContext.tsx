@@ -162,6 +162,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void appDataStore.save(data).catch((error) => console.error('Nie udało się zapisać danych GreekGod.', error))
   }, [data, hydrated])
 
+  useEffect(() => {
+    if (!hydrated || !appDataStore.loadIfChanged) return
+    let active = true
+    let polling = false
+    const poll = async () => {
+      if (polling) return
+      polling = true
+      try {
+        const changed = await appDataStore.loadIfChanged?.()
+        if (active && changed) setData(changed)
+      } catch (error) {
+        console.error('Nie udało się odświeżyć danych GreekGod po synchronizacji.', error)
+      } finally {
+        polling = false
+      }
+    }
+    const interval = window.setInterval(() => { void poll() }, 1_500)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [hydrated])
+
   const value = useMemo<AppContextValue>(() => ({
     data,
     upsertDailyEntry: (entry) => {

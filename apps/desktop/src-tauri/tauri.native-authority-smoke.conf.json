@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "GreekGod Authority Smoke",
+  "identifier": "com.igorpich.formlog.authoritysmoke",
+  "build": {
+    "beforeBuildCommand": "npm run build -- --mode authority-smoke"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "GreekGod Authority Smoke"
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

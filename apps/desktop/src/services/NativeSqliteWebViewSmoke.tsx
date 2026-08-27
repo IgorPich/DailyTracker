@@ -8,7 +8,7 @@ import { tauriNativeStorageBridge } from './tauriNativeStorageBridge'
 
 const RESULT_FILE = 'sqlite-smoke-result.json'
 
-const smokeFixture = (): AppData => {
+export const smokeFixture = (): AppData => {
   const initial = createInitialData()
   const template = initial.templates[0]
   const exercise = template.exercises[0]

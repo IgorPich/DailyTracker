@@ -158,6 +158,26 @@ test('Legacy pre-import backup is create-once, verified and does not touch main 
   equal(mainStore.saveCount, 0)
 })
 
+test('Legacy authority migration backup preserves raw data before normalization', async () => {
+  const stores = new Map<string, MemoryKeyValueStore>()
+  const mainStore = new MemoryKeyValueStore()
+  const raw = clone(fullAppDataFixture()) as Partial<ReturnType<typeof fullAppDataFixture>>
+  raw.version = 3
+  delete raw.exerciseLibrary
+  mainStore.values.set('appData', raw)
+  stores.set('formlog.store.json', mainStore)
+  const store = new LegacyAppDataStore(desktopEnvironment({ fileExists: true, stores }))
+
+  const migrated = await store.loadForAuthorityMigration()
+
+  equal(migrated.version, 4)
+  const backupEntry = [...stores.entries()].find(([filename]) => filename.includes('.pre-v3-authority-'))
+  strictEqual(Boolean(backupEntry), true)
+  deepStrictEqual(await backupEntry![1].get('appData'), raw)
+  equal(backupEntry![1].saveCount, 1)
+  equal(mainStore.saveCount, 0)
+})
+
 test('Legacy save queue recovers after a rejected save and persists the next aggregate', async () => {
   const stores = new Map<string, MemoryKeyValueStore>()
   const mainStore = new MemoryKeyValueStore()

@@ -13,6 +13,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [features]
 default = []
 native-sqlite-shadow = ["dep:greekgod-storage"]
+native-sqlite-authority = ["dep:greekgod-storage"]
+native-sqlite-production-authority = ["native-sqlite-authority"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

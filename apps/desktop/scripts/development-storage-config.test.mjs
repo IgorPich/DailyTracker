@@ -18,18 +18,27 @@ const [smokeConfig, developmentEnvironment, smokeEnvironment] = await Promise.al
   readFile(join(repositoryRoot, '.env.development'), 'utf8'),
   readFile(join(repositoryRoot, '.env.sqlite-smoke'), 'utf8'),
 ])
+const [authoritySmokeConfig, authoritySmokeEnvironment] = await Promise.all([
+  readJson('src-tauri/tauri.native-authority-smoke.conf.json'),
+  readFile(join(repositoryRoot, '.env.authority-smoke'), 'utf8'),
+])
 
 assert.equal(productionConfig.identifier, 'com.igorpich.formlog')
 assert.equal(developmentConfig.identifier, 'com.igorpich.formlog.dev')
 assert.equal(smokeConfig.identifier, 'com.igorpich.formlog.sqlitesmoke')
+assert.equal(authoritySmokeConfig.identifier, 'com.igorpich.formlog.authoritysmoke')
 assert.notEqual(developmentConfig.identifier, productionConfig.identifier)
 assert.notEqual(smokeConfig.identifier, productionConfig.identifier)
+assert.notEqual(authoritySmokeConfig.identifier, productionConfig.identifier)
 assert.match(packageJson.scripts['tauri:dev'], /--config src-tauri\/tauri\.dev\.conf\.json(?:\s|$)/)
-assert.match(packageJson.scripts['tauri:dev'], /--features native-sqlite-shadow/)
+assert.match(packageJson.scripts['tauri:dev'], /--features native-sqlite-authority/)
 assert.match(packageJson.scripts['tauri:sqlite-smoke:build'], /--features native-sqlite-shadow/)
+assert.match(packageJson.scripts['tauri:authority-smoke:build'], /--features native-sqlite-authority/)
 assert.doesNotMatch(packageJson.scripts['tauri:build'], /tauri\.dev\.conf\.json/)
 assert.doesNotMatch(packageJson.scripts['tauri:build'], /native-sqlite-shadow/)
-assert.equal(developmentEnvironment.trim(), 'VITE_NATIVE_SQLITE_SHADOW=1')
+assert.doesNotMatch(packageJson.scripts['tauri:build'], /native-sqlite-authority/)
+assert.equal(developmentEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')
 assert.equal(smokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_SHADOW=1')
+assert.equal(authoritySmokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')
 
 console.log('PASS development storage: production, dev and SQLite smoke compositions are isolated')

@@ -138,6 +138,33 @@ export class LegacyAppDataStore implements AppDataStore {
     }
   }
 
+  async loadForAuthorityMigration(): Promise<AppData> {
+    if (this.environment.isTauri()) {
+      const storeFileExisted = await this.environment.desktopStoreFileExists(DESKTOP_STORE_FILE)
+      const store = await this.getDesktopStore()
+      const stored = await store.get<unknown>(DESKTOP_DATA_KEY)
+      if (stored === undefined) {
+        if (storeFileExisted) throw new Error('Plik danych istnieje, ale nie zawiera klucza appData.')
+        return createInitialData()
+      }
+      await this.ensureDesktopBackup(
+        `formlog.store.pre-v3-authority-${backupFingerprint(stored)}.backup.json`,
+        stored,
+      )
+      return normalizeData(stored)
+    }
+
+    const browserStorage = this.environment.browserStorage()
+    const raw = browserStorage.getItem(STORAGE_KEY)
+    if (raw === null) return createInitialData()
+    const backupKey = `${STORAGE_KEY}.pre-v3-authority-${backupFingerprint(JSON.parse(raw))}.backup`
+    if (browserStorage.getItem(backupKey) === null) browserStorage.setItem(backupKey, raw)
+    if (browserStorage.getItem(backupKey) !== raw) {
+      throw new Error('Nie udało się zweryfikować kopii danych przed migracją do SQLite.')
+    }
+    return normalizeData(JSON.parse(raw) as unknown)
+  }
+
   async backupBeforeImport(data: AppData): Promise<void> {
     const fingerprint = backupFingerprint(data)
     if (this.environment.isTauri()) {

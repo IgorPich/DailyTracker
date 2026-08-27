@@ -18,8 +18,9 @@
     "audit:production-storage-bundle": "node scripts/audit-production-storage-bundle.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev --features native-sqlite-shadow --config src-tauri/tauri.dev.conf.json",
+    "tauri:dev": "tauri dev --features native-sqlite-authority --config src-tauri/tauri.dev.conf.json",
     "tauri:sqlite-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-shadow --config src-tauri/tauri.native-sqlite-smoke.conf.json",
+    "tauri:authority-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-authority --config src-tauri/tauri.native-authority-smoke.conf.json",
     "tauri:build": "tauri build"
   },
   "dependencies": {
