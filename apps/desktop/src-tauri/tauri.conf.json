@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev -- --port 1420",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build:bundle",
     "frontendDist": "../dist"
   },
   "app": {
@@ -36,7 +36,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis"],
+    "externalBin": ["binaries/greekgod-sync-service"],
+    "resources": {
+      "windows/sync-service-lifecycle.ps1": "sync-service-lifecycle.ps1"
+    },
     "publisher": "Igor Pich",
     "category": "Healthcare and Fitness",
     "shortDescription": "GreekGod — prywatny dziennik treningowy",

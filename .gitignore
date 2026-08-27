@@ -12,6 +12,8 @@ apps/*/dist/
 apps/*/target/
 apps/*/src-tauri/target/
 apps/*/src-tauri/gen/schemas/
+apps/desktop/src-tauri/binaries/*.exe
+apps/desktop/src-tauri/binaries/*.tmp
 crates/*/target/
 greekgod-v3.sqlite
 greekgod-v3.sqlite-*

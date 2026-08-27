@@ -1,4 +1,5 @@
 use greekgod_storage::{NativeAppDataStore, PairingWindow, DATABASE_FILENAME};
+use greekgod_sync::{PROTOCOL_VERSION, SERVICE_VERSION};
 use greekgod_sync_service::{
     build_router, ensure_crypto_provider, ServicePublicIdentity, ServiceTlsIdentity,
 };
@@ -42,10 +43,6 @@ struct PairingConfig {
 }
 
 impl Config {
-    fn parse() -> Result<Self, String> {
-        Self::parse_from(env::args().skip(1))
-    }
-
     fn parse_from(arguments: impl IntoIterator<Item = String>) -> Result<Self, String> {
         let mut database_path = None;
         let mut bind = BindSelection::Explicit(
@@ -191,9 +188,20 @@ async fn main() {
 }
 
 async fn run() -> Result<(), String> {
+    let arguments = env::args().skip(1).collect::<Vec<_>>();
+    if arguments == ["--version-json"] {
+        println!(
+            "{}",
+            serde_json::json!({
+                "serviceVersion": SERVICE_VERSION,
+                "protocolVersion": PROTOCOL_VERSION,
+            })
+        );
+        return Ok(());
+    }
     ensure_crypto_provider();
-    let config = Config::parse()?;
-    let bind = resolve_bind(config.bind)?;
+    let config = Config::parse_from(arguments)?;
+    let bind = resolve_bind(config.bind).await?;
     let store =
         NativeAppDataStore::new(&config.database_path).map_err(|error| error.to_string())?;
     let canonical_database_path = std::fs::canonicalize(store.database_path())
@@ -263,10 +271,36 @@ async fn run() -> Result<(), String> {
     server_result
 }
 
-fn resolve_bind(selection: BindSelection) -> Result<SocketAddr, String> {
+async fn resolve_bind(selection: BindSelection) -> Result<SocketAddr, String> {
     match selection {
         BindSelection::Explicit(bind) => Ok(bind),
-        BindSelection::PrivateLan => select_private_lan_address(DEFAULT_SYNC_PORT),
+        BindSelection::PrivateLan => wait_for_private_lan_address(DEFAULT_SYNC_PORT).await,
+    }
+}
+
+async fn wait_for_private_lan_address(port: u16) -> Result<SocketAddr, String> {
+    let mut waiting_was_logged = false;
+    let shutdown = tokio::signal::ctrl_c();
+    tokio::pin!(shutdown);
+    loop {
+        match select_private_lan_address(port) {
+            Ok(address) => return Ok(address),
+            Err(error) => {
+                if !waiting_was_logged {
+                    eprintln!("GreekGod Sync Service waiting for a private LAN: {error}");
+                    waiting_was_logged = true;
+                }
+            }
+        }
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(5)) => {}
+            signal = &mut shutdown => {
+                return match signal {
+                    Ok(()) => Err("Sync Service startup cancelled".into()),
+                    Err(error) => Err(format!("could not monitor shutdown signal: {error}")),
+                };
+            }
+        }
     }
 }
 
@@ -450,6 +484,19 @@ mod tests {
         ]);
         let error = Config::parse_from(arguments).expect_err("duplicate bind mode");
         assert!(error.contains("mutually exclusive"));
+    }
+
+    #[test]
+    fn public_version_contract_is_non_secret_and_stable() {
+        let encoded = serde_json::json!({
+            "serviceVersion": SERVICE_VERSION,
+            "protocolVersion": PROTOCOL_VERSION,
+        });
+        assert_eq!(encoded["protocolVersion"], PROTOCOL_VERSION);
+        assert!(encoded["serviceVersion"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()));
+        assert_eq!(encoded.as_object().map(|object| object.len()), Some(2));
     }
 
     #[test]

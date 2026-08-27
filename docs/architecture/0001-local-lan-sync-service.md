@@ -52,6 +52,21 @@ Pierwsza wersja będzie małym, bezokienkowym procesem Rust:
 
 Preferowany mechanizm startu to zadanie Harmonogramu zadań Windows z triggerem logowania użytkownika. Zachowuje to ten sam kontekst użytkownika i dostęp do tej samej bazy w jego katalogu aplikacji, bez przenoszenia danych i bez wymagania uprzywilejowanej usługi `LocalSystem`.
 
+Pakiet NSIS rejestruje zadanie dla bieżącego użytkownika z polityką `IgnoreNew`,
+restartem po awarii i procesem bez okna. Binary najpierw potwierdza jawny kontrakt
+wersji, a następnie uruchamia się z `--bind-private-lan` na stałym porcie `39173`.
+Jeżeli LAN nie jest jeszcze dostępny, proces czeka bez otwierania bazy. Po zmianie
+adresu DHCP listener kończy się kontrolowanie, a Harmonogram uruchamia proces
+ponownie i wybiera aktualny prywatny adres. Tożsamość TLS pozostaje w tej samej
+bazie, więc zmiana IP nie oznacza ponownego parowania.
+
+Instalator tworzy dwie i tylko dwie reguły przychodzące: HTTPS/TCP `39173` oraz
+mDNS/UDP `5353`. Obie są ograniczone równocześnie do dokładnej ścieżki binary,
+profilu `Private`, `LocalSubnet` i wyłączonego edge traversal. Bieżący instalator
+pozostaje instalatorem per-user; podniesienie UAC dotyczy wyłącznie tych dwóch
+reguł zapory. Deinstalacja usuwa zadanie i dokładnie nazwane reguły, lecz nie usuwa
+SQLite, certyfikatu TLS ani danych urządzeń.
+
 Termin „Sync Service” oznacza rolę procesu. Nie wymaga w pierwszej wersji rejestracji w Windows Service Control Manager.
 
 ### Aktualizacja razem z aplikacją desktopową
