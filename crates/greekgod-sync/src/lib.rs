@@ -267,6 +267,20 @@ mod tests {
         let directory = tempdir().expect("temporary sync engine directory");
         let store = NativeAppDataStore::new(directory.path().join(DATABASE_FILENAME))
             .expect("native store");
+        store
+            .bootstrap_from_legacy_snapshot(
+                &json!({
+                    "version": 4,
+                    "dailyEntries": [],
+                    "workouts": [],
+                    "templates": [],
+                    "exerciseLibrary": [],
+                    "settings": { "gymLocations": [] },
+                    "coachNotes": {}
+                }),
+                "desktop-bootstrap",
+            )
+            .expect("authoritative bootstrap");
         let engine = SyncEngine::new(store, "service-test").expect("sync engine");
         (directory, engine)
     }
@@ -276,8 +290,8 @@ mod tests {
             app_version: "3.0.0-test".into(),
             protocol_min: PROTOCOL_VERSION,
             protocol_max: PROTOCOL_VERSION,
-            schema_min: 5,
-            schema_max: 5,
+            schema_min: 6,
+            schema_max: 6,
             device_id: "mobile-test".into(),
             last_server_revision: 0,
         }
@@ -321,8 +335,8 @@ mod tests {
         ));
 
         let mut incompatible_schema = compatibility();
-        incompatible_schema.schema_min = 6;
-        incompatible_schema.schema_max = 6;
+        incompatible_schema.schema_min = 7;
+        incompatible_schema.schema_max = 7;
         let request = PushRequest {
             compatibility: incompatible_schema,
             operations: vec![operation("30000000-0000-4000-8000-000000000001", 0, 6)],
@@ -331,7 +345,7 @@ mod tests {
             engine.push(&request),
             Err(SyncEngineError::IncompatibleSchema { .. })
         ));
-        assert_eq!(engine.status().expect("status").server_revision, 0);
+        assert_eq!(engine.status().expect("status").server_revision, 1);
     }
 
     #[test]
@@ -345,8 +359,8 @@ mod tests {
         let first = engine.push(&request).expect("first push");
         let replay = engine.push(&request).expect("replayed push");
 
-        assert_eq!(first.server_revision, 1);
-        assert_eq!(replay.server_revision, 1);
+        assert_eq!(first.server_revision, 2);
+        assert_eq!(replay.server_revision, 2);
         assert!(matches!(
             &first.outcomes[0],
             OperationOutcome::Accepted { result } if !result.idempotent_replay
@@ -376,7 +390,7 @@ mod tests {
             conflict.outcomes[0],
             OperationOutcome::Conflict {
                 base_revision: 0,
-                current_revision: 1,
+                current_revision: 2,
                 ..
             }
         ));
@@ -384,11 +398,11 @@ mod tests {
         let pulled = engine
             .pull(&PullRequest {
                 compatibility: compatibility(),
-                after_revision: 0,
+                after_revision: 1,
                 limit: 100,
             })
             .expect("pull");
-        assert_eq!(pulled.server_revision, 1);
+        assert_eq!(pulled.server_revision, 2);
         assert_eq!(pulled.changes.len(), 1);
         assert_eq!(
             pulled.changes[0].payload.as_ref().expect("payload")["exercises"][0]["sets"][0]["reps"],

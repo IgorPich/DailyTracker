@@ -300,8 +300,8 @@ mod tests {
             app_version: "3.0.0-test".into(),
             protocol_min: PROTOCOL_VERSION,
             protocol_max: PROTOCOL_VERSION,
-            schema_min: 5,
-            schema_max: 5,
+            schema_min: 6,
+            schema_max: 6,
             device_id: "mobile-http-test".into(),
             last_server_revision: 0,
         }
@@ -319,7 +319,7 @@ mod tests {
         assert_eq!(health.service_id, "service-http-test");
         assert_eq!(health.protocol_version, PROTOCOL_VERSION);
         assert_eq!(handshake.server_revision, 0);
-        assert_eq!(handshake.schema_version, 5);
+        assert_eq!(handshake.schema_version, 6);
         assert_eq!(
             health.certificate_fingerprint_sha256,
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

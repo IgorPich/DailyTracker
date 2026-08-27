@@ -7,11 +7,13 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use thiserror::Error;
 
+mod authoritative_repository;
 mod legacy_bootstrap;
 mod security_repository;
 mod service_identity_repository;
 mod sync_repository;
 
+pub use authoritative_repository::*;
 pub use legacy_bootstrap::*;
 pub use security_repository::*;
 pub use service_identity_repository::*;
@@ -219,6 +221,30 @@ const MIGRATION_5_SQL: &str = r#"
     PRAGMA user_version = 5;
   "#;
 
+const MIGRATION_6_SQL: &str = r#"
+    ALTER TABLE sync_meta
+      ADD COLUMN materialized_revision INTEGER NOT NULL DEFAULT 0
+      CHECK (materialized_revision >= 0);
+
+    ALTER TABLE sync_meta
+      ADD COLUMN authoritative_data_version INTEGER
+      CHECK (authoritative_data_version IS NULL OR authoritative_data_version > 0);
+
+    UPDATE sync_meta
+    SET materialized_revision = CASE
+          WHEN bootstrap_state = 'complete' THEN global_revision
+          ELSE 0
+        END,
+        authoritative_data_version = CASE
+          WHEN bootstrap_state = 'complete'
+          THEN (SELECT data_version FROM app_data WHERE singleton_id = 1)
+          ELSE NULL
+        END
+    WHERE singleton_id = 1;
+
+    PRAGMA user_version = 6;
+  "#;
+
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("SQLite database is unavailable: {0}")]
@@ -329,6 +355,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 5,
         name: "persistent-sync-service-tls-identity",
         sql: MIGRATION_5_SQL,
+    },
+    Migration {
+        version: 6,
+        name: "authoritative-entity-materialization",
+        sql: MIGRATION_6_SQL,
     },
 ];
 
@@ -733,6 +764,14 @@ mod tests {
     }
 
     #[test]
+    fn authoritative_materialization_migration_checksum_is_preserved_exactly() {
+        assert_eq!(
+            migration_checksum(MIGRATION_6_SQL),
+            "21eb195f9e9629f2151e33af91fb4597e9b426cd9a0936398799f7e9cb287f94"
+        );
+    }
+
+    #[test]
     fn sync_ready_schema_is_additive_and_starts_without_projected_entities() {
         let (_directory, store) = store();
         store
@@ -780,8 +819,58 @@ mod tests {
         assert!(sqlite_version_is_safe_for_multiple_writers(
             &probe.sqlite_version
         ));
-        assert_eq!(probe.schema_version, 5);
+        assert_eq!(probe.schema_version, 6);
         assert_eq!(probe.journal_mode.to_ascii_lowercase(), "wal");
+    }
+
+    #[test]
+    fn schema_five_database_migrates_materialization_metadata_without_touching_payload() {
+        let directory = tempdir().expect("temporary migration directory");
+        let database_path = directory.path().join(DATABASE_FILENAME);
+        let expected = fixture();
+        {
+            let mut connection = Connection::open(&database_path).expect("open schema five DB");
+            configure_connection(&mut connection).expect("configure schema five DB");
+            for migration in &MIGRATIONS[..5] {
+                let transaction = connection
+                    .transaction_with_behavior(TransactionBehavior::Immediate)
+                    .expect("migration transaction");
+                transaction
+                    .execute_batch(migration.sql)
+                    .expect("apply old migration");
+                transaction
+                    .execute(
+                        "INSERT INTO schema_migrations (version, name, checksum) VALUES (?1, ?2, ?3)",
+                        params![
+                            migration.version,
+                            migration.name,
+                            migration_checksum(migration.sql)
+                        ],
+                    )
+                    .expect("record old migration");
+                transaction.commit().expect("commit old migration");
+            }
+            connection
+                .execute(
+                    "INSERT INTO app_data (singleton_id, data_version, payload_json) VALUES (1, 4, ?1)",
+                    [serde_json::to_string(&expected).expect("serialize fixture")],
+                )
+                .expect("seed old mirror");
+            connection
+                .execute(
+                    "UPDATE sync_meta SET bootstrap_state = 'complete' WHERE singleton_id = 1",
+                    [],
+                )
+                .expect("seed old bootstrap state");
+        }
+
+        let migrated = NativeAppDataStore::new(database_path).expect("migrate schema five DB");
+        let status = migrated.authoritative_status().expect("authority status");
+        assert_eq!(migrated.probe().expect("probe").schema_version, 6);
+        assert_eq!(status.data_version, Some(4));
+        assert_eq!(status.global_revision, 0);
+        assert_eq!(status.materialized_revision, 0);
+        assert_eq!(migrated.load().expect("unchanged mirror"), Some(expected));
     }
 
     #[test]

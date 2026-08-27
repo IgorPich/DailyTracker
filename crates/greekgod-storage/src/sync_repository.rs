@@ -1,5 +1,6 @@
+use crate::legacy_bootstrap::{reconstruct_with_connection, write_materialized_snapshot};
 use crate::{NativeAppDataStore, StorageError, StorageResult};
-use rusqlite::{params, OptionalExtension, Row, TransactionBehavior};
+use rusqlite::{params, OptionalExtension, Row, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -134,7 +135,7 @@ pub struct OutboxOperation {
 }
 
 #[derive(Clone, Copy)]
-enum MutationOrigin {
+pub(crate) enum MutationOrigin {
     Local,
     Remote,
 }
@@ -282,238 +283,15 @@ impl NativeAppDataStore {
         request: &SyncMutationRequest,
         origin: MutationOrigin,
     ) -> StorageResult<SyncMutationResult> {
-        validate_request(request)?;
-        let request_hash = request_hash(request, origin)?;
-        let payload_json = request
-            .payload
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()?;
-
         self.with_connection(|connection| {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-
-            if let Some((stored_hash, result_json)) = transaction
-                .query_row(
-                    "SELECT request_hash, result_json FROM applied_operations WHERE operation_id = ?1",
-                    [&request.operation_id],
-                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-                )
-                .optional()?
-            {
-                if stored_hash != request_hash {
-                    return Err(StorageError::OperationIdReuse(request.operation_id.clone()));
-                }
-                let mut result: SyncMutationResult = serde_json::from_str(&result_json)?;
-                result.idempotent_replay = true;
-                return Ok(result);
+            require_authoritative_bootstrap(&transaction)?;
+            let result = apply_mutation_in_transaction(&transaction, request, origin)?;
+            if !result.idempotent_replay {
+                let reconstructed = reconstruct_with_connection(&transaction)?;
+                write_materialized_snapshot(&transaction, &reconstructed)?;
             }
-
-            let current_revision = transaction
-                .query_row(
-                    "SELECT revision FROM sync_entities WHERE entity_type = ?1 AND entity_id = ?2",
-                    params![request.entity_type.as_str(), &request.entity_id],
-                    |row| row.get::<_, i64>(0),
-                )
-                .optional()?
-                .unwrap_or(0);
-            if request.base_revision != current_revision {
-                return Err(StorageError::Conflict {
-                    entity_type: request.entity_type.as_str().into(),
-                    entity_id: request.entity_id.clone(),
-                    base_revision: request.base_revision,
-                    current_revision,
-                });
-            }
-
-            let revision: i64 = transaction.query_row(
-                r#"
-                UPDATE sync_meta
-                SET global_revision = global_revision + 1
-                WHERE singleton_id = 1
-                RETURNING global_revision
-                "#,
-                [],
-                |row| row.get(0),
-            )?;
-
-            match request.operation_type {
-                SyncOperationType::Upsert => {
-                    transaction.execute(
-                        r#"
-                        INSERT INTO sync_entities (
-                          entity_type,
-                          entity_id,
-                          revision,
-                          created_revision,
-                          created_by_device_id,
-                          updated_by_device_id,
-                          payload_json
-                        )
-                        VALUES (?1, ?2, ?3, ?3, ?4, ?4, ?5)
-                        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-                          revision = excluded.revision,
-                          updated_at = CURRENT_TIMESTAMP,
-                          updated_by_device_id = excluded.updated_by_device_id,
-                          deleted_at = NULL,
-                          payload_json = excluded.payload_json
-                        "#,
-                        params![
-                            request.entity_type.as_str(),
-                            &request.entity_id,
-                            revision,
-                            &request.device_id,
-                            payload_json.as_deref(),
-                        ],
-                    )?;
-                }
-                SyncOperationType::Delete => {
-                    transaction.execute(
-                        r#"
-                        INSERT INTO sync_entities (
-                          entity_type,
-                          entity_id,
-                          revision,
-                          created_revision,
-                          created_by_device_id,
-                          updated_by_device_id,
-                          deleted_at,
-                          payload_json
-                        )
-                        VALUES (?1, ?2, ?3, ?3, ?4, ?4, CURRENT_TIMESTAMP, NULL)
-                        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-                          revision = excluded.revision,
-                          updated_at = CURRENT_TIMESTAMP,
-                          updated_by_device_id = excluded.updated_by_device_id,
-                          deleted_at = CURRENT_TIMESTAMP,
-                          payload_json = NULL
-                        "#,
-                        params![
-                            request.entity_type.as_str(),
-                            &request.entity_id,
-                            revision,
-                            &request.device_id,
-                        ],
-                    )?;
-                }
-            }
-
-            if request.operation_type == SyncOperationType::Upsert {
-                if let Some(position) = request.order_position {
-                    transaction.execute(
-                        r#"
-                        INSERT INTO sync_entity_order (
-                          entity_type,
-                          entity_id,
-                          position,
-                          updated_revision
-                        )
-                        VALUES (?1, ?2, ?3, ?4)
-                        ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-                          position = excluded.position,
-                          updated_revision = excluded.updated_revision
-                        "#,
-                        params![
-                            request.entity_type.as_str(),
-                            &request.entity_id,
-                            position,
-                            revision,
-                        ],
-                    )?;
-                } else {
-                    transaction.execute(
-                        r#"
-                        INSERT OR IGNORE INTO sync_entity_order (
-                          entity_type,
-                          entity_id,
-                          position,
-                          updated_revision
-                        )
-                        VALUES (
-                          ?1,
-                          ?2,
-                          COALESCE((
-                            SELECT MAX(position) + 1
-                            FROM sync_entity_order
-                            WHERE entity_type = ?1
-                          ), 0),
-                          ?3
-                        )
-                        "#,
-                        params![request.entity_type.as_str(), &request.entity_id, revision],
-                    )?;
-                }
-            }
-
-            let result = SyncMutationResult {
-                operation_id: request.operation_id.clone(),
-                entity_type: request.entity_type,
-                entity_id: request.entity_id.clone(),
-                revision,
-                deleted: request.operation_type == SyncOperationType::Delete,
-                idempotent_replay: false,
-            };
-            let result_json = serde_json::to_string(&result)?;
-
-            transaction.execute(
-                r#"
-                INSERT INTO applied_operations (
-                  operation_id,
-                  request_hash,
-                  device_id,
-                  entity_type,
-                  entity_id,
-                  result_revision,
-                  result_json
-                )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                "#,
-                params![
-                    &request.operation_id,
-                    &request_hash,
-                    &request.device_id,
-                    request.entity_type.as_str(),
-                    &request.entity_id,
-                    revision,
-                    &result_json,
-                ],
-            )?;
-
-            if matches!(origin, MutationOrigin::Local) {
-                transaction.execute(
-                    r#"
-                    INSERT INTO sync_outbox (
-                      operation_id,
-                      change_set_id,
-                      device_id,
-                      entity_type,
-                      entity_id,
-                      base_revision,
-                      result_revision,
-                      operation_type,
-                      payload_json,
-                      order_position,
-                      request_hash
-                    )
-                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                    "#,
-                    params![
-                        &request.operation_id,
-                        &request.change_set_id,
-                        &request.device_id,
-                        request.entity_type.as_str(),
-                        &request.entity_id,
-                        request.base_revision,
-                        revision,
-                        request.operation_type.as_str(),
-                        payload_json.as_deref(),
-                        request.order_position,
-                        &request_hash,
-                    ],
-                )?;
-            }
-
             transaction.commit()?;
             Ok(result)
         })
@@ -675,6 +453,245 @@ impl NativeAppDataStore {
     }
 }
 
+pub(crate) fn require_authoritative_bootstrap(transaction: &Transaction<'_>) -> StorageResult<()> {
+    let state: String = transaction.query_row(
+        "SELECT bootstrap_state FROM sync_meta WHERE singleton_id = 1",
+        [],
+        |row| row.get(0),
+    )?;
+    if state != "complete" {
+        return Err(StorageError::BootstrapMismatch(
+            "sync mutation is forbidden before authoritative bootstrap".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn apply_mutation_in_transaction(
+    transaction: &Transaction<'_>,
+    request: &SyncMutationRequest,
+    origin: MutationOrigin,
+) -> StorageResult<SyncMutationResult> {
+    validate_request(request)?;
+    let request_hash = request_hash(request, origin)?;
+    let payload_json = request
+        .payload
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()?;
+
+    if let Some((stored_hash, result_json)) = transaction
+        .query_row(
+            "SELECT request_hash, result_json FROM applied_operations WHERE operation_id = ?1",
+            [&request.operation_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()?
+    {
+        if stored_hash != request_hash {
+            return Err(StorageError::OperationIdReuse(request.operation_id.clone()));
+        }
+        let mut result: SyncMutationResult = serde_json::from_str(&result_json)?;
+        result.idempotent_replay = true;
+        return Ok(result);
+    }
+
+    let current_revision = transaction
+        .query_row(
+            "SELECT revision FROM sync_entities WHERE entity_type = ?1 AND entity_id = ?2",
+            params![request.entity_type.as_str(), &request.entity_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?
+        .unwrap_or(0);
+    if request.base_revision != current_revision {
+        return Err(StorageError::Conflict {
+            entity_type: request.entity_type.as_str().into(),
+            entity_id: request.entity_id.clone(),
+            base_revision: request.base_revision,
+            current_revision,
+        });
+    }
+
+    let revision: i64 = transaction.query_row(
+        r#"
+        UPDATE sync_meta
+        SET global_revision = global_revision + 1
+        WHERE singleton_id = 1
+        RETURNING global_revision
+        "#,
+        [],
+        |row| row.get(0),
+    )?;
+
+    match request.operation_type {
+        SyncOperationType::Upsert => {
+            transaction.execute(
+                r#"
+                INSERT INTO sync_entities (
+                  entity_type, entity_id, revision, created_revision,
+                  created_by_device_id, updated_by_device_id, payload_json
+                )
+                VALUES (?1, ?2, ?3, ?3, ?4, ?4, ?5)
+                ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+                  revision = excluded.revision,
+                  updated_at = CURRENT_TIMESTAMP,
+                  updated_by_device_id = excluded.updated_by_device_id,
+                  deleted_at = NULL,
+                  payload_json = excluded.payload_json
+                "#,
+                params![
+                    request.entity_type.as_str(),
+                    &request.entity_id,
+                    revision,
+                    &request.device_id,
+                    payload_json.as_deref(),
+                ],
+            )?;
+        }
+        SyncOperationType::Delete => {
+            transaction.execute(
+                r#"
+                INSERT INTO sync_entities (
+                  entity_type, entity_id, revision, created_revision,
+                  created_by_device_id, updated_by_device_id, deleted_at, payload_json
+                )
+                VALUES (?1, ?2, ?3, ?3, ?4, ?4, CURRENT_TIMESTAMP, NULL)
+                ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+                  revision = excluded.revision,
+                  updated_at = CURRENT_TIMESTAMP,
+                  updated_by_device_id = excluded.updated_by_device_id,
+                  deleted_at = CURRENT_TIMESTAMP,
+                  payload_json = NULL
+                "#,
+                params![
+                    request.entity_type.as_str(),
+                    &request.entity_id,
+                    revision,
+                    &request.device_id,
+                ],
+            )?;
+        }
+    }
+
+    if request.operation_type == SyncOperationType::Upsert {
+        if let Some(position) = request.order_position {
+            transaction.execute(
+                r#"
+                INSERT INTO sync_entity_order (entity_type, entity_id, position, updated_revision)
+                VALUES (?1, ?2, ?3, ?4)
+                ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+                  position = excluded.position,
+                  updated_revision = excluded.updated_revision
+                "#,
+                params![
+                    request.entity_type.as_str(),
+                    &request.entity_id,
+                    position,
+                    revision,
+                ],
+            )?;
+        } else {
+            transaction.execute(
+                r#"
+                INSERT OR IGNORE INTO sync_entity_order (
+                  entity_type, entity_id, position, updated_revision
+                )
+                VALUES (
+                  ?1, ?2,
+                  COALESCE((SELECT MAX(position) + 1 FROM sync_entity_order WHERE entity_type = ?1), 0),
+                  ?3
+                )
+                "#,
+                params![request.entity_type.as_str(), &request.entity_id, revision],
+            )?;
+        }
+    }
+
+    if request.entity_type == SyncEntityType::Gym
+        && request.operation_type == SyncOperationType::Upsert
+    {
+        let name = request
+            .payload
+            .as_ref()
+            .and_then(Value::as_object)
+            .and_then(|payload| payload.get("name"))
+            .and_then(Value::as_str)
+            .expect("validated gym name");
+        transaction.execute(
+            r#"
+            INSERT INTO gym_sync_identities (
+              gym_id, legacy_name, legacy_ordinal, current_name
+            )
+            VALUES (
+              ?1, ?2,
+              COALESCE((SELECT MAX(legacy_ordinal) + 1 FROM gym_sync_identities), 0),
+              ?2
+            )
+            ON CONFLICT(gym_id) DO UPDATE SET
+              current_name = excluded.current_name,
+              updated_at = CURRENT_TIMESTAMP
+            "#,
+            params![&request.entity_id, name],
+        )?;
+    }
+
+    let result = SyncMutationResult {
+        operation_id: request.operation_id.clone(),
+        entity_type: request.entity_type,
+        entity_id: request.entity_id.clone(),
+        revision,
+        deleted: request.operation_type == SyncOperationType::Delete,
+        idempotent_replay: false,
+    };
+    let result_json = serde_json::to_string(&result)?;
+    transaction.execute(
+        r#"
+        INSERT INTO applied_operations (
+          operation_id, request_hash, device_id, entity_type,
+          entity_id, result_revision, result_json
+        )
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "#,
+        params![
+            &request.operation_id,
+            &request_hash,
+            &request.device_id,
+            request.entity_type.as_str(),
+            &request.entity_id,
+            revision,
+            &result_json,
+        ],
+    )?;
+
+    if matches!(origin, MutationOrigin::Local) {
+        transaction.execute(
+            r#"
+            INSERT INTO sync_outbox (
+              operation_id, change_set_id, device_id, entity_type, entity_id,
+              base_revision, result_revision, operation_type, payload_json,
+              order_position, request_hash
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            "#,
+            params![
+                &request.operation_id,
+                &request.change_set_id,
+                &request.device_id,
+                request.entity_type.as_str(),
+                &request.entity_id,
+                request.base_revision,
+                revision,
+                request.operation_type.as_str(),
+                payload_json.as_deref(),
+                request.order_position,
+                &request_hash,
+            ],
+        )?;
+    }
+    Ok(result)
+}
+
 fn validate_request(request: &SyncMutationRequest) -> StorageResult<()> {
     for (name, value) in [
         ("operationId", request.operation_id.as_str()),
@@ -729,6 +746,13 @@ fn validate_entity_key(request: &SyncMutationRequest) -> StorageResult<()> {
     if request.entity_type == SyncEntityType::Gym && Uuid::parse_str(&request.entity_id).is_err() {
         return Err(StorageError::InvalidMutation(
             "gym entityId must be a sidecar UUID".into(),
+        ));
+    }
+    if request.entity_type == SyncEntityType::Settings
+        && request.operation_type == SyncOperationType::Delete
+    {
+        return Err(StorageError::InvalidMutation(
+            "settings singleton cannot be deleted".into(),
         ));
     }
     Ok(())
@@ -817,6 +841,20 @@ mod tests {
         let directory = tempdir().expect("temporary repository directory");
         let store = NativeAppDataStore::new(directory.path().join(DATABASE_FILENAME))
             .expect("native store");
+        store
+            .bootstrap_from_legacy_snapshot(
+                &json!({
+                    "version": 4,
+                    "dailyEntries": [],
+                    "workouts": [],
+                    "templates": [],
+                    "exerciseLibrary": [],
+                    "settings": { "gymLocations": [] },
+                    "coachNotes": {}
+                }),
+                "bootstrap-test",
+            )
+            .expect("authoritative bootstrap");
         (directory, store)
     }
 
@@ -863,15 +901,15 @@ mod tests {
             .expect("entity exists");
         let outbox = store.pending_outbox(10).expect("pending outbox");
 
-        assert_eq!(applied.revision, 1);
+        assert_eq!(applied.revision, 2);
         assert!(!applied.idempotent_replay);
-        assert_eq!(replay.revision, 1);
+        assert_eq!(replay.revision, 2);
         assert!(replay.idempotent_replay);
-        assert_eq!(store.current_sync_revision().expect("revision"), 1);
+        assert_eq!(store.current_sync_revision().expect("revision"), 2);
         assert_eq!(entity.payload, request.payload);
         assert_eq!(outbox.len(), 1);
         assert_eq!(outbox[0].operation_id, request.operation_id);
-        assert_eq!(outbox[0].result_revision, 1);
+        assert_eq!(outbox[0].result_revision, 2);
         assert_eq!(outbox[0].order_position, Some(0));
     }
 
@@ -892,11 +930,11 @@ mod tests {
             store.apply_local_mutation(&stale),
             Err(StorageError::Conflict {
                 base_revision: 0,
-                current_revision: 1,
+                current_revision: 2,
                 ..
             })
         ));
-        assert_eq!(store.current_sync_revision().expect("revision"), 1);
+        assert_eq!(store.current_sync_revision().expect("revision"), 2);
         assert_eq!(store.pending_outbox(10).expect("outbox").len(), 1);
     }
 
@@ -920,15 +958,15 @@ mod tests {
         let replay = store
             .apply_remote_mutation(&delete)
             .expect("replay remote delete");
-        let stale = workout_request("00000000-0000-4000-8000-000000000006", 1, 12);
+        let stale = workout_request("00000000-0000-4000-8000-000000000006", 2, 12);
 
-        assert_eq!(deleted.revision, 2);
+        assert_eq!(deleted.revision, 3);
         assert!(replay.idempotent_replay);
         assert!(matches!(
             store.apply_remote_mutation(&stale),
             Err(StorageError::Conflict {
-                base_revision: 1,
-                current_revision: 2,
+                base_revision: 2,
+                current_revision: 3,
                 ..
             })
         ));
@@ -940,7 +978,7 @@ mod tests {
         assert!(tombstone.payload.is_none());
         assert!(store.pending_outbox(10).expect("outbox").is_empty());
         assert_eq!(
-            store.changes_since(0, 10).expect("changes"),
+            store.changes_since(1, 10).expect("changes"),
             vec![tombstone]
         );
     }
@@ -970,18 +1008,23 @@ mod tests {
         ));
         store
             .with_connection(|connection| {
-                for table in ["sync_entities", "sync_outbox", "applied_operations"] {
-                    let count: i64 = connection.query_row(
-                        &format!("SELECT COUNT(*) FROM {table}"),
-                        [],
-                        |row| row.get(0),
-                    )?;
-                    assert_eq!(count, 0, "{table} must roll back");
-                }
+                let entity_count: i64 =
+                    connection
+                        .query_row("SELECT COUNT(*) FROM sync_entities", [], |row| row.get(0))?;
+                let outbox_count: i64 =
+                    connection
+                        .query_row("SELECT COUNT(*) FROM sync_outbox", [], |row| row.get(0))?;
+                let applied_count: i64 =
+                    connection.query_row("SELECT COUNT(*) FROM applied_operations", [], |row| {
+                        row.get(0)
+                    })?;
+                assert_eq!(entity_count, 1, "bootstrap entity must remain");
+                assert_eq!(outbox_count, 0, "outbox must roll back");
+                assert_eq!(applied_count, 0, "applied operation must roll back");
                 Ok(())
             })
             .expect("verify rollback");
-        assert_eq!(store.current_sync_revision().expect("revision"), 0);
+        assert_eq!(store.current_sync_revision().expect("revision"), 1);
     }
 
     #[test]
@@ -1024,7 +1067,7 @@ mod tests {
             store.apply_remote_mutation(&request),
             Err(StorageError::InvalidMutation(_))
         ));
-        assert_eq!(store.current_sync_revision().expect("revision"), 0);
+        assert_eq!(store.current_sync_revision().expect("revision"), 1);
     }
 
     #[test]

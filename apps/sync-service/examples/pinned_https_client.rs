@@ -93,8 +93,8 @@ fn compatibility() -> Value {
         "appVersion": "3.0.0-tls-smoke",
         "protocolMin": 1,
         "protocolMax": 1,
-        "schemaMin": 5,
-        "schemaMax": 5,
+        "schemaMin": 6,
+        "schemaMax": 6,
         "deviceId": "mobile-tls-smoke",
         "lastServerRevision": 0
     })
@@ -169,7 +169,7 @@ async fn run_full(
         .json()
         .await
         .map_err(|error| format!("health JSON failed: {error}"))?;
-    if health["schemaVersion"] != 5
+    if health["schemaVersion"] != 6
         || health["protocolVersion"] != 1
         || health["certificateFingerprintSha256"] != fingerprint
     {

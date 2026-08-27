@@ -18,17 +18,19 @@ pub struct LegacyBootstrapResult {
     pub already_complete: bool,
 }
 
-struct ProjectedEntity {
-    entity_type: SyncEntityType,
-    entity_id: String,
-    payload: Value,
-    order_position: Option<i64>,
-    gym_sidecar: Option<GymSidecar>,
+#[derive(Clone)]
+pub(crate) struct ProjectedEntity {
+    pub(crate) entity_type: SyncEntityType,
+    pub(crate) entity_id: String,
+    pub(crate) payload: Value,
+    pub(crate) order_position: Option<i64>,
+    pub(crate) gym_sidecar: Option<GymSidecar>,
 }
 
-struct GymSidecar {
-    legacy_name: String,
-    legacy_ordinal: i64,
+#[derive(Clone)]
+pub(crate) struct GymSidecar {
+    pub(crate) legacy_name: String,
+    pub(crate) legacy_ordinal: i64,
 }
 
 impl NativeAppDataStore {
@@ -180,10 +182,12 @@ impl NativeAppDataStore {
                 SET global_revision = ?1,
                     bootstrap_state = 'complete',
                     bootstrap_source_hash = ?2,
-                    bootstrap_completed_at = CURRENT_TIMESTAMP
+                    bootstrap_completed_at = CURRENT_TIMESTAMP,
+                    materialized_revision = ?1,
+                    authoritative_data_version = ?3
                 WHERE singleton_id = 1
                 "#,
-                params![revision, &source_hash],
+                params![revision, &source_hash, data_version],
             )?;
 
             let reconstructed = reconstruct_with_connection(&transaction)?;
@@ -220,7 +224,7 @@ impl NativeAppDataStore {
     }
 }
 
-fn project_snapshot(snapshot: &Value) -> StorageResult<Vec<ProjectedEntity>> {
+pub(crate) fn project_snapshot(snapshot: &Value) -> StorageResult<Vec<ProjectedEntity>> {
     let root = snapshot.as_object().ok_or_else(|| {
         StorageError::BootstrapMismatch("Legacy AppData must be a JSON object".into())
     })?;
@@ -380,16 +384,22 @@ fn deterministic_gym_uuid(position: usize, name: &str) -> String {
     Uuid::from_bytes(bytes).hyphenated().to_string()
 }
 
-fn reconstruct_with_connection(connection: &Connection) -> StorageResult<Value> {
+pub(crate) fn reconstruct_with_connection(connection: &Connection) -> StorageResult<Value> {
     let data_version: i64 = connection
         .query_row(
-            "SELECT data_version FROM app_data WHERE singleton_id = 1",
+            r#"
+            SELECT authoritative_data_version
+            FROM sync_meta
+            WHERE singleton_id = 1 AND bootstrap_state = 'complete'
+            "#,
             [],
             |row| row.get(0),
         )
         .optional()?
         .ok_or_else(|| {
-            StorageError::BootstrapMismatch("bootstrap AppData mirror is missing".into())
+            StorageError::BootstrapMismatch(
+                "authoritative AppData version is unavailable before bootstrap".into(),
+            )
         })?;
     let daily_entries = active_payloads(connection, SyncEntityType::DailyEntry)?;
     let workouts = active_payloads(connection, SyncEntityType::Workout)?;
@@ -419,18 +429,84 @@ fn reconstruct_with_connection(connection: &Connection) -> StorageResult<Value> 
         coach_notes.insert(range_key.into(), Value::String(note.into()));
     }
 
+    let mut settings = settings.into_iter().next().expect("one settings");
+    let settings_object = settings.as_object_mut().ok_or_else(|| {
+        StorageError::InvalidData("settings entity payload is not an object".into())
+    })?;
+    settings_object.insert(
+        "gymLocations".into(),
+        Value::Array(
+            active_payloads(connection, SyncEntityType::Gym)?
+                .into_iter()
+                .map(|payload| {
+                    payload
+                        .as_object()
+                        .and_then(|object| object.get("name"))
+                        .and_then(Value::as_str)
+                        .filter(|name| !name.trim().is_empty())
+                        .map(|name| Value::String(name.into()))
+                        .ok_or_else(|| {
+                            StorageError::InvalidData(
+                                "active gym payload is missing a non-blank name".into(),
+                            )
+                        })
+                })
+                .collect::<StorageResult<Vec<_>>>()?,
+        ),
+    );
+
     let mut root = Map::new();
     root.insert("version".into(), Value::from(data_version));
     root.insert("dailyEntries".into(), Value::Array(daily_entries));
     root.insert("workouts".into(), Value::Array(workouts));
     root.insert("templates".into(), Value::Array(templates));
     root.insert("exerciseLibrary".into(), Value::Array(exercise_library));
-    root.insert(
-        "settings".into(),
-        settings.into_iter().next().expect("one settings"),
-    );
+    root.insert("settings".into(), settings);
     root.insert("coachNotes".into(), Value::Object(coach_notes));
     Ok(Value::Object(root))
+}
+
+pub(crate) fn write_materialized_snapshot(
+    connection: &Connection,
+    snapshot: &Value,
+) -> StorageResult<i64> {
+    let data_version = app_data_version(snapshot)?;
+    let authoritative_data_version: i64 = connection.query_row(
+        r#"
+        SELECT authoritative_data_version
+        FROM sync_meta
+        WHERE singleton_id = 1 AND bootstrap_state = 'complete'
+        "#,
+        [],
+        |row| row.get(0),
+    )?;
+    if data_version != authoritative_data_version {
+        return Err(StorageError::InvalidData(format!(
+            "AppData version {data_version} differs from authoritative version {authoritative_data_version}"
+        )));
+    }
+    let payload = serde_json::to_string(snapshot)?;
+    connection.execute(
+        r#"
+        INSERT INTO app_data (singleton_id, data_version, payload_json)
+        VALUES (1, ?1, ?2)
+        ON CONFLICT(singleton_id) DO UPDATE SET
+          data_version = excluded.data_version,
+          payload_json = excluded.payload_json
+        "#,
+        params![data_version, payload],
+    )?;
+    let revision: i64 = connection.query_row(
+        r#"
+        UPDATE sync_meta
+        SET materialized_revision = global_revision
+        WHERE singleton_id = 1
+        RETURNING materialized_revision
+        "#,
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(revision)
 }
 
 fn active_payloads(
