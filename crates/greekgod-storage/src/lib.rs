@@ -9,10 +9,12 @@ use thiserror::Error;
 
 mod legacy_bootstrap;
 mod security_repository;
+mod service_identity_repository;
 mod sync_repository;
 
 pub use legacy_bootstrap::*;
 pub use security_repository::*;
+pub use service_identity_repository::*;
 pub use sync_repository::*;
 
 pub const DATABASE_FILENAME: &str = "greekgod-v3.sqlite";
@@ -178,6 +180,45 @@ const MIGRATION_4_SQL: &str = r#"
     PRAGMA user_version = 4;
   "#;
 
+const MIGRATION_5_SQL: &str = r#"
+    CREATE TABLE sync_service_identity (
+      singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+      identity_state TEXT NOT NULL CHECK (identity_state IN ('uninitialized', 'ready')),
+      service_id TEXT UNIQUE,
+      certificate_der BLOB,
+      protected_private_key BLOB,
+      key_protection TEXT,
+      certificate_fingerprint_sha256 TEXT,
+      created_at TEXT,
+      CHECK (
+        (
+          identity_state = 'uninitialized'
+          AND service_id IS NULL
+          AND certificate_der IS NULL
+          AND protected_private_key IS NULL
+          AND key_protection IS NULL
+          AND certificate_fingerprint_sha256 IS NULL
+          AND created_at IS NULL
+        )
+        OR
+        (
+          identity_state = 'ready'
+          AND length(trim(service_id)) > 0
+          AND length(certificate_der) > 0
+          AND length(protected_private_key) > 0
+          AND length(trim(key_protection)) > 0
+          AND length(certificate_fingerprint_sha256) = 64
+          AND created_at IS NOT NULL
+        )
+      )
+    ) STRICT;
+
+    INSERT INTO sync_service_identity (singleton_id, identity_state)
+    VALUES (1, 'uninitialized');
+
+    PRAGMA user_version = 5;
+  "#;
+
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("SQLite database is unavailable: {0}")]
@@ -207,6 +248,10 @@ pub enum StorageError {
     UnauthorizedDevice,
     #[error("Secure random generation failed: {0}")]
     EntropyUnavailable(String),
+    #[error("Sync Service TLS identity is invalid or corrupt: {0}")]
+    InvalidServiceIdentity(String),
+    #[error("Sync Service TLS identity already exists with different material")]
+    ServiceIdentityConflict,
     #[error("SQLite operation failed: {0}")]
     Sqlite(#[from] rusqlite::Error),
     #[error("Storage filesystem operation failed: {0}")]
@@ -228,6 +273,8 @@ impl StorageError {
             Self::PairingWindowClosed => "pairing_window_closed",
             Self::UnauthorizedDevice => "unauthorized_device",
             Self::EntropyUnavailable(_) => "entropy_unavailable",
+            Self::InvalidServiceIdentity(_) => "invalid_service_identity",
+            Self::ServiceIdentityConflict => "service_identity_conflict",
             Self::Sqlite(_) => "sqlite-operation-failed",
             Self::Io(_) => "filesystem-operation-failed",
             Self::Json(_) => "json-serialization-failed",
@@ -277,6 +324,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 4,
         name: "pairing-and-device-authentication",
         sql: MIGRATION_4_SQL,
+    },
+    Migration {
+        version: 5,
+        name: "persistent-sync-service-tls-identity",
+        sql: MIGRATION_5_SQL,
     },
 ];
 
@@ -673,6 +725,14 @@ mod tests {
     }
 
     #[test]
+    fn service_identity_migration_checksum_is_preserved_exactly() {
+        assert_eq!(
+            migration_checksum(MIGRATION_5_SQL),
+            "7ed285d69a41530878341febde946b94f76b3ece5d5b059b02019ce886f6d1ff"
+        );
+    }
+
+    #[test]
     fn sync_ready_schema_is_additive_and_starts_without_projected_entities() {
         let (_directory, store) = store();
         store
@@ -687,6 +747,7 @@ mod tests {
                     "sync_entity_order",
                     "pairing_windows",
                     "paired_devices",
+                    "sync_service_identity",
                 ];
                 for table in tables {
                     let exists: i64 = connection.query_row(
@@ -719,7 +780,7 @@ mod tests {
         assert!(sqlite_version_is_safe_for_multiple_writers(
             &probe.sqlite_version
         ));
-        assert_eq!(probe.schema_version, 4);
+        assert_eq!(probe.schema_version, 5);
         assert_eq!(probe.journal_mode.to_ascii_lowercase(), "wal");
     }
 

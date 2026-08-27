@@ -13,10 +13,17 @@ use greekgod_sync::{
 use serde::Serialize;
 use std::sync::Arc;
 
+mod tls_identity;
+
+pub use tls_identity::{
+    ensure_crypto_provider, ServicePublicIdentity, ServiceTlsIdentity, TlsIdentityError,
+};
+
 #[derive(Clone)]
 struct ServiceState {
     engine: Arc<SyncEngine>,
     store: NativeAppDataStore,
+    certificate_fingerprint_sha256: String,
 }
 
 const DEVICE_ID_HEADER: &str = "x-greekgod-device-id";
@@ -41,6 +48,7 @@ struct HealthResponse {
     service_version: String,
     protocol_version: u32,
     schema_version: i64,
+    certificate_fingerprint_sha256: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -55,6 +63,7 @@ struct PairRequest {
 #[serde(rename_all = "camelCase")]
 struct PairResponse {
     service_id: String,
+    certificate_fingerprint_sha256: String,
     credentials: PairedDeviceCredentials,
 }
 
@@ -114,11 +123,12 @@ impl IntoResponse for ApiError {
 
 pub fn build_router(
     store: NativeAppDataStore,
-    service_id: String,
+    identity: ServicePublicIdentity,
 ) -> Result<Router, SyncEngineError> {
     let state = ServiceState {
-        engine: Arc::new(SyncEngine::new(store.clone(), service_id)?),
+        engine: Arc::new(SyncEngine::new(store.clone(), identity.service_id)?),
         store,
+        certificate_fingerprint_sha256: identity.certificate_fingerprint_sha256,
     };
     Ok(Router::new()
         .route("/v1/health", get(health))
@@ -127,6 +137,7 @@ pub fn build_router(
         .route("/v1/sync/push", post(push))
         .route("/v1/sync/pull", post(pull))
         .route("/v1/sync/status", get(status))
+        .route("/v1/device/revoke", post(revoke_current_device))
         .with_state(state))
 }
 
@@ -137,6 +148,7 @@ async fn health(State(state): State<ServiceState>) -> Result<Json<HealthResponse
         service_version: status.service_version,
         protocol_version: status.protocol_version,
         schema_version: status.schema_version,
+        certificate_fingerprint_sha256: state.certificate_fingerprint_sha256,
     }))
 }
 
@@ -151,6 +163,7 @@ async fn pair(
     let service_id = state.engine.status()?.service_id;
     Ok(Json(PairResponse {
         service_id,
+        certificate_fingerprint_sha256: state.certificate_fingerprint_sha256,
         credentials,
     }))
 }
@@ -189,6 +202,18 @@ async fn status(
     let device_id = header_value(&headers, DEVICE_ID_HEADER)?;
     authorize(&state, &headers, device_id)?;
     Ok(Json(state.engine.status()?))
+}
+
+async fn revoke_current_device(
+    State(state): State<ServiceState>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let device_id = header_value(&headers, DEVICE_ID_HEADER)?;
+    authorize(&state, &headers, device_id)?;
+    if !state.store.revoke_device(device_id)? {
+        return Err(StorageError::UnauthorizedDevice.into());
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn authorize(
@@ -235,6 +260,8 @@ mod tests {
             ServiceState {
                 engine: Arc::new(engine),
                 store,
+                certificate_fingerprint_sha256:
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
             },
         )
     }
@@ -273,8 +300,8 @@ mod tests {
             app_version: "3.0.0-test".into(),
             protocol_min: PROTOCOL_VERSION,
             protocol_max: PROTOCOL_VERSION,
-            schema_min: 4,
-            schema_max: 4,
+            schema_min: 5,
+            schema_max: 5,
             device_id: "mobile-http-test".into(),
             last_server_revision: 0,
         }
@@ -292,7 +319,11 @@ mod tests {
         assert_eq!(health.service_id, "service-http-test");
         assert_eq!(health.protocol_version, PROTOCOL_VERSION);
         assert_eq!(handshake.server_revision, 0);
-        assert_eq!(handshake.schema_version, 4);
+        assert_eq!(handshake.schema_version, 5);
+        assert_eq!(
+            health.certificate_fingerprint_sha256,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
     }
 
     #[tokio::test]
@@ -364,5 +395,19 @@ mod tests {
             .await
             .expect_err("revoked handshake");
         assert_eq!(revoked.status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn authenticated_device_can_revoke_its_own_token() {
+        let (_directory, state) = state();
+        let headers = pair_and_headers(&state).await;
+        let response = revoke_current_device(State(state.clone()), headers.clone())
+            .await
+            .expect("revoke current device");
+        assert_eq!(response, StatusCode::NO_CONTENT);
+        let rejected = handshake(State(state), headers, Json(compatibility()))
+            .await
+            .expect_err("revoked token");
+        assert_eq!(rejected.status, StatusCode::UNAUTHORIZED);
     }
 }
