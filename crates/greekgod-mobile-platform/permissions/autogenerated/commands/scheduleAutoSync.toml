@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-scheduleAutoSync"
+description = "Enables the scheduleAutoSync command without any pre-configured scope."
+commands.allow = ["scheduleAutoSync"]
+
+[[permission]]
+identifier = "deny-scheduleAutoSync"
+description = "Denies the scheduleAutoSync command without any pre-configured scope."
+commands.deny = ["scheduleAutoSync"]
