@@ -9,12 +9,14 @@ use thiserror::Error;
 
 mod authoritative_repository;
 mod legacy_bootstrap;
+mod remote_sync_repository;
 mod security_repository;
 mod service_identity_repository;
 mod sync_repository;
 
 pub use authoritative_repository::*;
 pub use legacy_bootstrap::*;
+pub use remote_sync_repository::*;
 pub use security_repository::*;
 pub use service_identity_repository::*;
 pub use sync_repository::*;
@@ -245,6 +247,34 @@ const MIGRATION_6_SQL: &str = r#"
     PRAGMA user_version = 6;
   "#;
 
+const MIGRATION_7_SQL: &str = r#"
+    CREATE TABLE sync_remotes (
+      service_id TEXT PRIMARY KEY CHECK (length(trim(service_id)) > 0),
+      certificate_fingerprint_sha256 TEXT NOT NULL
+        CHECK (length(certificate_fingerprint_sha256) = 64),
+      last_known_host TEXT NOT NULL CHECK (length(trim(last_known_host)) > 0),
+      last_pulled_revision INTEGER NOT NULL DEFAULT 0
+        CHECK (last_pulled_revision >= 0),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) STRICT;
+
+    CREATE TABLE sync_remote_entities (
+      service_id TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      remote_revision INTEGER NOT NULL CHECK (remote_revision > 0),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (service_id, entity_type, entity_id),
+      FOREIGN KEY (service_id) REFERENCES sync_remotes(service_id) ON DELETE CASCADE
+    ) STRICT;
+
+    CREATE INDEX sync_remote_entities_revision_idx
+      ON sync_remote_entities (service_id, remote_revision);
+
+    PRAGMA user_version = 7;
+  "#;
+
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("SQLite database is unavailable: {0}")]
@@ -361,6 +391,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "authoritative-entity-materialization",
         sql: MIGRATION_6_SQL,
     },
+    Migration {
+        version: 7,
+        name: "remote-sync-cursor-and-entity-revisions",
+        sql: MIGRATION_7_SQL,
+    },
 ];
 
 impl NativeAppDataStore {
@@ -452,7 +487,7 @@ impl NativeAppDataStore {
         })
     }
 
-    fn with_connection<T>(
+    pub(crate) fn with_connection<T>(
         &self,
         operation: impl FnOnce(&mut Connection) -> StorageResult<T>,
     ) -> StorageResult<T> {
@@ -772,6 +807,14 @@ mod tests {
     }
 
     #[test]
+    fn remote_sync_state_migration_checksum_is_preserved_exactly() {
+        assert_eq!(
+            migration_checksum(MIGRATION_7_SQL),
+            "1cb7c1cd32e31390f0b97075660f17fb62a3cd498c17e43d473a2936083bccea"
+        );
+    }
+
+    #[test]
     fn sync_ready_schema_is_additive_and_starts_without_projected_entities() {
         let (_directory, store) = store();
         store
@@ -787,6 +830,8 @@ mod tests {
                     "pairing_windows",
                     "paired_devices",
                     "sync_service_identity",
+                    "sync_remotes",
+                    "sync_remote_entities",
                 ];
                 for table in tables {
                     let exists: i64 = connection.query_row(
@@ -819,7 +864,7 @@ mod tests {
         assert!(sqlite_version_is_safe_for_multiple_writers(
             &probe.sqlite_version
         ));
-        assert_eq!(probe.schema_version, 6);
+        assert_eq!(probe.schema_version, 7);
         assert_eq!(probe.journal_mode.to_ascii_lowercase(), "wal");
     }
 
@@ -866,7 +911,7 @@ mod tests {
 
         let migrated = NativeAppDataStore::new(database_path).expect("migrate schema five DB");
         let status = migrated.authoritative_status().expect("authority status");
-        assert_eq!(migrated.probe().expect("probe").schema_version, 6);
+        assert_eq!(migrated.probe().expect("probe").schema_version, 7);
         assert_eq!(status.data_version, Some(4));
         assert_eq!(status.global_revision, 0);
         assert_eq!(status.materialized_revision, 0);

@@ -225,7 +225,7 @@ async fn run() -> Result<(), String> {
         let window = store
             .open_pairing_window(pairing.ttl_seconds)
             .map_err(|error| error.to_string())?;
-        write_pairing_window(&pairing.output_path, &public_identity, &window)?;
+        write_pairing_window(&pairing.output_path, bind, &public_identity, &window)?;
         eprintln!("GreekGod pairing window opened; nonce written to the configured output file");
     }
 
@@ -388,6 +388,7 @@ fn local_address_is_available(expected: IpAddr) -> bool {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PairingBootstrap<'a> {
+    base_url: String,
     service_id: &'a str,
     certificate_fingerprint_sha256: &'a str,
     nonce: &'a str,
@@ -396,10 +397,12 @@ struct PairingBootstrap<'a> {
 
 fn write_pairing_window(
     path: &Path,
+    bind: SocketAddr,
     identity: &ServicePublicIdentity,
     window: &PairingWindow,
 ) -> Result<(), String> {
     let encoded = serde_json::to_vec(&PairingBootstrap {
+        base_url: format!("https://{bind}"),
         service_id: &identity.service_id,
         certificate_fingerprint_sha256: &identity.certificate_fingerprint_sha256,
         nonce: &window.nonce,
@@ -522,12 +525,14 @@ mod tests {
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
         };
 
-        write_pairing_window(&path, &identity, &window).expect("first write");
+        let bind = "192.168.1.25:39173".parse().expect("pairing bind");
+        write_pairing_window(&path, bind, &identity, &window).expect("first write");
         let output = std::fs::read_to_string(&path).expect("pairing output");
+        assert!(output.contains("https://192.168.1.25:39173"));
         assert!(output.contains("secret-nonce"));
         assert!(output.contains("service-test"));
         assert!(output.contains(&identity.certificate_fingerprint_sha256));
-        assert!(write_pairing_window(&path, &identity, &window).is_err());
+        assert!(write_pairing_window(&path, bind, &identity, &window).is_err());
         assert!(!format!("{window:?}").contains("secret-nonce"));
     }
 }

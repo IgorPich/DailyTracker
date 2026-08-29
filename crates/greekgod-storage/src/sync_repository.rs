@@ -31,7 +31,7 @@ impl SyncEntityType {
         }
     }
 
-    fn from_database(value: &str) -> StorageResult<Self> {
+    pub(crate) fn from_database(value: &str) -> StorageResult<Self> {
         match value {
             "workout" => Ok(Self::Workout),
             "daily_entry" => Ok(Self::DailyEntry),

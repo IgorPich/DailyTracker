@@ -95,8 +95,8 @@ fn compatibility() -> Value {
         "appVersion": "3.0.0-tls-smoke",
         "protocolMin": 1,
         "protocolMax": 1,
-        "schemaMin": 6,
-        "schemaMax": 6,
+        "schemaMin": 7,
+        "schemaMax": 7,
         "deviceId": "mobile-tls-smoke",
         "lastServerRevision": 0
     })
@@ -327,7 +327,7 @@ async fn run_full(
         .json()
         .await
         .map_err(|error| format!("health JSON failed: {error}"))?;
-    if health["schemaVersion"] != 6
+    if health["schemaVersion"] != 7
         || health["protocolVersion"] != 1
         || health["certificateFingerprintSha256"] != fingerprint
     {
@@ -412,11 +412,37 @@ async fn run_full(
         .json()
         .await
         .map_err(|error| format!("handshake JSON failed: {error}"))?;
-    if handshake["serverRevision"] != 0 {
-        return Err("fresh handshake revision is not zero".into());
+    let initial_revision = handshake["serverRevision"]
+        .as_i64()
+        .ok_or_else(|| "handshake server revision is missing".to_string())?;
+
+    let mut incompatible = compatibility.clone();
+    incompatible["protocolMin"] = json!(2);
+    incompatible["protocolMax"] = json!(2);
+    let rejected_handshake = with_auth(
+        client
+            .post(format!("{base_url}/v1/handshake"))
+            .json(&incompatible),
+        &token,
+    )
+    .send()
+    .await
+    .map_err(|error| format!("incompatible handshake failed: {error}"))?;
+    require_status(
+        &rejected_handshake,
+        StatusCode::UPGRADE_REQUIRED,
+        "incompatible handshake",
+    )?;
+    let revision_after_rejection =
+        authenticated_json(client, base_url, "/v1/handshake", &compatibility, &token).await?
+            ["serverRevision"]
+            .as_i64()
+            .ok_or_else(|| "post-mismatch server revision is missing".to_string())?;
+    if revision_after_rejection != initial_revision {
+        return Err("incompatible handshake mutated the server revision".into());
     }
 
-    let operation = json!({
+    let workout_operation = json!({
         "operationId": "40000000-0000-4000-8000-000000000001",
         "changeSetId": "41000000-0000-4000-8000-000000000001",
         "deviceId": "mobile-tls-smoke",
@@ -434,17 +460,139 @@ async fn run_full(
             "exercises": []
         }
     });
-    let push_body = json!({ "compatibility": compatibility, "operations": [operation] });
-    let first_push =
-        authenticated_json(client, base_url, "/v1/sync/push", &push_body, &token).await?;
-    let replayed_push =
-        authenticated_json(client, base_url, "/v1/sync/push", &push_body, &token).await?;
-    if first_push["serverRevision"] != 1
-        || first_push["outcomes"][0]["result"]["idempotentReplay"] != false
-        || replayed_push["serverRevision"] != 1
-        || replayed_push["outcomes"][0]["result"]["idempotentReplay"] != true
+    let workout_push = json!({
+        "compatibility": compatibility,
+        "operations": [workout_operation]
+    });
+    let lost_workout_response = with_auth(
+        client
+            .post(format!("{base_url}/v1/sync/push"))
+            .json(&workout_push),
+        &token,
+    )
+    .send()
+    .await
+    .map_err(|error| format!("lost-response workout push failed: {error}"))?;
+    drop(lost_workout_response);
+    let replayed_workout =
+        authenticated_json(client, base_url, "/v1/sync/push", &workout_push, &token).await?;
+    let workout_revision = replayed_workout["outcomes"][0]["result"]["revision"]
+        .as_i64()
+        .ok_or_else(|| "workout replay revision is missing".to_string())?;
+    if workout_revision != initial_revision + 1
+        || replayed_workout["serverRevision"] != workout_revision
+        || replayed_workout["outcomes"][0]["result"]["idempotentReplay"] != true
     {
-        return Err("pinned HTTPS push/replay was not exactly-once".into());
+        return Err("lost-response workout retry was not exactly-once".into());
+    }
+
+    let daily_operation = json!({
+        "operationId": "40000000-0000-4000-8000-000000000002",
+        "changeSetId": "41000000-0000-4000-8000-000000000002",
+        "deviceId": "mobile-tls-smoke",
+        "entityType": "daily_entry",
+        "entityId": "2026-08-27",
+        "baseRevision": 0,
+        "orderPosition": 0,
+        "operationType": "upsert",
+        "payload": {
+            "id": "tls-smoke-daily",
+            "date": "2026-08-27",
+            "protein": 177
+        }
+    });
+    let daily_push = json!({
+        "compatibility": compatibility,
+        "operations": [daily_operation]
+    });
+    let lost_daily_response = with_auth(
+        client
+            .post(format!("{base_url}/v1/sync/push"))
+            .json(&daily_push),
+        &token,
+    )
+    .send()
+    .await
+    .map_err(|error| format!("lost-response DailyEntry push failed: {error}"))?;
+    drop(lost_daily_response);
+    let replayed_daily =
+        authenticated_json(client, base_url, "/v1/sync/push", &daily_push, &token).await?;
+    let daily_revision = replayed_daily["outcomes"][0]["result"]["revision"]
+        .as_i64()
+        .ok_or_else(|| "DailyEntry replay revision is missing".to_string())?;
+    if daily_revision != workout_revision + 1
+        || replayed_daily["serverRevision"] != daily_revision
+        || replayed_daily["outcomes"][0]["result"]["idempotentReplay"] != true
+    {
+        return Err("lost-response DailyEntry retry was not exactly-once".into());
+    }
+
+    let delete_operation = json!({
+        "operationId": "40000000-0000-4000-8000-000000000003",
+        "changeSetId": "41000000-0000-4000-8000-000000000003",
+        "deviceId": "mobile-tls-smoke",
+        "entityType": "workout",
+        "entityId": "tls-smoke-workout",
+        "baseRevision": workout_revision,
+        "orderPosition": null,
+        "operationType": "delete",
+        "payload": null
+    });
+    let delete_push = json!({
+        "compatibility": compatibility,
+        "operations": [delete_operation]
+    });
+    let lost_delete_response = with_auth(
+        client
+            .post(format!("{base_url}/v1/sync/push"))
+            .json(&delete_push),
+        &token,
+    )
+    .send()
+    .await
+    .map_err(|error| format!("lost-response tombstone push failed: {error}"))?;
+    drop(lost_delete_response);
+    let replayed_delete =
+        authenticated_json(client, base_url, "/v1/sync/push", &delete_push, &token).await?;
+    let delete_revision = replayed_delete["outcomes"][0]["result"]["revision"]
+        .as_i64()
+        .ok_or_else(|| "tombstone replay revision is missing".to_string())?;
+    if delete_revision != daily_revision + 1
+        || replayed_delete["serverRevision"] != delete_revision
+        || replayed_delete["outcomes"][0]["result"]["idempotentReplay"] != true
+        || replayed_delete["outcomes"][0]["result"]["deleted"] != true
+    {
+        return Err("lost-response tombstone retry was not exactly-once".into());
+    }
+
+    let stale_resurrection = json!({
+        "operationId": "40000000-0000-4000-8000-000000000004",
+        "changeSetId": "41000000-0000-4000-8000-000000000004",
+        "deviceId": "mobile-tls-smoke",
+        "entityType": "workout",
+        "entityId": "tls-smoke-workout",
+        "baseRevision": workout_revision,
+        "orderPosition": 0,
+        "operationType": "upsert",
+        "payload": {
+            "id": "tls-smoke-workout",
+            "date": "2026-08-27",
+            "templateId": "template-a",
+            "templateCode": "A",
+            "templateName": "STALE",
+            "exercises": []
+        }
+    });
+    let stale = authenticated_json(
+        client,
+        base_url,
+        "/v1/sync/push",
+        &json!({ "compatibility": compatibility, "operations": [stale_resurrection] }),
+        &token,
+    )
+    .await?;
+    if stale["serverRevision"] != delete_revision || stale["outcomes"][0]["status"] != "conflict" {
+        return Err("stale mutation resurrected a tombstoned Workout".into());
     }
 
     let pull = authenticated_json(
@@ -453,17 +601,29 @@ async fn run_full(
         "/v1/sync/pull",
         &json!({
             "compatibility": compatibility,
-            "afterRevision": 0,
+            "afterRevision": initial_revision,
             "limit": 100
         }),
         &token,
     )
     .await?;
-    if pull["serverRevision"] != 1
-        || pull["changes"].as_array().map(Vec::len) != Some(1)
-        || pull["changes"][0]["entityId"] != "tls-smoke-workout"
+    let changes = pull["changes"]
+        .as_array()
+        .ok_or_else(|| "pull changes are missing".to_string())?;
+    let workout = changes
+        .iter()
+        .find(|change| change["entityId"] == "tls-smoke-workout")
+        .ok_or_else(|| "pull did not return the Workout tombstone".to_string())?;
+    let daily = changes
+        .iter()
+        .find(|change| change["entityId"] == "2026-08-27")
+        .ok_or_else(|| "pull did not return the DailyEntry".to_string())?;
+    if pull["serverRevision"] != delete_revision
+        || changes.len() != 2
+        || workout["deletedAt"].is_null()
+        || daily["payload"]["protein"] != 177
     {
-        return Err("pinned HTTPS pull did not return the accepted workout".into());
+        return Err("pinned HTTPS pull was not semantically equivalent after retries".into());
     }
 
     let revoke = with_auth(client.post(format!("{base_url}/v1/device/revoke")), &token)
@@ -482,7 +642,9 @@ async fn run_full(
     .map_err(|error| format!("revoked-token request failed: {error}"))?;
     require_status(&revoked, StatusCode::UNAUTHORIZED, "revoked token")?;
 
-    println!("PASS pinned HTTPS identity/auth/idempotency/revocation client gate");
+    println!(
+        "PASS pinned HTTPS mismatch/lost-response/idempotency/tombstone/revocation client gate"
+    );
     Ok(())
 }
 
