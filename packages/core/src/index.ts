@@ -10,13 +10,13 @@ export type {
   Workout,
   WorkoutExercise,
   WorkoutSet,
-} from './types'
-export type { AppDataStore } from './appDataStore'
+} from './types.ts'
+export type { AppDataStore } from './appDataStore.ts'
 
-export { deleteDailyEntry, findDailyEntryByDate, upsertDailyEntry } from './dailyEntryOperations'
-export { addGymLocation, deleteGymLocation, renameGymLocation } from './gymOperations'
-export { insertTemplateExercise, moveItem, removeTemplateExercise, replaceTrainingTemplate } from './templateOperations'
-export { addWorkout, deleteWorkout, findWorkoutById, updateWorkout } from './workoutOperations'
+export { deleteDailyEntry, findDailyEntryByDate, upsertDailyEntry } from './dailyEntryOperations.ts'
+export { addGymLocation, deleteGymLocation, renameGymLocation } from './gymOperations.ts'
+export { insertTemplateExercise, moveItem, removeTemplateExercise, replaceTrainingTemplate } from './templateOperations.ts'
+export { addWorkout, deleteWorkout, findWorkoutById, updateWorkout } from './workoutOperations.ts'
 export {
   canonicalExerciseId,
   exerciseDefinitionFor,
@@ -25,13 +25,13 @@ export {
   normalizeExerciseName,
   renameExerciseDefinition,
   withRegisteredExercise,
-} from './exerciseIdentity'
-export type { ExerciseReference } from './exerciseIdentity'
+} from './exerciseIdentity.ts'
+export type { ExerciseReference } from './exerciseIdentity.ts'
 export {
   decimalInputValue,
   formatDecimal,
   normalizeDecimalInput,
-} from './numbers'
+} from './numbers.ts'
 export {
   exerciseOccurrencesByWorkout,
   exercisesMatch,
@@ -39,8 +39,8 @@ export {
   moveExercise,
   previousExerciseOccurrence,
   replaceWorkoutById,
-} from './workoutData'
-export type { ExerciseOccurrence } from './workoutData'
+} from './workoutData.ts'
+export type { ExerciseOccurrence } from './workoutData.ts'
 export {
   compareExercises,
   compareSets,
@@ -50,6 +50,6 @@ export {
   getBestSet,
   isEquipmentSensitive,
   prescriptionRepRange,
-} from './workoutProgress'
-export type { ProgressResult } from './workoutProgress'
-export { DEFAULT_TEMPLATES } from './defaultTemplates'
+} from './workoutProgress.ts'
+export type { ProgressResult } from './workoutProgress.ts'
+export { DEFAULT_TEMPLATES } from './defaultTemplates.ts'

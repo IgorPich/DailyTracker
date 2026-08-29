@@ -13,13 +13,13 @@ const exercise = (id: string, weight: number, reps: number, equipmentSensitive =
   sets: [{ id: `${id}-${weight}-${reps}`, weight, reps }],
 })
 
-const workout = (id: string, date: string, gymLocation: string, item: WorkoutExercise): Workout => ({
+const workout = (id: string, date: string, gymLocation: string, item: WorkoutExercise, templateCode: Workout['templateCode'] = 'A'): Workout => ({
   id,
   date,
   gymLocation,
   templateId: 'push',
-  templateCode: 'A',
-  templateName: 'PUSH',
+  templateCode,
+  templateName: templateCode === 'D' ? 'GRECKA GÓRA' : 'PUSH',
   exercises: [item],
 })
 
@@ -54,4 +54,39 @@ test('shared progress logic marks a real improvement positive', () => {
     'Gym B',
   )
   assert.deepEqual(result, { label: '+1 powt.', positive: true })
+})
+
+test('A → D → A selects the chronologically latest shared exercise session', () => {
+  const reference = exercise('cable-crunch', 55, 10, true)
+  const rows = [
+    workout('session-a', '2026-08-01', 'Gym A', exercise('cable-crunch', 50, 10, true), 'A'),
+    workout('session-d', '2026-08-08', 'Gym A', exercise('cable-crunch', 52.5, 10, true), 'D'),
+  ]
+  const result = previousExerciseOccurrence(rows, reference, '2026-08-15', 'Gym A')
+  assert.equal(result.latest?.workout.id, 'session-d')
+  assert.equal(result.comparable?.workout.id, 'session-d')
+})
+
+test('same machine in another gym is latest but never directly comparable', () => {
+  const reference = exercise('machine-row', 70, 8, true)
+  const rows = [workout('other-gym', '2026-08-08', 'Gym B', exercise('machine-row', 75, 8, true))]
+  const result = previousExerciseOccurrence(rows, reference, '2026-08-10', 'Gym A')
+  assert.equal(result.latest?.workout.id, 'other-gym')
+  assert.equal(result.comparable, undefined)
+})
+
+test('custom exercise remains selectable by its stable exerciseId', () => {
+  const reference = exercise('custom-seal-row', 60, 8)
+  const rows = [workout('custom-session', '2026-08-08', 'Gym A', exercise('custom-seal-row', 57.5, 9))]
+  assert.equal(previousExerciseOccurrence(rows, reference, '2026-08-10', 'Gym A').comparable?.workout.id, 'custom-session')
+})
+
+test('cable row and machine row never share history', () => {
+  const rows = [workout('machine-session', '2026-08-08', 'Gym A', exercise('machine-row', 100, 9, true))]
+  assert.equal(previousExerciseOccurrence(rows, exercise('chest-supported-row', 80, 8, true), '2026-08-10', 'Gym A').latest, undefined)
+})
+
+test('machine lateral raise and dumbbell lateral raise never share history', () => {
+  const rows = [workout('dumbbell-session', '2026-08-08', 'Gym A', exercise('dumbbell-lateral-raise', 12, 12))]
+  assert.equal(previousExerciseOccurrence(rows, exercise('lateral-raise-machine', 30, 12, true), '2026-08-10', 'Gym A').latest, undefined)
 })

@@ -1,9 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Activity, BookOpen, Dumbbell, Home, Settings } from 'lucide-react'
+import { addWorkout } from '@greekgod/core'
+import { useMobileData } from './context/MobileDataContext'
+import { activeWorkoutForToday, createWorkoutFromTemplate, nextTemplate } from './domain/mobileModel'
+import { HistoryPage } from './pages/HistoryPage'
+import { HomePage } from './pages/HomePage'
+import { JournalPage } from './pages/JournalPage'
+import { ProgressPage } from './pages/ProgressPage'
+import { SettingsPage } from './pages/SettingsPage'
+import { WorkoutPage } from './pages/WorkoutPage'
+import type { MobileRoute } from './routes'
 
-type Route = 'home' | 'workout' | 'journal' | 'progress' | 'settings'
-
-const navigation: Array<{ route: Route; label: string; icon: typeof Home }> = [
+const navigation: Array<{ route: Exclude<MobileRoute, 'history'>; label: string; icon: typeof Home }> = [
   { route: 'home', label: 'Start', icon: Home },
   { route: 'workout', label: 'Trening', icon: Dumbbell },
   { route: 'journal', label: 'Dziennik', icon: BookOpen },
@@ -11,78 +19,71 @@ const navigation: Array<{ route: Route; label: string; icon: typeof Home }> = [
   { route: 'settings', label: 'Więcej', icon: Settings },
 ]
 
-const PagePlaceholder = ({ route }: { route: Exclude<Route, 'home'> }) => {
-  const content = {
-    workout: ['Trening', 'Szybki logger serii będzie dostępny offline.'],
-    journal: ['Dziennik', 'Pomiary i makroskładniki zapiszą się lokalnie.'],
-    progress: ['Progres', 'Historia sesji i wykresy będą liczone z SQLite.'],
-    settings: ['Ustawienia i synchronizacja', 'Parowanie z domowym PC bez chmury.'],
-  }[route]
-  return (
-    <main className="mobile-page">
-      <p className="eyebrow">GreekGod mobile</p>
-      <h1>{content[0]}</h1>
-      <section className="surface empty-surface">
-        <span className="empty-mark" aria-hidden="true">G</span>
-        <p>{content[1]}</p>
-      </section>
-    </main>
-  )
-}
-
-const HomePage = ({ startWorkout, openJournal }: { startWorkout: () => void; openJournal: () => void }) => (
-  <main className="mobile-page">
-    <p className="eyebrow">Czwartek, 27 sierpnia</p>
-    <h1>Gotowy na trening?</h1>
-
-    <section className="hero-card">
-      <div>
-        <p className="card-kicker">Następny trening</p>
-        <h2>A · PUSH</h2>
-        <p className="muted">7 ćwiczeń · ostatnio 18 sierpnia</p>
-      </div>
-      <button className="primary-button" type="button" onClick={startWorkout}>Rozpocznij trening</button>
-    </section>
-
-    <div className="metric-grid">
-      <section className="surface metric-card">
-        <p className="card-kicker">Aktualna faza</p>
-        <strong>Zero kaloryczne</strong>
-      </section>
-      <section className="surface metric-card">
-        <p className="card-kicker">Cel kalorii</p>
-        <strong>2800 <small>kcal</small></strong>
-      </section>
-    </div>
-
-    <button className="surface journal-shortcut" type="button" onClick={openJournal}>
-      <span><BookOpen size={20} /></span>
-      <span><strong>Uzupełnij Dziennik</strong><small>Waga, makro i kroki</small></span>
-      <span aria-hidden="true">›</span>
-    </button>
-  </main>
-)
-
 export const App = () => {
-  const [route, setRoute] = useState<Route>('home')
+  const { data, loading, error, mutate, snapshot } = useMobileData()
+  const [route, setRoute] = useState<MobileRoute>('home')
+  const [workoutId, setWorkoutId] = useState<string>()
+  const startingWorkout = useRef(false)
+  const restoredRoute = useRef(false)
+  useEffect(() => {
+    if (!data || restoredRoute.current) return
+    restoredRoute.current = true
+    const active = activeWorkoutForToday(data.workouts)
+    if (active) {
+      setWorkoutId(active.id)
+      setRoute('workout')
+    }
+  }, [data])
+  useEffect(() => {
+    const openActiveWorkout = () => {
+      const active = data && activeWorkoutForToday(data.workouts)
+      if (active) {
+        setWorkoutId(active.id)
+        setRoute('workout')
+      }
+    }
+    window.addEventListener('focus', openActiveWorkout)
+    return () => window.removeEventListener('focus', openActiveWorkout)
+  }, [data])
+  if (loading) return <div className="app-state"><span className="loading-mark">G</span><p>Otwieram lokalną bazę…</p></div>
+  if (!data || error) return <div className="app-state error-state"><span>!</span><strong>Nie udało się otworzyć danych</strong><p>{error ?? 'Nieznany błąd.'}</p></div>
+
+  const startWorkout = async () => {
+    if (startingWorkout.current) return
+    startingWorkout.current = true
+    try {
+      const active = activeWorkoutForToday(data.workouts)
+      if (active) { setWorkoutId(active.id); setRoute('workout'); return }
+      const template = nextTemplate(data)
+      if (!template) return
+      const workout = createWorkoutFromTemplate(template, data)
+      await mutate((current) => ({ ...current, workouts: addWorkout(current.workouts, workout) }))
+      setWorkoutId(workout.id)
+      setRoute('workout')
+    } finally {
+      startingWorkout.current = false
+    }
+  }
+
+  const openWorkout = () => {
+    const selected = workoutId && data.workouts.some((item) => item.id === workoutId)
+      ? data.workouts.find((item) => item.id === workoutId)
+      : activeWorkoutForToday(data.workouts)
+    if (selected) { setWorkoutId(selected.id); setRoute('workout') } else void startWorkout()
+  }
+
   return (
     <div className="mobile-shell">
-      {route === 'home'
-        ? <HomePage startWorkout={() => setRoute('workout')} openJournal={() => setRoute('journal')} />
-        : <PagePlaceholder route={route} />}
-      <nav className="bottom-navigation" aria-label="Główna nawigacja">
-        {navigation.map(({ route: itemRoute, label, icon: Icon }) => (
-          <button
-            className={route === itemRoute ? 'active' : ''}
-            key={itemRoute}
-            type="button"
-            onClick={() => setRoute(itemRoute)}
-          >
-            <Icon size={21} strokeWidth={2} />
-            <span>{label}</span>
-          </button>
-        ))}
-      </nav>
+      {!snapshot || snapshot.probe.journalMode === 'memory' ? <div className="preview-ribbon">Podgląd UI · Android zapisuje do SQLite</div> : null}
+      {route === 'home' && <HomePage startWorkout={() => void startWorkout()} openJournal={() => setRoute('journal')} openHistory={() => setRoute('history')} />}
+      {route === 'workout' && <WorkoutPage workoutId={workoutId ?? activeWorkoutForToday(data.workouts)?.id} goBack={() => setRoute('home')} />}
+      {route === 'journal' && <JournalPage />}
+      {route === 'history' && <HistoryPage goBack={() => setRoute('home')} />}
+      {route === 'progress' && <ProgressPage />}
+      {route === 'settings' && <SettingsPage openHistory={() => setRoute('history')} />}
+      {route !== 'history' && <nav className="bottom-navigation" aria-label="Główna nawigacja">{navigation.map(({ route: itemRoute, label, icon: Icon }) => (
+        <button className={route === itemRoute ? 'active' : ''} key={itemRoute} type="button" onClick={() => itemRoute === 'workout' ? openWorkout() : setRoute(itemRoute)}><Icon size={21} strokeWidth={2} /><span>{label}</span></button>
+      ))}</nav>}
     </div>
   )
 }
