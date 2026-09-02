@@ -23,6 +23,7 @@
     "tauri:sqlite-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-shadow --config src-tauri/tauri.native-sqlite-smoke.conf.json",
     "tauri:authority-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-authority --config src-tauri/tauri.native-authority-smoke.conf.json",
     "tauri:authority-live-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-authority --config src-tauri/tauri.native-authority-live-smoke.conf.json",
+    "tauri:rehearsal:build": "tauri build --debug --no-bundle --features native-sqlite-production-authority --config src-tauri/tauri.rehearsal.conf.json",
     "tauri:production-authority:build": "tauri build --features native-sqlite-production-authority --config src-tauri/tauri.production-authority.conf.json",
     "tauri:build": "tauri build"
   },

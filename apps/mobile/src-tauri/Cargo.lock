@@ -1213,7 +1213,7 @@ dependencies = [
 
 [[package]]
 name = "greekgod-sync"
-version = "0.1.0"
+version = "3.0.0"
 dependencies = [
  "greekgod-storage",
  "serde",

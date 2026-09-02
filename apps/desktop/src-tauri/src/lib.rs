@@ -15,6 +15,7 @@ mod native_storage_shadow {
     const SQLITE_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.sqlitesmoke";
     const AUTHORITY_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.authoritysmoke";
     const AUTHORITY_LIVE_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.authoritylivesmoke";
+    const REHEARSAL_IDENTIFIER: &str = "com.igorpich.formlog.rehearsal";
     #[cfg(feature = "native-sqlite-production-authority")]
     const PRODUCTION_IDENTIFIER: &str = "com.igorpich.formlog";
 
@@ -80,7 +81,8 @@ mod native_storage_shadow {
         let isolated_development = identifier == DEVELOPMENT_IDENTIFIER
             || identifier == SQLITE_SMOKE_IDENTIFIER
             || identifier == AUTHORITY_SMOKE_IDENTIFIER
-            || identifier == AUTHORITY_LIVE_SMOKE_IDENTIFIER;
+            || identifier == AUTHORITY_LIVE_SMOKE_IDENTIFIER
+            || identifier == REHEARSAL_IDENTIFIER;
         #[cfg(feature = "native-sqlite-production-authority")]
         let allowed = isolated_development || identifier == PRODUCTION_IDENTIFIER;
         #[cfg(not(feature = "native-sqlite-production-authority"))]

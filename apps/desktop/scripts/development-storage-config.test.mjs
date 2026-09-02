@@ -18,6 +18,9 @@ const [smokeConfig, developmentEnvironment, smokeEnvironment] = await Promise.al
   readFile(join(repositoryRoot, '.env.development'), 'utf8'),
   readFile(join(repositoryRoot, '.env.sqlite-smoke'), 'utf8'),
 ])
+
+const rehearsalConfig = await readJson('src-tauri/tauri.rehearsal.conf.json')
+const rehearsalEnvironment = await readFile(join(repositoryRoot, '.env.rehearsal'), 'utf8')
 const [authoritySmokeConfig, authoritySmokeEnvironment] = await Promise.all([
   readJson('src-tauri/tauri.native-authority-smoke.conf.json'),
   readFile(join(repositoryRoot, '.env.authority-smoke'), 'utf8'),
@@ -36,9 +39,14 @@ assert.equal(developmentConfig.identifier, 'com.igorpich.formlog.dev')
 assert.equal(smokeConfig.identifier, 'com.igorpich.formlog.sqlitesmoke')
 assert.equal(authoritySmokeConfig.identifier, 'com.igorpich.formlog.authoritysmoke')
 assert.equal(authorityLiveSmokeConfig.identifier, 'com.igorpich.formlog.authoritylivesmoke')
+assert.equal(rehearsalConfig.identifier, 'com.igorpich.formlog.rehearsal')
 assert.equal(productionAuthorityConfig.identifier, 'com.igorpich.formlog')
+assert.equal(productionConfig.version, '2.6.1')
+assert.equal(rehearsalConfig.version, '3.0.0')
+assert.equal(productionAuthorityConfig.version, '3.0.0')
 assert.notEqual(developmentConfig.identifier, productionConfig.identifier)
 assert.notEqual(smokeConfig.identifier, productionConfig.identifier)
+assert.notEqual(rehearsalConfig.identifier, productionConfig.identifier)
 assert.notEqual(authoritySmokeConfig.identifier, productionConfig.identifier)
 assert.notEqual(authorityLiveSmokeConfig.identifier, productionConfig.identifier)
 assert.match(packageJson.scripts['tauri:dev'], /--config src-tauri\/tauri\.dev\.conf\.json(?:\s|$)/)
@@ -46,6 +54,7 @@ assert.match(packageJson.scripts['tauri:dev'], /--features native-sqlite-authori
 assert.match(packageJson.scripts['tauri:sqlite-smoke:build'], /--features native-sqlite-shadow/)
 assert.match(packageJson.scripts['tauri:authority-smoke:build'], /--features native-sqlite-authority/)
 assert.match(packageJson.scripts['tauri:authority-live-smoke:build'], /--features native-sqlite-authority/)
+assert.match(packageJson.scripts['tauri:rehearsal:build'], /--features native-sqlite-production-authority/)
 assert.match(packageJson.scripts['tauri:production-authority:build'], /--features native-sqlite-production-authority/)
 assert.doesNotMatch(packageJson.scripts['tauri:build'], /tauri\.dev\.conf\.json/)
 assert.doesNotMatch(packageJson.scripts['tauri:build'], /native-sqlite-shadow/)
@@ -55,5 +64,6 @@ assert.equal(smokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_SHADOW=1')
 assert.equal(authoritySmokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')
 assert.equal(authorityLiveSmokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')
 assert.equal(productionAuthorityEnvironment.trim(), 'VITE_NATIVE_SQLITE_PRODUCTION_AUTHORITY=1')
+assert.equal(rehearsalEnvironment.trim(), 'VITE_NATIVE_SQLITE_PRODUCTION_AUTHORITY=1')
 
 console.log('PASS development storage: production, dev and SQLite smoke compositions are isolated')
