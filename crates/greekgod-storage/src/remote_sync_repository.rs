@@ -479,6 +479,198 @@ mod tests {
     }
 
     #[test]
+    fn current_client_round_trip_preserves_explicit_exercise_aliases_and_identity() {
+        let source_directory = tempdir().expect("temporary source database");
+        let source = NativeAppDataStore::new(source_directory.path().join(DATABASE_FILENAME))
+            .expect("source store");
+        source
+            .bootstrap_from_legacy_snapshot(
+                &json!({
+                    "version": 4,
+                    "dailyEntries": [],
+                    "workouts": [{
+                        "id": "workout-a",
+                        "date": "2026-08-30",
+                        "templateId": "push",
+                        "templateCode": "A",
+                        "templateName": "PUSH",
+                        "exercises": [{
+                            "id": "bench-snapshot",
+                            "exerciseId": "bench-press",
+                            "name": "Historical bench snapshot",
+                            "sets": []
+                        }]
+                    }],
+                    "templates": [{
+                        "id": "push",
+                        "code": "A",
+                        "name": "PUSH",
+                        "exercises": [{
+                            "id": "bench-template",
+                            "exerciseId": "bench-press",
+                            "name": "Bench press",
+                            "prescription": "3 x 5",
+                            "defaultSets": 3
+                        }]
+                    }],
+                    "exerciseLibrary": [{
+                        "id": "bench-press",
+                        "name": "Bench press",
+                        "equipmentSensitive": false,
+                        "aliases": ["Historical bench snapshot"]
+                    }],
+                    "settings": { "gymLocations": [] },
+                    "coachNotes": {}
+                }),
+                "desktop:clean-source",
+            )
+            .expect("source bootstrap");
+
+        let (_client_directory, client) = store();
+        let (_late_client_directory, late_client) = store();
+        let source_revision = source.current_sync_revision().expect("source revision");
+        let source_changes = source.changes_since(0, 100).expect("source changes");
+        client
+            .apply_remote_batch_and_advance_cursor("service-a", &source_changes, source_revision)
+            .expect("initial desktop to phone pull");
+        late_client
+            .apply_remote_batch_and_advance_cursor("service-a", &source_changes, source_revision)
+            .expect("initial pull for a client that will synchronize later");
+
+        let client_definition = client
+            .load_sync_entity(SyncEntityType::ExerciseDefinition, "bench-press")
+            .expect("load client definition")
+            .expect("client definition exists");
+        assert_eq!(
+            client_definition.payload.as_ref().unwrap()["aliases"],
+            json!(["Historical bench snapshot"])
+        );
+        let mut updated_payload = client_definition.payload.clone().unwrap();
+        updated_payload["aliases"] = json!(["Historical bench snapshot", "Current mobile alias"]);
+        let update = SyncMutationRequest {
+            operation_id: "92000000-0000-4000-8000-000000000010".into(),
+            change_set_id: "93000000-0000-4000-8000-000000000010".into(),
+            device_id: "mobile:current-client".into(),
+            entity_type: SyncEntityType::ExerciseDefinition,
+            entity_id: "bench-press".into(),
+            base_revision: client_definition.revision,
+            order_position: client_definition.order_position,
+            operation_type: SyncOperationType::Upsert,
+            payload: Some(updated_payload.clone()),
+        };
+        client
+            .apply_local_mutation(&update)
+            .expect("current mobile client update");
+        let prepared = client
+            .prepare_remote_outbox("service-a", 10)
+            .expect("prepare current client outbox");
+        assert_eq!(prepared.len(), 1);
+        assert_eq!(prepared[0].request.entity_id, "bench-press");
+        assert_eq!(prepared[0].request.payload, Some(updated_payload));
+
+        let source_result = source
+            .apply_remote_mutation(&prepared[0].request)
+            .expect("phone to desktop service push");
+        client
+            .acknowledge_remote_operation(
+                "service-a",
+                &prepared[0].request.operation_id,
+                source_result.revision,
+            )
+            .expect("acknowledge phone push");
+        let source_definition = source
+            .load_sync_entity(SyncEntityType::ExerciseDefinition, "bench-press")
+            .unwrap()
+            .unwrap();
+        assert_eq!(source_definition.entity_id, "bench-press");
+        assert_eq!(
+            source_definition.payload.as_ref().unwrap()["aliases"],
+            json!(["Historical bench snapshot", "Current mobile alias"])
+        );
+
+        let return_changes = source
+            .changes_since(source_revision, 100)
+            .expect("desktop return changes");
+        client
+            .apply_remote_batch_and_advance_cursor(
+                "service-a",
+                &return_changes,
+                source_result.revision,
+            )
+            .expect("return pull to current mobile client");
+        let round_trip = client
+            .load_authoritative_snapshot()
+            .expect("round-trip snapshot");
+        let definitions = round_trip.data["exerciseLibrary"].as_array().unwrap();
+        assert_eq!(definitions.len(), 1);
+        assert_eq!(definitions[0]["id"], "bench-press");
+        assert_eq!(
+            definitions[0]["aliases"],
+            json!(["Historical bench snapshot", "Current mobile alias"])
+        );
+
+        let current_definition = client
+            .load_sync_entity(SyncEntityType::ExerciseDefinition, "bench-press")
+            .unwrap()
+            .unwrap();
+        let mut cleared_payload = current_definition.payload.clone().unwrap();
+        cleared_payload["aliases"] = json!([]);
+        let clear = SyncMutationRequest {
+            operation_id: "92000000-0000-4000-8000-000000000011".into(),
+            change_set_id: "93000000-0000-4000-8000-000000000011".into(),
+            device_id: "mobile:current-client".into(),
+            entity_type: SyncEntityType::ExerciseDefinition,
+            entity_id: "bench-press".into(),
+            base_revision: current_definition.revision,
+            order_position: current_definition.order_position,
+            operation_type: SyncOperationType::Upsert,
+            payload: Some(cleared_payload),
+        };
+        client
+            .apply_local_mutation(&clear)
+            .expect("current client explicit alias removal");
+        let prepared_clear = client
+            .prepare_remote_outbox("service-a", 10)
+            .expect("prepare explicit clear");
+        assert_eq!(prepared_clear.len(), 1);
+        assert_eq!(
+            prepared_clear[0].request.payload.as_ref().unwrap()["aliases"],
+            json!([])
+        );
+        let clear_result = source
+            .apply_remote_mutation(&prepared_clear[0].request)
+            .expect("push explicit clear to source");
+        assert_eq!(
+            source
+                .load_sync_entity(SyncEntityType::ExerciseDefinition, "bench-press")
+                .unwrap()
+                .unwrap()
+                .payload
+                .unwrap()["aliases"],
+            json!([])
+        );
+
+        let clear_changes = source
+            .changes_since(source_result.revision, 100)
+            .expect("changes containing explicit clear");
+        late_client
+            .apply_remote_batch_and_advance_cursor(
+                "service-a",
+                &clear_changes,
+                clear_result.revision,
+            )
+            .expect("late client pulls explicit clear");
+        let late_definitions = late_client.load_authoritative_snapshot().unwrap().data
+            ["exerciseLibrary"]
+            .as_array()
+            .unwrap()
+            .clone();
+        assert_eq!(late_definitions.len(), 1);
+        assert_eq!(late_definitions[0]["id"], "bench-press");
+        assert_eq!(late_definitions[0]["aliases"], json!([]));
+    }
+
+    #[test]
     fn pulled_batch_and_cursor_commit_atomically_into_materialized_app_data() {
         let (_directory, store) = store();
         let change = SyncEntityRecord {

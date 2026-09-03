@@ -474,11 +474,6 @@ pub(crate) fn apply_mutation_in_transaction(
 ) -> StorageResult<SyncMutationResult> {
     validate_request(request)?;
     let request_hash = request_hash(request, origin)?;
-    let payload_json = request
-        .payload
-        .as_ref()
-        .map(serde_json::to_string)
-        .transpose()?;
 
     if let Some((stored_hash, result_json)) = transaction
         .query_row(
@@ -512,6 +507,12 @@ pub(crate) fn apply_mutation_in_transaction(
             current_revision,
         });
     }
+
+    let effective_payload = backward_compatible_upsert_payload(transaction, request)?;
+    let payload_json = effective_payload
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()?;
 
     let revision: i64 = transaction.query_row(
         r#"
@@ -684,6 +685,50 @@ pub(crate) fn apply_mutation_in_transaction(
         )?;
     }
     Ok(result)
+}
+
+fn backward_compatible_upsert_payload(
+    transaction: &Transaction<'_>,
+    request: &SyncMutationRequest,
+) -> StorageResult<Option<Value>> {
+    let Some(mut payload) = request.payload.clone() else {
+        return Ok(None);
+    };
+    if request.operation_type != SyncOperationType::Upsert
+        || request.entity_type != SyncEntityType::ExerciseDefinition
+    {
+        return Ok(Some(payload));
+    }
+
+    let payload_object = payload
+        .as_object_mut()
+        .expect("validated exercise definition payload");
+    if payload_object.contains_key("aliases") {
+        return Ok(Some(payload));
+    }
+
+    let existing_payload = transaction
+        .query_row(
+            "SELECT payload_json FROM sync_entities WHERE entity_type = ?1 AND entity_id = ?2",
+            params![request.entity_type.as_str(), &request.entity_id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()?
+        .flatten()
+        .map(|encoded| serde_json::from_str::<Value>(&encoded))
+        .transpose()?;
+    if let Some(Value::Array(aliases)) = existing_payload
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|object| object.get("aliases"))
+    {
+        // A missing field came from clients that did not carry aliases yet. Keep
+        // the last known value, including an explicit empty-list tombstone. An
+        // incoming `aliases: []` or non-empty list is handled above as an
+        // intentional replacement.
+        payload_object.insert("aliases".into(), Value::Array(aliases.clone()));
+    }
+    Ok(Some(payload))
 }
 
 fn validate_request(request: &SyncMutationRequest) -> StorageResult<()> {
@@ -876,6 +921,193 @@ mod tests {
                 }]
             })),
         }
+    }
+
+    fn exercise_request(
+        operation_id: &str,
+        entity_id: &str,
+        base_revision: i64,
+        payload: Value,
+    ) -> SyncMutationRequest {
+        SyncMutationRequest {
+            operation_id: operation_id.into(),
+            change_set_id: "11000000-0000-4000-8000-000000000001".into(),
+            device_id: "mobile-compatibility-test".into(),
+            entity_type: SyncEntityType::ExerciseDefinition,
+            entity_id: entity_id.into(),
+            base_revision,
+            order_position: Some(0),
+            operation_type: SyncOperationType::Upsert,
+            payload: Some(payload),
+        }
+    }
+
+    #[test]
+    fn exercise_alias_compatibility_distinguishes_missing_empty_and_updated_values() {
+        let directory = tempdir().expect("temporary alias compatibility directory");
+        let store = NativeAppDataStore::new(directory.path().join(DATABASE_FILENAME))
+            .expect("native store");
+        store
+            .bootstrap_from_legacy_snapshot(
+                &json!({
+                    "version": 4,
+                    "dailyEntries": [],
+                    "workouts": [],
+                    "templates": [],
+                    "exerciseLibrary": [
+                        {
+                            "id": "cable-row",
+                            "name": "Cable row",
+                            "equipmentSensitive": true,
+                            "aliases": ["Seated cable row"]
+                        },
+                        {
+                            "id": "machine-row",
+                            "name": "Machine row",
+                            "equipmentSensitive": true,
+                            "aliases": ["Chest-supported machine row"]
+                        }
+                    ],
+                    "settings": { "gymLocations": [] },
+                    "coachNotes": {}
+                }),
+                "desktop-alias-bootstrap",
+            )
+            .expect("alias fixture bootstrap");
+
+        let original = store
+            .load_sync_entity(SyncEntityType::ExerciseDefinition, "cable-row")
+            .expect("load original definition")
+            .expect("original definition exists");
+        let missing = exercise_request(
+            "01000000-0000-4000-8000-000000000001",
+            "cable-row",
+            original.revision,
+            json!({
+                "id": "cable-row",
+                "name": "Cable row updated by an older client",
+                "equipmentSensitive": false
+            }),
+        );
+        let preserved = store
+            .apply_remote_mutation(&missing)
+            .expect("apply missing-alias compatibility mutation");
+        let replay = store
+            .apply_remote_mutation(&missing)
+            .expect("replay missing-alias compatibility mutation");
+        let after_missing = store
+            .load_sync_entity(SyncEntityType::ExerciseDefinition, "cable-row")
+            .expect("load preserved definition")
+            .expect("preserved definition exists");
+
+        assert_eq!(after_missing.entity_id, "cable-row");
+        assert_eq!(after_missing.payload.as_ref().unwrap()["id"], "cable-row");
+        assert_eq!(
+            after_missing.payload.as_ref().unwrap()["name"],
+            "Cable row updated by an older client"
+        );
+        assert_eq!(
+            after_missing.payload.as_ref().unwrap()["equipmentSensitive"],
+            false
+        );
+        assert_eq!(
+            after_missing.payload.as_ref().unwrap()["aliases"],
+            json!(["Seated cable row"])
+        );
+        assert!(replay.idempotent_replay);
+        assert_eq!(replay.revision, preserved.revision);
+        assert_eq!(
+            store
+                .current_sync_revision()
+                .expect("revision after replay"),
+            preserved.revision
+        );
+
+        let explicit_empty = exercise_request(
+            "01000000-0000-4000-8000-000000000002",
+            "cable-row",
+            preserved.revision,
+            json!({
+                "id": "cable-row",
+                "name": "Cable row updated by an older client",
+                "equipmentSensitive": false,
+                "aliases": []
+            }),
+        );
+        let cleared = store
+            .apply_remote_mutation(&explicit_empty)
+            .expect("apply explicit alias removal");
+        let after_clear = store
+            .load_sync_entity(SyncEntityType::ExerciseDefinition, "cable-row")
+            .unwrap()
+            .unwrap()
+            .payload
+            .unwrap();
+        assert_eq!(
+            after_clear["aliases"],
+            json!([]),
+            "an explicit empty list must remain distinguishable from an omitted field"
+        );
+        assert_eq!(
+            store.load_authoritative_snapshot().unwrap().data["exerciseLibrary"][0]["aliases"],
+            json!([])
+        );
+
+        let missing_after_clear = exercise_request(
+            "01000000-0000-4000-8000-000000000004",
+            "cable-row",
+            cleared.revision,
+            json!({
+                "id": "cable-row",
+                "name": "Cable row updated after explicit clearing",
+                "equipmentSensitive": true
+            }),
+        );
+        let preserved_clear = store
+            .apply_remote_mutation(&missing_after_clear)
+            .expect("preserve explicit clear across an older payload");
+        assert_eq!(
+            store
+                .load_sync_entity(SyncEntityType::ExerciseDefinition, "cable-row")
+                .unwrap()
+                .unwrap()
+                .payload
+                .unwrap()["aliases"],
+            json!([])
+        );
+
+        let explicit_update = exercise_request(
+            "01000000-0000-4000-8000-000000000003",
+            "cable-row",
+            preserved_clear.revision,
+            json!({
+                "id": "cable-row",
+                "name": "Cable row updated by an older client",
+                "equipmentSensitive": false,
+                "aliases": ["Cable row historical", "Seated cable row"]
+            }),
+        );
+        store
+            .apply_remote_mutation(&explicit_update)
+            .expect("apply explicit alias update");
+
+        let snapshot = store
+            .load_authoritative_snapshot()
+            .expect("load materialized alias snapshot");
+        let definitions = snapshot.data["exerciseLibrary"]
+            .as_array()
+            .expect("exercise library array");
+        assert_eq!(definitions.len(), 2, "no definition may be duplicated");
+        assert_eq!(definitions[0]["id"], "cable-row");
+        assert_eq!(
+            definitions[0]["aliases"],
+            json!(["Cable row historical", "Seated cable row"])
+        );
+        assert_eq!(definitions[1]["id"], "machine-row");
+        assert_eq!(
+            definitions[1]["aliases"],
+            json!(["Chest-supported machine row"])
+        );
     }
 
     #[test]
