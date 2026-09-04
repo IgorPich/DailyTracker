@@ -266,6 +266,101 @@ impl NativeAppDataStore {
             Ok(applied)
         })
     }
+
+    pub fn prune_untracked_bootstrap_entities_after_initial_pull(
+        &self,
+        service_id: &str,
+    ) -> StorageResult<usize> {
+        self.with_connection(|connection| {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            require_authoritative_bootstrap(&transaction)?;
+            let state = require_remote(&transaction, service_id)?;
+            if state.last_pulled_revision <= 0 {
+                return Err(StorageError::InvalidMutation(
+                    "initial remote snapshot is incomplete".into(),
+                ));
+            }
+            let pending: i64 = transaction.query_row(
+                "SELECT COUNT(*) FROM sync_outbox WHERE acknowledged_at IS NULL",
+                [],
+                |row| row.get(0),
+            )?;
+            if pending != 0 {
+                transaction.commit()?;
+                return Ok(0);
+            }
+
+            let untracked = {
+                let mut statement = transaction.prepare(
+                    r#"
+                    SELECT entities.entity_type, entities.entity_id, entities.revision
+                    FROM sync_entities AS entities
+                    WHERE entities.deleted_at IS NULL
+                      AND NOT EXISTS (
+                        SELECT 1 FROM sync_remote_entities AS remote_entities
+                        WHERE remote_entities.entity_type = entities.entity_type
+                          AND remote_entities.entity_id = entities.entity_id
+                      )
+                    ORDER BY entities.entity_type, entities.entity_id
+                    "#,
+                )?;
+                let rows = statement
+                    .query_map([], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, i64>(2)?,
+                        ))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+                rows
+            };
+            if untracked.is_empty() {
+                transaction.commit()?;
+                return Ok(0);
+            }
+
+            let change_set_id = Uuid::new_v4().hyphenated().to_string();
+            for (entity_type, entity_id, base_revision) in &untracked {
+                let entity_type = sync_entity_type_from_database(entity_type)?;
+                apply_mutation_in_transaction(
+                    &transaction,
+                    &SyncMutationRequest {
+                        operation_id: Uuid::new_v4().hyphenated().to_string(),
+                        change_set_id: change_set_id.clone(),
+                        device_id: format!("service:{service_id}"),
+                        entity_type,
+                        entity_id: entity_id.clone(),
+                        base_revision: *base_revision,
+                        order_position: None,
+                        operation_type: SyncOperationType::Delete,
+                        payload: None,
+                    },
+                    MutationOrigin::Remote,
+                )?;
+            }
+            let reconstructed = reconstruct_with_connection(&transaction)?;
+            write_materialized_snapshot(&transaction, &reconstructed)?;
+            transaction.commit()?;
+            Ok(untracked.len())
+        })
+    }
+}
+
+fn sync_entity_type_from_database(value: &str) -> StorageResult<crate::SyncEntityType> {
+    match value {
+        "workout" => Ok(crate::SyncEntityType::Workout),
+        "daily_entry" => Ok(crate::SyncEntityType::DailyEntry),
+        "training_template" => Ok(crate::SyncEntityType::TrainingTemplate),
+        "gym" => Ok(crate::SyncEntityType::Gym),
+        "exercise_definition" => Ok(crate::SyncEntityType::ExerciseDefinition),
+        "settings" => Ok(crate::SyncEntityType::Settings),
+        "coach_note" => Ok(crate::SyncEntityType::CoachNote),
+        _ => Err(StorageError::InvalidData(format!(
+            "unknown sync entity type {value}"
+        ))),
+    }
 }
 
 fn prepare_operation(

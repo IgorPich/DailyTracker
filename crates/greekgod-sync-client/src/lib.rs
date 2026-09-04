@@ -332,6 +332,8 @@ impl<T: SyncTransport> MobileSyncEngine<T> {
             .load_sync_remote(&self.service_id)?
             .ok_or_else(|| MobileSyncError::InvalidConfiguration("paired PC is missing".into()))?;
         let mut compatibility = self.compatibility(remote.last_pulled_revision);
+        let reconcile_initial_snapshot =
+            remote.last_pulled_revision == 0 && self.store.pending_outbox(1)?.is_empty();
         let handshake = self.transport.handshake(compatibility.clone()).await?;
         if handshake.service_id != self.service_id
             || handshake.protocol_version != PROTOCOL_VERSION
@@ -350,7 +352,9 @@ impl<T: SyncTransport> MobileSyncEngine<T> {
         let mut pushed = 0_usize;
         let mut pulled = 0_usize;
         let conflicts = self.push_pending(&mut compatibility, &mut pushed).await?;
-        pulled += self.pull_all(&mut compatibility).await?;
+        pulled += self
+            .pull_all(&mut compatibility, reconcile_initial_snapshot)
+            .await?;
         if conflicts > 0 {
             let unresolved = self.push_pending(&mut compatibility, &mut pushed).await?;
             if unresolved > 0 {
@@ -359,7 +363,7 @@ impl<T: SyncTransport> MobileSyncEngine<T> {
                         .into(),
                 ));
             }
-            pulled += self.pull_all(&mut compatibility).await?;
+            pulled += self.pull_all(&mut compatibility, false).await?;
         }
         let final_remote = self
             .store
@@ -467,6 +471,7 @@ impl<T: SyncTransport> MobileSyncEngine<T> {
     async fn pull_all(
         &self,
         compatibility: &mut CompatibilityRequest,
+        reconcile_initial_snapshot: bool,
     ) -> Result<usize, MobileSyncError> {
         let mut pulled = 0_usize;
         loop {
@@ -523,6 +528,10 @@ impl<T: SyncTransport> MobileSyncEngine<T> {
                 }
                 break;
             }
+        }
+        if reconcile_initial_snapshot {
+            self.store
+                .prune_untracked_bootstrap_entities_after_initial_pull(&self.service_id)?;
         }
         Ok(pulled)
     }
@@ -696,6 +705,144 @@ mod tests {
                 .last_pulled_revision,
             5
         );
+    }
+
+    struct InitialSnapshotTransport {
+        entities: Vec<SyncEntityRecord>,
+    }
+
+    impl SyncTransport for InitialSnapshotTransport {
+        fn handshake(
+            &self,
+            _request: CompatibilityRequest,
+        ) -> TransportFuture<'_, HandshakeResponse> {
+            Box::pin(async move {
+                Ok(HandshakeResponse {
+                    service_id: "service-a".into(),
+                    service_version: "test".into(),
+                    protocol_version: PROTOCOL_VERSION,
+                    schema_version: SUPPORTED_SCHEMA_VERSION,
+                    server_revision: 2,
+                })
+            })
+        }
+
+        fn push(&self, _request: PushRequest) -> TransportFuture<'_, PushResponse> {
+            Box::pin(async move { panic!("clean initial sync must not push bootstrap data") })
+        }
+
+        fn pull(&self, request: PullRequest) -> TransportFuture<'_, PullResponse> {
+            Box::pin(async move {
+                Ok(PullResponse {
+                    server_revision: 2,
+                    changes: if request.after_revision == 0 {
+                        self.entities.clone()
+                    } else {
+                        vec![]
+                    },
+                })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn clean_initial_pull_replaces_untracked_mobile_seed_before_first_edit() {
+        let directory = tempdir().expect("temporary clean mobile DB");
+        let store = NativeAppDataStore::new(directory.path().join(DATABASE_FILENAME)).unwrap();
+        store
+            .bootstrap_from_legacy_snapshot(
+                &json!({
+                    "version": 4,
+                    "dailyEntries": [],
+                    "workouts": [],
+                    "templates": [],
+                    "exerciseLibrary": [
+                        { "id": "shared", "name": "Seed name", "equipmentSensitive": false },
+                        { "id": "seed-only", "name": "Seed only", "equipmentSensitive": true }
+                    ],
+                    "settings": { "phase": "Seed" },
+                    "coachNotes": {}
+                }),
+                "mobile:test",
+            )
+            .unwrap();
+        store
+            .register_sync_remote("service-a", &"ab".repeat(32), "https://192.168.1.10:39173")
+            .unwrap();
+        let transport = InitialSnapshotTransport {
+            entities: vec![
+                SyncEntityRecord {
+                    entity_type: SyncEntityType::ExerciseDefinition,
+                    entity_id: "shared".into(),
+                    revision: 1,
+                    created_revision: 1,
+                    created_at: "now".into(),
+                    created_by_device_id: "desktop:test".into(),
+                    updated_at: "now".into(),
+                    updated_by_device_id: "desktop:test".into(),
+                    deleted_at: None,
+                    order_position: Some(0),
+                    payload: Some(json!({
+                        "id": "shared", "name": "PC name", "equipmentSensitive": false,
+                        "aliases": ["Seed name"]
+                    })),
+                },
+                SyncEntityRecord {
+                    entity_type: SyncEntityType::Settings,
+                    entity_id: "global".into(),
+                    revision: 2,
+                    created_revision: 2,
+                    created_at: "now".into(),
+                    created_by_device_id: "desktop:test".into(),
+                    updated_at: "now".into(),
+                    updated_by_device_id: "desktop:test".into(),
+                    deleted_at: None,
+                    order_position: None,
+                    payload: Some(json!({ "phase": "PC" })),
+                },
+            ],
+        };
+        let engine = MobileSyncEngine::new(
+            store.clone(),
+            transport,
+            "service-a",
+            "mobile:test",
+            "3.0.0",
+        )
+        .unwrap();
+
+        let report = engine.sync_once().await.expect("clean initial sync");
+        assert_eq!(report.pushed_operations, 0);
+        assert_eq!(report.pulled_changes, 2);
+        assert_eq!(report.pending_changes, 0);
+        let synced = store.load_authoritative_snapshot().unwrap();
+        assert_eq!(
+            synced.data,
+            json!({
+                "version": 4,
+                "dailyEntries": [],
+                "workouts": [],
+                "templates": [],
+                "exerciseLibrary": [{
+                    "id": "shared", "name": "PC name", "equipmentSensitive": false,
+                    "aliases": ["Seed name"]
+                }],
+                "settings": { "phase": "PC" },
+                "coachNotes": {}
+            })
+        );
+
+        let mut edited = synced.data;
+        edited["dailyEntries"] = json!([{
+            "id": "daily-a", "date": "2026-09-03", "protein": 211
+        }]);
+        let replaced = store
+            .replace_authoritative_snapshot(&edited, "mobile:test", synced.revision)
+            .expect("one DailyEntry edit");
+        assert_eq!(replaced.applied_operations, 1);
+        let pending = store.pending_outbox(100).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].entity_type, SyncEntityType::DailyEntry);
     }
 
     struct PersistentConflictTransport {
