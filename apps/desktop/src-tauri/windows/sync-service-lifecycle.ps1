@@ -104,7 +104,21 @@ function Install-GreekGodSyncTask {
     -Execute $ServiceExecutable `
     -Argument $arguments `
     -WorkingDirectory ([IO.Path]::GetDirectoryName($ServiceExecutable))
-  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity
+  $logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $identity
+  $repetitionClass = Get-CimClass `
+    -Namespace 'Root/Microsoft/Windows/TaskScheduler' `
+    -ClassName 'MSFT_TaskRepetitionPattern'
+  $watchdogRepetition = New-CimInstance `
+    -CimClass $repetitionClass `
+    -ClientOnly `
+    -Property @{
+      Interval = 'PT1M'
+      Duration = 'P1D'
+      StopAtDurationEnd = $false
+    }
+  $watchdogTrigger = New-ScheduledTaskTrigger -Daily -At ([datetime]::Today)
+  $watchdogTrigger.Repetition = $watchdogRepetition
+  $triggers = @($logonTrigger, $watchdogTrigger)
   $principal = New-ScheduledTaskPrincipal `
     -UserId $identity `
     -LogonType Interactive `
@@ -119,7 +133,7 @@ function Install-GreekGodSyncTask {
     -ExecutionTimeLimit ([TimeSpan]::Zero)
   $definition = New-ScheduledTask `
     -Action $taskAction `
-    -Trigger $trigger `
+    -Trigger $triggers `
     -Principal $principal `
     -Settings $settings `
     -Description 'GreekGod local-only HTTPS sync for the current Windows user.'
