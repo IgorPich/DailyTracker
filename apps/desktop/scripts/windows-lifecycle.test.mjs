@@ -17,7 +17,7 @@ assert.equal(
   config.bundle.resources['windows/sync-service-lifecycle.ps1'],
   'sync-service-lifecycle.ps1',
 )
-assert.equal(config.build.beforeBuildCommand, 'npm run build:bundle')
+assert.equal(config.build.beforeBuildCommand, 'npm run build:bundle:production-authority')
 
 for (const required of [
   '-Profile Private',

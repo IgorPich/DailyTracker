@@ -19,20 +19,25 @@ const sourceFiles = (await collectFiles(distRoot))
   .filter((path) => ['.js', '.html'].includes(extname(path)))
 const productionBundle = (await Promise.all(sourceFiles.map((path) => readFile(path, 'utf8')))).join('\n')
 
-for (const forbidden of [
+for (const required of [
   'native_storage_probe',
-  'native_shadow_replace',
-  'native_shadow_load',
-  'native_shadow_backup_before_import',
   'native_authority_status',
   'native_authority_bootstrap',
   'native_authority_load',
   'native_authority_replace',
   'native_authority_backup_before_import',
+]) {
+  assert.match(productionBundle, new RegExp(required), `production bundle is missing ${required}`)
+}
+
+for (const forbidden of [
+  'native_shadow_replace',
+  'native_shadow_load',
+  'native_shadow_backup_before_import',
   'native_sqlite_smoke_exit',
   'SQLITE_WEBVIEW_SMOKE_PASS',
 ]) {
   assert.doesNotMatch(productionBundle, new RegExp(forbidden), `production bundle contains ${forbidden}`)
 }
 
-console.log('PASS production storage bundle: Legacy composition contains no native SQLite command path')
+console.log('PASS production storage bundle: authoritative SQLite composition is present and isolated')

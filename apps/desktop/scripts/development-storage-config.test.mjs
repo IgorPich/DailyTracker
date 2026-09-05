@@ -41,9 +41,13 @@ assert.equal(authoritySmokeConfig.identifier, 'com.igorpich.formlog.authoritysmo
 assert.equal(authorityLiveSmokeConfig.identifier, 'com.igorpich.formlog.authoritylivesmoke')
 assert.equal(rehearsalConfig.identifier, 'com.igorpich.formlog.rehearsal')
 assert.equal(productionAuthorityConfig.identifier, 'com.igorpich.formlog')
-assert.equal(productionConfig.version, '2.6.1')
+assert.equal(productionConfig.version, '3.0.0')
 assert.equal(rehearsalConfig.version, '3.0.0')
 assert.equal(productionAuthorityConfig.version, '3.0.0')
+assert.equal(
+  productionConfig.build.beforeBuildCommand,
+  productionAuthorityConfig.build.beforeBuildCommand,
+)
 assert.notEqual(developmentConfig.identifier, productionConfig.identifier)
 assert.notEqual(smokeConfig.identifier, productionConfig.identifier)
 assert.notEqual(rehearsalConfig.identifier, productionConfig.identifier)
@@ -55,10 +59,10 @@ assert.match(packageJson.scripts['tauri:sqlite-smoke:build'], /--features native
 assert.match(packageJson.scripts['tauri:authority-smoke:build'], /--features native-sqlite-authority/)
 assert.match(packageJson.scripts['tauri:authority-live-smoke:build'], /--features native-sqlite-authority/)
 assert.match(packageJson.scripts['tauri:rehearsal:build'], /--features native-sqlite-production-authority/)
-assert.match(packageJson.scripts['tauri:production-authority:build'], /--features native-sqlite-production-authority/)
+assert.equal(packageJson.scripts['tauri:production-authority:build'], 'npm run tauri:build')
 assert.doesNotMatch(packageJson.scripts['tauri:build'], /tauri\.dev\.conf\.json/)
 assert.doesNotMatch(packageJson.scripts['tauri:build'], /native-sqlite-shadow/)
-assert.doesNotMatch(packageJson.scripts['tauri:build'], /native-sqlite-authority/)
+assert.match(packageJson.scripts['tauri:build'], /--features native-sqlite-production-authority/)
 assert.equal(developmentEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')
 assert.equal(smokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_SHADOW=1')
 assert.equal(authoritySmokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')

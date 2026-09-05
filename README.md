@@ -64,17 +64,17 @@ Build najpierw tworzy statyczny frontend Vite, osadza go w aplikacji i nie uruch
 Wyniki:
 
 - samodzielny plik: `apps/desktop/src-tauri/target/release/greekgod.exe`,
-- zalecany instalator: `apps/desktop/src-tauri/target/release/bundle/nsis/GreekGod_2.6.1_x64-setup.exe`,
-- instalatory MSI: `apps/desktop/src-tauri/target/release/bundle/msi/GreekGod_2.6.1_x64_pl-PL.msi` i `GreekGod_2.6.1_x64_en-US.msi`.
+- zalecany instalator: `apps/desktop/src-tauri/target/release/bundle/nsis/GreekGod_3.0.0_x64-setup.exe`,
+- instalatory MSI: `apps/desktop/src-tauri/target/release/bundle/msi/GreekGod_3.0.0_x64_pl-PL.msi` i `GreekGod_3.0.0_x64_en-US.msi`.
 
-Do normalnej instalacji uruchom plik `GreekGod_2.6.1_x64-setup.exe`. Instalator działa dla bieżącego użytkownika i dodaje GreekGod do menu Start oraz skrót na pulpicie. Kliknięcie systemowego `X` kończy aplikację — projekt nie zawiera ikony w zasobniku, autostartu ani zadań w tle.
+Do normalnej instalacji uruchom plik `GreekGod_3.0.0_x64-setup.exe`. Instalator działa dla bieżącego użytkownika, dodaje GreekGod do menu Start oraz skrót na pulpicie i konfiguruje usługę synchronizacji uruchamianą przez Harmonogram zadań. Kliknięcie systemowego `X` kończy aplikację Desktop; usługa synchronizacji działa niezależnie.
 
 ## Struktura
 
 ```text
 apps/
 └── desktop/
-    ├── src/              # React UI, stan, dane, serwisy i narzędzia wersji 2.6.1
+    ├── src/              # React UI, stan, dane, serwisy i narzędzia wersji 3.0.0
     ├── scripts/          # testy deterministyczne, fixture'y i audyt Store
     └── src-tauri/
         ├── capabilities/ # uprawnienia Store, dialogów i plików
