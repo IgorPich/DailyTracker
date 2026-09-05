@@ -1,3 +1,5 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use greekgod_storage::{NativeAppDataStore, PairingWindow, DATABASE_FILENAME};
 use greekgod_sync::{PROTOCOL_VERSION, SERVICE_VERSION};
 use greekgod_sync_service::{
@@ -12,15 +14,44 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, OnceLock,
 };
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod discovery;
 
 use discovery::MdnsAdvertisement;
 
 const DEFAULT_SYNC_PORT: u16 = 39173;
+const DIAGNOSTIC_LOG_FILENAME: &str = "greekgod-sync-service.log";
+static DIAGNOSTIC_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+fn diagnostic_log_path(database_path: &Path) -> PathBuf {
+    database_path.with_file_name(DIAGNOSTIC_LOG_FILENAME)
+}
+
+fn configure_diagnostic_log(database_path: &Path) {
+    let _ = DIAGNOSTIC_LOG_PATH.set(diagnostic_log_path(database_path));
+}
+
+fn append_diagnostic_log(path: &Path, message: &str) -> std::io::Result<()> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    writeln!(file, "{timestamp} {message}")?;
+    file.flush()
+}
+
+fn log_message(message: impl AsRef<str>) {
+    let message = message.as_ref();
+    #[cfg(any(not(windows), debug_assertions))]
+    eprintln!("{message}");
+    if let Some(path) = DIAGNOSTIC_LOG_PATH.get() {
+        let _ = append_diagnostic_log(path, message);
+    }
+}
 
 #[derive(Debug)]
 struct Config {
@@ -182,7 +213,7 @@ impl SingleInstance {
 #[tokio::main]
 async fn main() {
     if let Err(error) = run().await {
-        eprintln!("GreekGod Sync Service failed: {error}");
+        log_message(format!("GreekGod Sync Service failed: {error}"));
         std::process::exit(1);
     }
 }
@@ -201,6 +232,7 @@ async fn run() -> Result<(), String> {
     }
     ensure_crypto_provider();
     let config = Config::parse_from(arguments)?;
+    configure_diagnostic_log(&config.database_path);
     let bind = resolve_bind(config.bind).await?;
     let store =
         NativeAppDataStore::new(&config.database_path).map_err(|error| error.to_string())?;
@@ -226,12 +258,14 @@ async fn run() -> Result<(), String> {
             .open_pairing_window(pairing.ttl_seconds)
             .map_err(|error| error.to_string())?;
         write_pairing_window(&pairing.output_path, bind, &public_identity, &window)?;
-        eprintln!("GreekGod pairing window opened; nonce written to the configured output file");
+        log_message("GreekGod pairing window opened; nonce written to the configured output file");
     }
 
     let discovery = MdnsAdvertisement::register(&public_identity.service_id, bind)?;
 
-    eprintln!("GreekGod Sync Service listening with HTTPS on {}", bind);
+    log_message(format!(
+        "GreekGod Sync Service listening with HTTPS on {bind}"
+    ));
     let handle = axum_server::Handle::new();
     let shutdown_handle = handle.clone();
     tokio::spawn(async move {
@@ -287,7 +321,9 @@ async fn wait_for_private_lan_address(port: u16) -> Result<SocketAddr, String> {
             Ok(address) => return Ok(address),
             Err(error) => {
                 if !waiting_was_logged {
-                    eprintln!("GreekGod Sync Service waiting for a private LAN: {error}");
+                    log_message(format!(
+                        "GreekGod Sync Service waiting for a private LAN: {error}"
+                    ));
                     waiting_was_logged = true;
                 }
             }
@@ -534,5 +570,31 @@ mod tests {
         assert!(output.contains(&identity.certificate_fingerprint_sha256));
         assert!(write_pairing_window(&path, bind, &identity, &window).is_err());
         assert!(!format!("{window:?}").contains("secret-nonce"));
+    }
+
+    #[test]
+    fn diagnostic_log_is_adjacent_to_the_database() {
+        let database = Path::new("C:/GreekGod/data/greekgod-v3.sqlite");
+        assert_eq!(
+            diagnostic_log_path(database),
+            Path::new("C:/GreekGod/data/greekgod-sync-service.log")
+        );
+    }
+
+    #[test]
+    fn diagnostic_log_persists_messages_without_pairing_secrets() {
+        let directory = tempfile::tempdir().expect("temporary log directory");
+        let path = directory.path().join(DIAGNOSTIC_LOG_FILENAME);
+        let nonce = "secret-nonce-must-not-be-logged";
+
+        append_diagnostic_log(
+            &path,
+            "GreekGod pairing window opened; nonce written to the configured output file",
+        )
+        .expect("diagnostic log write");
+
+        let output = std::fs::read_to_string(path).expect("diagnostic log output");
+        assert!(output.contains("GreekGod pairing window opened"));
+        assert!(!output.contains(nonce));
     }
 }

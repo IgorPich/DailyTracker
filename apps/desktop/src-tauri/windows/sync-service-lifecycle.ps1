@@ -60,15 +60,38 @@ function Stop-GreekGodSyncTask {
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 }
 
+function Get-SyncServiceVersionContract {
+  $standardOutputPath = [IO.Path]::GetTempFileName()
+  $standardErrorPath = [IO.Path]::GetTempFileName()
+  try {
+    $process = Start-Process `
+      -FilePath $ServiceExecutable `
+      -ArgumentList '--version-json' `
+      -WindowStyle Hidden `
+      -RedirectStandardOutput $standardOutputPath `
+      -RedirectStandardError $standardErrorPath `
+      -Wait `
+      -PassThru
+    if ($process.ExitCode -ne 0) {
+      throw 'Sync Service version handshake command failed.'
+    }
+    $versionJson = Get-Content -LiteralPath $standardOutputPath -Raw
+    if ([string]::IsNullOrWhiteSpace($versionJson)) {
+      throw 'Sync Service version handshake returned no output.'
+    }
+    return $versionJson | ConvertFrom-Json
+  }
+  finally {
+    Remove-Item -LiteralPath $standardOutputPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $standardErrorPath -Force -ErrorAction SilentlyContinue
+  }
+}
+
 function Install-GreekGodSyncTask {
   if (-not (Test-Path -LiteralPath $ServiceExecutable -PathType Leaf)) {
     throw "Sync Service executable does not exist: $ServiceExecutable"
   }
-  $versionJson = & $ServiceExecutable --version-json
-  if ($LASTEXITCODE -ne 0) {
-    throw 'Sync Service version handshake command failed.'
-  }
-  $versionContract = $versionJson | ConvertFrom-Json
+  $versionContract = Get-SyncServiceVersionContract
   if ([string]::IsNullOrWhiteSpace($versionContract.serviceVersion) -or
       $versionContract.protocolVersion -ne 1) {
     throw 'Sync Service binary has an incompatible version contract.'

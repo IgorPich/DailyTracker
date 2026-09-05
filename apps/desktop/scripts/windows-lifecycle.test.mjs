@@ -10,6 +10,10 @@ const lifecycle = readFileSync(
   'utf8',
 )
 const hooks = readFileSync(resolve(desktopDirectory, 'src-tauri', 'windows', 'hooks.nsh'), 'utf8')
+const serviceMain = readFileSync(
+  resolve(desktopDirectory, '..', 'sync-service', 'src', 'main.rs'),
+  'utf8',
+)
 
 assert.deepEqual(config.bundle.targets, ['nsis'])
 assert.deepEqual(config.bundle.externalBin, ['binaries/greekgod-sync-service'])
@@ -18,6 +22,11 @@ assert.equal(
   'sync-service-lifecycle.ps1',
 )
 assert.equal(config.build.beforeBuildCommand, 'npm run build:bundle:production-authority')
+assert.match(
+  serviceMain,
+  /cfg_attr\(all\(windows, not\(debug_assertions\)\), windows_subsystem = "windows"\)/,
+)
+assert.match(serviceMain, /DIAGNOSTIC_LOG_FILENAME: &str = "greekgod-sync-service\.log"/)
 
 for (const required of [
   '-Profile Private',
@@ -31,6 +40,10 @@ for (const required of [
   '-MultipleInstances IgnoreNew',
   '--bind-private-lan',
   '--version-json',
+  '-RedirectStandardOutput $standardOutputPath',
+  '-RedirectStandardError $standardErrorPath',
+  '-WindowStyle Hidden',
+  '-Wait',
 ]) {
   assert.ok(lifecycle.includes(required), `lifecycle is missing ${required}`)
 }
