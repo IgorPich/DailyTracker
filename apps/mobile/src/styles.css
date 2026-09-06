@@ -84,8 +84,10 @@ h2 { margin: 7px 0 4px; font-size: 28px; letter-spacing: -.035em; }
 .mobile-set-row input:focus { border-color: var(--gg-color-accent); }
 .set-save { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid var(--gg-color-border); border-radius: 12px; background: var(--gg-color-surface); color: var(--gg-color-text-muted); }
 .set-save.saved { border-color: rgb(48 209 88 / 30%); background: rgb(48 209 88 / 10%); color: var(--gg-color-success); }
-.set-progress { grid-column: 2 / -1; min-height: 14px; color: var(--gg-color-warning); font-size: 10px; }
-.set-progress.positive { color: var(--gg-color-success); }
+.set-progress { grid-column: 2 / -1; min-height: 14px; color: var(--gg-color-text-muted); font-size: 10px; }
+.set-progress--positive { color: var(--gg-color-success); }
+.set-progress--negative { color: var(--gg-color-danger); }
+.set-progress--warning { color: var(--gg-color-warning); }
 .secondary-button { display: flex; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--gg-color-border); border-radius: 13px; background: var(--gg-color-surface); font-weight: 800; }
 .timer-placeholder, .finish-workout { width: 100%; margin-top: 10px; }
 .workout-preview-list { overflow: hidden; }

@@ -41,7 +41,7 @@ const SetRow = ({ exercise, set, index, previous, save }: {
       <label><span>KG</span><input inputMode="decimal" value={weight} onChange={(event) => { setWeight(event.target.value); setSaved(false) }} placeholder="—" /></label>
       <label><span>POWT.</span><input inputMode="numeric" value={reps} onChange={(event) => { setReps(event.target.value); setSaved(false) }} placeholder="—" /></label>
       <button className={saved ? 'set-save saved' : 'set-save'} type="button" onClick={submit} aria-label={`Zapisz serię ${index + 1}`}><Check size={19} /></button>
-      <small className={progress.positive ? 'set-progress positive' : 'set-progress'}>{progress.label}</small>
+      <small className={`set-progress set-progress--${progress.tone}`}>{progress.label}</small>
     </div>
   )
 }

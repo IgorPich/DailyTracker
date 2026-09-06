@@ -4,7 +4,7 @@ import { formatDecimal } from './numbers.ts'
 
 export interface ProgressResult {
   label: string
-  positive: boolean
+  tone: 'positive' | 'negative' | 'warning' | 'neutral'
   incomparable?: boolean
 }
 
@@ -97,36 +97,39 @@ export const equipmentComparisonIssue = (
   const currentGym = normalizedGymName(currentGymLocation)
   const previousGym = normalizedGymName(previousGymLocation)
   if (!currentGym || !previousGym) {
-    return { label: 'Brak informacji o siłowni — nie porównuję ciężaru', positive: false, incomparable: true }
+    return { label: 'Brak informacji o siłowni — nie porównuję ciężaru', tone: 'neutral', incomparable: true }
   }
   if (currentGym !== previousGym) {
-    return { label: 'Inna siłownia — nie porównuję ciężaru', positive: false, incomparable: true }
+    return { label: 'Inna siłownia — nie porównuję ciężaru', tone: 'neutral', incomparable: true }
   }
   return undefined
 }
 
 export const compareSets = (current?: WorkoutSet, previous?: WorkoutSet, prescription?: string): ProgressResult => {
   if (!current || !previous || current.weight === undefined || current.reps === undefined || previous.weight === undefined || previous.reps === undefined) {
-    return { label: '—', positive: false }
+    return { label: '—', tone: 'neutral' }
   }
 
   const weightDelta = Number((current.weight - previous.weight).toFixed(2))
   const repsDelta = current.reps - previous.reps
 
   if (weightDelta === 0) {
-    if (repsDelta > 0) return { label: `+${repsDelta} powt.`, positive: true }
-    if (repsDelta < 0) return { label: `${repsDelta} powt.`, positive: false }
-    return { label: 'bez zmiany', positive: false }
+    if (repsDelta > 0) return { label: `+${repsDelta} powt.`, tone: 'positive' }
+    if (repsDelta < 0) return { label: `${repsDelta} powt.`, tone: 'negative' }
+    return { label: 'bez zmiany', tone: 'neutral' }
   }
 
   if (weightDelta > 0) {
     const range = prescriptionRepRange(prescription)
     const sensibleFloor = range?.min ?? Math.max(1, previous.reps - 2)
-    if (current.reps < sensibleFloor) return { label: 'większy ciężar, poza zakresem', positive: false }
-    return { label: `+${formatDecimal(weightDelta)} kg`, positive: true }
+    if (current.reps < sensibleFloor) return { label: 'większy ciężar, poza zakresem', tone: 'warning' }
+    return { label: `+${formatDecimal(weightDelta)} kg`, tone: repsDelta >= 0 ? 'positive' : 'neutral' }
   }
 
-  return { label: repsDelta > 0 ? 'więcej powt., niższy ciężar' : `${formatDecimal(weightDelta)} kg`, positive: false }
+  return {
+    label: repsDelta > 0 ? 'więcej powt., niższy ciężar' : `${formatDecimal(weightDelta)} kg`,
+    tone: repsDelta > 0 ? 'neutral' : 'negative',
+  }
 }
 
 export const compareExercises = (
@@ -135,14 +138,14 @@ export const compareExercises = (
   currentGymLocation?: string,
   previousGymLocation?: string,
 ): ProgressResult => {
-  if (!current || !previous) return { label: '—', positive: false }
+  if (!current || !previous) return { label: '—', tone: 'neutral' }
   const currentBest = bestSetWithIndex(current)
   const previousBest = bestSetWithIndex(previous)
-  if (!currentBest || !previousBest) return { label: '—', positive: false }
+  if (!currentBest || !previousBest) return { label: '—', tone: 'neutral' }
   const comparisonIssue = equipmentComparisonIssue(current, previous, currentGymLocation, previousGymLocation)
   if (comparisonIssue) return comparisonIssue
   const bestResult = compareSets(currentBest?.set, previousBest?.set, current.prescription ?? previous.prescription)
-  if (bestResult.positive) return bestResult
+  if (bestResult.tone === 'positive') return bestResult
 
   const sameBest = currentBest?.set.weight === previousBest?.set.weight && currentBest?.set.reps === previousBest?.set.reps
   if (!sameBest) return bestResult
@@ -157,6 +160,6 @@ export const compareExercises = (
       workingRepsDelta += currentSet.reps - previousSet.reps
     }
   }
-  if (workingRepsDelta > 0) return { label: `+${workingRepsDelta} powt. w seriach roboczych`, positive: true }
+  if (workingRepsDelta > 0) return { label: `+${workingRepsDelta} powt. w seriach roboczych`, tone: 'positive' }
   return bestResult
 }

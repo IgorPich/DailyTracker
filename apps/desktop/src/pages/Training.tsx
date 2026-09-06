@@ -330,7 +330,7 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
                   <span className="set-number">{index + 1}</span>
                   <DecimalInput aria-label={`Seria ${index + 1}, ciężar`} min="0" placeholder={previousSet?.weight !== undefined ? formatDecimal(previousSet.weight) : '—'} value={set.weight} onValueChange={(value) => updateSet(exercise.id, set.id, 'weight', value)} />
                   <input aria-label={`Seria ${index + 1}, powtórzenia`} type="number" inputMode="numeric" step="1" min="0" placeholder={previousSet?.reps !== undefined ? formatDecimal(previousSet.reps, 0) : '—'} value={set.reps ?? ''} onChange={(event) => updateSet(exercise.id, set.id, 'reps', event.target.value === '' ? undefined : Number(event.target.value))} />
-                  <span className={`set-progress ${progress.positive ? 'set-progress--positive' : ''}`}>{progress.label}</span>
+                  <span className={`set-progress set-progress--${progress.tone}`}>{progress.label}</span>
                   <button type="button" className="icon-button icon-button--subtle" onClick={() => removeSet(exercise.id, set.id)} disabled={exercise.sets.length === 1} aria-label="Usuń serię"><X size={16} /></button>
                 </div>
               })}</div>

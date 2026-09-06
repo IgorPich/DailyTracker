@@ -54,7 +54,20 @@ test('shared progress logic marks a real improvement positive', () => {
     'Gym A',
     'Gym B',
   )
-  assert.deepEqual(result, { label: '+1 powt.', positive: true })
+  assert.deepEqual(result, { label: '+1 powt.', tone: 'positive' })
+})
+
+test('progress tones distinguish regressions, neutral trade-offs, and warnings', () => {
+  assert.equal(compareExercises(exercise('bench-press', 90, 7), exercise('bench-press', 90, 8)).tone, 'negative')
+  assert.equal(compareExercises(exercise('bench-press', 90, 8), exercise('bench-press', 90, 8)).tone, 'neutral')
+  assert.deepEqual(
+    compareExercises(exercise('bench-press', 92.5, 7), exercise('bench-press', 90, 8)),
+    { label: '+2.5 kg', tone: 'neutral' },
+  )
+  assert.deepEqual(
+    compareExercises(exercise('bench-press', 92.5, 5), exercise('bench-press', 90, 8)),
+    { label: 'większy ciężar, poza zakresem', tone: 'warning' },
+  )
 })
 
 test('A → D → A selects the chronologically latest shared exercise session', () => {
