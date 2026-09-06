@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { DEFAULT_TEMPLATES, upsertDailyEntry, type AppData } from '@greekgod/core'
-import { appendWorkoutSet, createWorkoutFromTemplate, nextTemplate, upsertWorkoutSet } from '../src/domain/mobileModel.ts'
+import { applyJournalNumericDraft, appendWorkoutSet, createWorkoutFromTemplate, journalNumericDraft, nextTemplate, upsertWorkoutSet } from '../src/domain/mobileModel.ts'
 import { INITIAL_MOBILE_DATA } from '../src/data/initialData.ts'
 
 test('next workout follows the shared A/B/C/D template order', () => {
@@ -45,4 +45,30 @@ test('mobile journal same-date edit keeps exactly one DailyEntry', () => {
   data.dailyEntries = upsertDailyEntry(data.dailyEntries, { id: 'daily-a', date: '2026-08-27', protein: 170 })
   data.dailyEntries = upsertDailyEntry(data.dailyEntries, { id: 'daily-a', date: '2026-08-27', protein: 195 })
   assert.deepEqual(data.dailyEntries, [{ id: 'daily-a', date: '2026-08-27', protein: 195 }])
+})
+
+test('mobile journal preserves decimal typing until submit and normalizes comma or dot', () => {
+  const commaDraft = journalNumericDraft()
+  commaDraft.weight = '79,'
+  assert.equal(commaDraft.weight, '79,')
+  commaDraft.weight = '79,1'
+  const commaEntry = applyJournalNumericDraft({ id: 'daily-comma', date: '2026-09-06' }, commaDraft)
+  assert.equal(commaEntry.weight, 79.1)
+
+  const dotDraft = journalNumericDraft()
+  dotDraft.weight = '79.1'
+  const dotEntry = applyJournalNumericDraft({ id: 'daily-dot', date: '2026-09-07' }, dotDraft)
+  assert.equal(dotEntry.weight, 79.1)
+  assert.equal(JSON.parse(JSON.stringify(dotEntry)).weight, 79.1)
+  assert.equal(journalNumericDraft(JSON.parse(JSON.stringify(dotEntry))).weight, '79.1')
+})
+
+test('mobile journal rejects malformed decimals and non-integer integer fields', () => {
+  const malformed = journalNumericDraft()
+  malformed.weight = '79,1,2'
+  assert.throws(() => applyJournalNumericDraft({ id: 'daily-invalid', date: '2026-09-06' }, malformed))
+
+  const fractionalSteps = journalNumericDraft()
+  fractionalSteps.steps = '1000,5'
+  assert.throws(() => applyJournalNumericDraft({ id: 'daily-invalid-steps', date: '2026-09-06' }, fractionalSteps))
 })

@@ -1,6 +1,8 @@
 import {
   canonicalExerciseId,
+  decimalInputValue,
   exerciseDefinitionFor,
+  normalizeDecimalInput,
   type AppData,
   type DailyEntry,
   type TrainingTemplate,
@@ -8,6 +10,41 @@ import {
   type WorkoutExercise,
   type WorkoutSet,
 } from '@greekgod/core'
+
+export const JOURNAL_NUMERIC_FIELDS = [
+  { key: 'weight', integer: false },
+  { key: 'waist', integer: false },
+  { key: 'calories', integer: true },
+  { key: 'protein', integer: true },
+  { key: 'carbs', integer: true },
+  { key: 'fat', integer: true },
+  { key: 'steps', integer: true },
+] as const
+
+export type JournalNumericKey = typeof JOURNAL_NUMERIC_FIELDS[number]['key']
+export type JournalNumericDraft = Record<JournalNumericKey, string>
+
+export const journalNumericDraft = (entry?: DailyEntry): JournalNumericDraft => Object.fromEntries(
+  JOURNAL_NUMERIC_FIELDS.map(({ key }) => [key, decimalInputValue(entry?.[key])]),
+) as JournalNumericDraft
+
+export const applyJournalNumericDraft = (
+  entry: DailyEntry,
+  draft: JournalNumericDraft,
+): DailyEntry => {
+  const result = { ...entry }
+  for (const { key, integer } of JOURNAL_NUMERIC_FIELDS) {
+    delete result[key]
+    const raw = draft[key].trim()
+    if (!raw) continue
+    const value = normalizeDecimalInput(raw)
+    if (value === undefined || value < 0 || (integer && !Number.isInteger(value))) {
+      throw new Error(`Nieprawidłowa wartość pola: ${key}.`)
+    }
+    result[key] = value
+  }
+  return result
+}
 
 export const isoToday = (date = new Date()) => {
   const year = date.getFullYear()
