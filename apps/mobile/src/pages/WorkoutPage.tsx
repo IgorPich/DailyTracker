@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Check, ChevronLeft, TimerReset } from 'lucide-react'
 import { compareSets, formatSet, normalizeDecimalInput, previousExerciseOccurrence, updateWorkout, type Workout, type WorkoutExercise, type WorkoutSet } from '@greekgod/core'
 import { useMobileData } from '../context/MobileDataContext'
-import { appendWorkoutSet, upsertWorkoutSet } from '../domain/mobileModel'
+import { appendWorkoutSet, finalizeWorkout, upsertWorkoutSet } from '../domain/mobileModel'
 import { NativeMobileStore, type TimerStatus } from '../services/mobileStore'
 
 const timerText = (status: TimerStatus | undefined, now: number) => {
@@ -80,19 +80,15 @@ export const WorkoutPage = ({ workoutId, goBack }: { workoutId?: string; goBack:
     editWorkout((current) => upsertWorkoutSet(current, exerciseId, setId, values))
   const gyms = data.settings.gymLocations ?? []
   const finishWorkout = async () => {
-    let canFinish = false
+    const latest = data.workouts.find((item) => item.id === workout.id)
+    if (!latest) return
+    const completed = finalizeWorkout(latest)
+    const allowEmpty = completed !== undefined || window.confirm('Brak ukończonych serii. Zapisać ten trening mimo to?')
+    if (!allowEmpty) return
     await editWorkout((current) => {
-      const completed = {
-        ...current,
-        exercises: current.exercises.map((item) => ({
-          ...item,
-          sets: item.sets.filter((set) => set.weight !== undefined && set.reps !== undefined),
-        })),
-      }
-      canFinish = completed.exercises.some((item) => item.sets.length > 0)
-      return canFinish ? completed : current
+      return finalizeWorkout(current, allowEmpty) ?? current
     })
-    if (canFinish) goBack()
+    goBack()
   }
   const startTimer = async () => {
     if (!nativeStore || !snapshot) return

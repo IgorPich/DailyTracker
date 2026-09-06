@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { DEFAULT_TEMPLATES, upsertDailyEntry, type AppData } from '@greekgod/core'
-import { applyJournalNumericDraft, appendWorkoutSet, createWorkoutFromTemplate, journalNumericDraft, nextTemplate, upsertWorkoutSet, workoutDestination } from '../src/domain/mobileModel.ts'
+import { applyJournalNumericDraft, appendWorkoutSet, createWorkoutFromTemplate, finalizeWorkout, journalNumericDraft, nextTemplate, upsertWorkoutSet, workoutDestination } from '../src/domain/mobileModel.ts'
 import { INITIAL_MOBILE_DATA } from '../src/data/initialData.ts'
 
 test('next workout follows the shared A/B/C/D template order', () => {
@@ -45,6 +45,24 @@ test('mobile journal same-date edit keeps exactly one DailyEntry', () => {
   data.dailyEntries = upsertDailyEntry(data.dailyEntries, { id: 'daily-a', date: '2026-08-27', protein: 170 })
   data.dailyEntries = upsertDailyEntry(data.dailyEntries, { id: 'daily-a', date: '2026-08-27', protein: 195 })
   assert.deepEqual(data.dailyEntries, [{ id: 'daily-a', date: '2026-08-27', protein: 195 }])
+})
+
+test('empty workout cannot finish normally but can be saved after explicit confirmation', () => {
+  const workout = createWorkoutFromTemplate(DEFAULT_TEMPLATES[0], INITIAL_MOBILE_DATA, '2026-09-06')
+  assert.equal(finalizeWorkout(workout), undefined)
+  const explicitlySaved = finalizeWorkout(workout, true)
+  assert.ok(explicitlySaved)
+  assert.equal(explicitlySaved.exercises.every((exercise) => exercise.sets.length === 0), true)
+})
+
+test('finishing a workout keeps only completed sets without empty confirmation', () => {
+  const workout = createWorkoutFromTemplate(DEFAULT_TEMPLATES[0], INITIAL_MOBILE_DATA, '2026-09-06')
+  const firstExercise = workout.exercises[0]
+  const completed = upsertWorkoutSet(workout, firstExercise.id, firstExercise.sets[0].id, { weight: 80, reps: 8 })
+  const finalized = finalizeWorkout(completed)
+  assert.ok(finalized)
+  assert.equal(finalized.exercises[0].sets.length, 1)
+  assert.equal(finalized.exercises.slice(1).every((exercise) => exercise.sets.length === 0), true)
 })
 
 test('opening workout navigation without an active session only returns a preview', () => {

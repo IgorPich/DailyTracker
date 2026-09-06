@@ -125,6 +125,20 @@ export const appendWorkoutSet = (workout: Workout, exerciseId: string): Workout 
   }),
 })
 
+export const workoutWithCompletedSets = (workout: Workout): Workout => ({
+  ...workout,
+  exercises: workout.exercises.map((exercise) => ({
+    ...exercise,
+    sets: exercise.sets.filter((set) => set.weight !== undefined && set.reps !== undefined),
+  })),
+})
+
+export const finalizeWorkout = (workout: Workout, allowEmpty = false): Workout | undefined => {
+  const completed = workoutWithCompletedSets(workout)
+  const hasCompletedSet = completed.exercises.some((exercise) => exercise.sets.length > 0)
+  return hasCompletedSet || allowEmpty ? completed : undefined
+}
+
 export const journalDraft = (existing: DailyEntry | undefined, date: string): DailyEntry => ({
   id: existing?.id ?? crypto.randomUUID(),
   ...existing,
