@@ -1,6 +1,7 @@
 import {
   canonicalExerciseId,
   decimalInputValue,
+  deleteWorkout,
   exerciseDefinitionFor,
   normalizeDecimalInput,
   type AppData,
@@ -138,6 +139,11 @@ export const finalizeWorkout = (workout: Workout, allowEmpty = false): Workout |
   const hasCompletedSet = completed.exercises.some((exercise) => exercise.sets.length > 0)
   return hasCompletedSet || allowEmpty ? completed : undefined
 }
+
+export const deleteMobileWorkout = (data: AppData, workoutId: string): AppData => ({
+  ...data,
+  workouts: deleteWorkout(data.workouts, workoutId),
+})
 
 export const journalDraft = (existing: DailyEntry | undefined, date: string): DailyEntry => ({
   id: existing?.id ?? crypto.randomUUID(),

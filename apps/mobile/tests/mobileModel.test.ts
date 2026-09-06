@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { DEFAULT_TEMPLATES, upsertDailyEntry, type AppData } from '@greekgod/core'
-import { applyJournalNumericDraft, appendWorkoutSet, createWorkoutFromTemplate, finalizeWorkout, journalNumericDraft, nextTemplate, upsertWorkoutSet, workoutDestination } from '../src/domain/mobileModel.ts'
+import { applyJournalNumericDraft, appendWorkoutSet, createWorkoutFromTemplate, deleteMobileWorkout, finalizeWorkout, journalNumericDraft, nextTemplate, upsertWorkoutSet, workoutDestination } from '../src/domain/mobileModel.ts'
 import { INITIAL_MOBILE_DATA } from '../src/data/initialData.ts'
 
 test('next workout follows the shared A/B/C/D template order', () => {
@@ -63,6 +63,16 @@ test('finishing a workout keeps only completed sets without empty confirmation',
   assert.ok(finalized)
   assert.equal(finalized.exercises[0].sets.length, 1)
   assert.equal(finalized.exercises.slice(1).every((exercise) => exercise.sets.length === 0), true)
+})
+
+test('mobile workout deletion removes only the selected identity and stays deleted after reload', () => {
+  const data: AppData = structuredClone(INITIAL_MOBILE_DATA)
+  const selected = createWorkoutFromTemplate(DEFAULT_TEMPLATES[0], data, '2026-09-06')
+  const retained = { ...selected, id: 'retained-workout', date: '2026-09-05' }
+  data.workouts = [retained, selected]
+  const deleted = deleteMobileWorkout(data, selected.id)
+  assert.deepEqual(deleted.workouts.map((workout) => workout.id), ['retained-workout'])
+  assert.deepEqual(JSON.parse(JSON.stringify(deleted)).workouts.map((workout: { id: string }) => workout.id), ['retained-workout'])
 })
 
 test('opening workout navigation without an active session only returns a preview', () => {

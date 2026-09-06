@@ -110,6 +110,7 @@ h2 { margin: 7px 0 4px; font-size: 28px; letter-spacing: -.035em; }
 .history-details div { display: grid; gap: 5px; padding-top: 12px; }
 .history-details strong { font-size: 13px; }
 .history-details span { color: var(--gg-color-text-muted); font-size: 12px; }
+.history-delete { margin-top: 3px; border-color: rgb(255 69 58 / 30%); color: var(--gg-color-danger); }
 .progress-filters { display: grid; gap: 12px; }
 .progress-latest { display: grid; gap: 7px; margin-top: 14px; padding: 18px; }
 .progress-latest > strong { font-size: 30px; letter-spacing: -.04em; }
