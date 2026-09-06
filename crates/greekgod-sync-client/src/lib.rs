@@ -834,7 +834,7 @@ mod tests {
 
         let mut edited = synced.data;
         edited["dailyEntries"] = json!([{
-            "id": "daily-a", "date": "2026-09-03", "protein": 211
+            "id": "daily-a", "date": "2026-09-03", "weight": 79.1, "protein": 211
         }]);
         let replaced = store
             .replace_authoritative_snapshot(&edited, "mobile:test", synced.revision)
@@ -843,6 +843,11 @@ mod tests {
         let pending = store.pending_outbox(100).unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].entity_type, SyncEntityType::DailyEntry);
+        assert_eq!(pending[0].payload.as_ref().unwrap()["weight"], json!(79.1));
+        assert_eq!(
+            store.load_authoritative_snapshot().unwrap().data["dailyEntries"][0]["weight"],
+            json!(79.1)
+        );
     }
 
     struct PersistentConflictTransport {
