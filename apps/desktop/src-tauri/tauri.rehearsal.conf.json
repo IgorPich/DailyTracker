@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "GreekGod Rehearsal",
-  "version": "3.0.0",
+  "version": "3.0.2",
   "identifier": "com.igorpich.formlog.rehearsal",
   "build": {
     "beforeBuildCommand": "npm run build -- --mode rehearsal"
