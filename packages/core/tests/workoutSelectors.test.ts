@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { Workout, WorkoutExercise } from '../src/types.ts'
+import type { ExerciseDefinition, TemplateExercise, Workout, WorkoutExercise } from '../src/types.ts'
+import { resolveTemplateExerciseId } from '../src/exerciseIdentity.ts'
 import { previousExerciseOccurrence } from '../src/workoutData.ts'
 import { compareExercises } from '../src/workoutProgress.ts'
 
@@ -89,4 +90,45 @@ test('cable row and machine row never share history', () => {
 test('machine lateral raise and dumbbell lateral raise never share history', () => {
   const rows = [workout('dumbbell-session', '2026-08-08', 'Gym A', exercise('dumbbell-lateral-raise', 12, 12))]
   assert.equal(previousExerciseOccurrence(rows, exercise('lateral-raise-machine', 30, 12, true), '2026-08-10', 'Gym A').latest, undefined)
+})
+
+test('template replacement resolves the new exact identity without rewriting historical rows', () => {
+  const library: ExerciseDefinition[] = [
+    { id: 'chest-supported-row', name: 'Wiosło na wyciągu', equipmentSensitive: true },
+    { id: 'machine-row', name: 'Wiosło na siedząco na maszynie', equipmentSensitive: true },
+  ]
+  const previous: TemplateExercise = {
+    id: 'template-row',
+    exerciseId: 'chest-supported-row',
+    name: 'Wiosło na wyciągu',
+    prescription: '3 × 6–10',
+    defaultSets: 3,
+    equipmentSensitive: true,
+  }
+  const edited = { ...previous, name: 'Wiosło na siedząco na maszynie' }
+  const resolvedId = resolveTemplateExerciseId(library, edited, previous)
+  assert.equal(resolvedId, 'machine-row')
+
+  const history = [
+    workout('cable-history', '2026-08-01', 'Gym A', exercise('chest-supported-row', 82, 9, true)),
+    workout('machine-history', '2026-08-02', 'Gym A', exercise('machine-row', 100, 10, true)),
+  ]
+  const before = structuredClone(history)
+  const reference = exercise(resolvedId!, 0, 0, true)
+  const comparable = previousExerciseOccurrence(history, reference, '2026-09-06', 'Gym A')
+  assert.equal(comparable.latest?.workout.id, 'machine-history')
+  assert.equal(comparable.comparable?.workout.id, 'machine-history')
+  assert.deepEqual(history, before)
+})
+
+test('template rename never fuzzy-merges into another exercise identity', () => {
+  const library: ExerciseDefinition[] = [
+    { id: 'chest-supported-row', name: 'Wiosło na wyciągu', equipmentSensitive: true },
+    { id: 'machine-row', name: 'Wiosło na siedząco na maszynie', equipmentSensitive: true },
+  ]
+  const previous: TemplateExercise = {
+    id: 'template-row', exerciseId: 'chest-supported-row', name: 'Wiosło na wyciągu',
+    prescription: '3 × 6–10', defaultSets: 3, equipmentSensitive: true,
+  }
+  assert.equal(resolveTemplateExerciseId(library, { ...previous, name: 'Wiosło siedzące maszyna' }, previous), 'chest-supported-row')
 })

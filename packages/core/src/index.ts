@@ -24,6 +24,7 @@ export {
   matchingExerciseDefinitionsByName,
   normalizeExerciseName,
   renameExerciseDefinition,
+  resolveTemplateExerciseId,
   withRegisteredExercise,
 } from './exerciseIdentity.ts'
 export type { ExerciseReference } from './exerciseIdentity.ts'

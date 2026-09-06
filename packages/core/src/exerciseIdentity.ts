@@ -30,6 +30,19 @@ export const exerciseDefinitionFor = (
   exercise?: Pick<ExerciseReference, 'id' | 'exerciseId'>,
 ) => exercise ? library.find((definition) => definition.id === canonicalExerciseId(exercise)) : undefined
 
+export const resolveTemplateExerciseId = (
+  library: ExerciseDefinition[],
+  exercise: TemplateExercise,
+  previous?: TemplateExercise,
+) => {
+  const explicitId = exercise.exerciseId?.trim()
+  const previousId = previous && canonicalExerciseId(previous)
+  if (!previousId || (explicitId && explicitId !== previousId)) return explicitId || previousId
+  if (normalizeExerciseName(exercise.name) === normalizeExerciseName(previous.name)) return explicitId || previousId
+  const exactReplacement = findExerciseDefinitionByName(library, exercise.name)
+  return exactReplacement?.id ?? explicitId ?? previousId
+}
+
 const uniqueNameList = (names: string[]) => {
   const seen = new Set<string>()
   return names.filter((name) => {

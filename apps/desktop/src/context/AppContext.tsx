@@ -13,7 +13,7 @@ import {
 } from '@greekgod/core'
 import type { AppData, DailyEntry, ExerciseDefinition, Settings, TrainingTemplate, Workout, WorkoutExercise } from '../types'
 import { appDataStore } from '../services/appDataStore'
-import { canonicalExerciseId, normalizeExerciseName, renameExerciseDefinition, withRegisteredExercise } from '../utils/exerciseIdentity'
+import { canonicalExerciseId, normalizeExerciseName, renameExerciseDefinition, resolveTemplateExerciseId, withRegisteredExercise } from '../utils/exerciseIdentity'
 import { createId } from '../utils/id'
 import { createInitialData } from '../utils/storage'
 
@@ -86,7 +86,7 @@ const updateTemplateAndLibrary = (current: AppData, template: TrainingTemplate) 
 
   const exercises = template.exercises.map((exercise) => {
     const previous = previousTemplate?.exercises.find((item) => item.id === exercise.id)
-    let exerciseId = exercise.exerciseId?.trim() || previous?.exerciseId?.trim()
+    let exerciseId = resolveTemplateExerciseId(library, exercise, previous)
     if (!exerciseId) {
       const registered = withRegisteredExercise(
         library,
