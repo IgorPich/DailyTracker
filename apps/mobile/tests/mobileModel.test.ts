@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { DEFAULT_TEMPLATES, upsertDailyEntry, type AppData } from '@greekgod/core'
-import { applyJournalNumericDraft, appendWorkoutSet, createWorkoutFromTemplate, journalNumericDraft, nextTemplate, upsertWorkoutSet } from '../src/domain/mobileModel.ts'
+import { applyJournalNumericDraft, appendWorkoutSet, createWorkoutFromTemplate, journalNumericDraft, nextTemplate, upsertWorkoutSet, workoutDestination } from '../src/domain/mobileModel.ts'
 import { INITIAL_MOBILE_DATA } from '../src/data/initialData.ts'
 
 test('next workout follows the shared A/B/C/D template order', () => {
@@ -45,6 +45,27 @@ test('mobile journal same-date edit keeps exactly one DailyEntry', () => {
   data.dailyEntries = upsertDailyEntry(data.dailyEntries, { id: 'daily-a', date: '2026-08-27', protein: 170 })
   data.dailyEntries = upsertDailyEntry(data.dailyEntries, { id: 'daily-a', date: '2026-08-27', protein: 195 })
   assert.deepEqual(data.dailyEntries, [{ id: 'daily-a', date: '2026-08-27', protein: 195 }])
+})
+
+test('opening workout navigation without an active session only returns a preview', () => {
+  const data: AppData = structuredClone(INITIAL_MOBILE_DATA)
+  const before = structuredClone(data)
+  const destination = workoutDestination(data, '2026-09-06')
+  assert.equal(destination.kind, 'preview')
+  assert.equal(destination.kind === 'preview' ? destination.template?.id : undefined, DEFAULT_TEMPLATES[0].id)
+  assert.deepEqual(data, before)
+  assert.equal(data.workouts.length, 0)
+})
+
+test('explicit start creates exactly one workout after preview', () => {
+  const data: AppData = structuredClone(INITIAL_MOBILE_DATA)
+  const destination = workoutDestination(data, '2026-09-06')
+  assert.equal(destination.kind, 'preview')
+  if (destination.kind !== 'preview' || !destination.template) throw new Error('expected preview template')
+  const workout = createWorkoutFromTemplate(destination.template, data, '2026-09-06')
+  data.workouts = [...data.workouts, workout]
+  assert.equal(data.workouts.length, 1)
+  assert.equal(workoutDestination(data, '2026-09-06').kind, 'active')
 })
 
 test('mobile journal preserves decimal typing until submit and normalizes comma or dot', () => {

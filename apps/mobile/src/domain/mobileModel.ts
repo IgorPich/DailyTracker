@@ -97,6 +97,13 @@ export const activeWorkoutForToday = (workouts: Workout[], date = isoToday()) =>
   .find((workout) => workout.date === date && workout.exercises.some((exercise) =>
     exercise.sets.some((set) => set.weight === undefined || set.reps === undefined)))
 
+export const workoutDestination = (data: Pick<AppData, 'templates' | 'workouts'>, date = isoToday()) => {
+  const active = activeWorkoutForToday(data.workouts, date)
+  return active
+    ? { kind: 'active' as const, workoutId: active.id }
+    : { kind: 'preview' as const, template: nextTemplate(data) }
+}
+
 export const upsertWorkoutSet = (
   workout: Workout,
   exerciseId: string,

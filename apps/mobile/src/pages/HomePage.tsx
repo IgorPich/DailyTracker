@@ -9,8 +9,8 @@ const phaseLabel = {
   Redukcja: 'Redukcja',
 } as const
 
-export const HomePage = ({ startWorkout, openJournal, openHistory }: {
-  startWorkout: () => void
+export const HomePage = ({ previewWorkout, openJournal, openHistory }: {
+  previewWorkout: () => void
   openJournal: () => void
   openHistory: () => void
 }) => {
@@ -26,7 +26,7 @@ export const HomePage = ({ startWorkout, openJournal, openHistory }: {
       <h1>Gotowy na trening?</h1>
       <section className="hero-card">
         <div><p className="card-kicker">Następny trening</p><h2>{suggested ? `${suggested.code} · ${suggested.name}` : 'Brak planu'}</h2><p className="muted">{suggested ? `${suggested.exercises.length} ćwiczeń` : 'Dodaj plan na komputerze i zsynchronizuj'}</p></div>
-        <button className="primary-button" type="button" disabled={!suggested || saving} onClick={startWorkout}>{saving ? 'Zapisuję lokalnie…' : 'Rozpocznij trening'}</button>
+        <button className="primary-button" type="button" disabled={!suggested || saving} onClick={previewWorkout}>Zobacz trening</button>
       </section>
       <div className="metric-grid">
         <section className="surface metric-card"><p className="card-kicker">Aktualna faza</p><strong>{phaseLabel[data.settings.phase]}</strong></section>

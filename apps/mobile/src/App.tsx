@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { Activity, BookOpen, Dumbbell, Home, Settings } from 'lucide-react'
 import { addWorkout } from '@greekgod/core'
 import { useMobileData } from './context/MobileDataContext'
-import { activeWorkoutForToday, createWorkoutFromTemplate, nextTemplate } from './domain/mobileModel'
+import { activeWorkoutForToday, createWorkoutFromTemplate, nextTemplate, workoutDestination } from './domain/mobileModel'
 import { HistoryPage } from './pages/HistoryPage'
 import { HomePage } from './pages/HomePage'
 import { JournalPage } from './pages/JournalPage'
 import { ProgressPage } from './pages/ProgressPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { WorkoutPage } from './pages/WorkoutPage'
+import { WorkoutPreviewPage } from './pages/WorkoutPreviewPage'
 import type { MobileRoute } from './routes'
 
 const navigation: Array<{ route: Exclude<MobileRoute, 'history'>; label: string; icon: typeof Home }> = [
@@ -66,23 +67,28 @@ export const App = () => {
   }
 
   const openWorkout = () => {
-    const selected = workoutId && data.workouts.some((item) => item.id === workoutId)
-      ? data.workouts.find((item) => item.id === workoutId)
-      : activeWorkoutForToday(data.workouts)
-    if (selected) { setWorkoutId(selected.id); setRoute('workout') } else void startWorkout()
+    const destination = workoutDestination(data)
+    if (destination.kind === 'active') {
+      setWorkoutId(destination.workoutId)
+      setRoute('workout')
+    } else {
+      setWorkoutId(undefined)
+      setRoute('workout-preview')
+    }
   }
 
   return (
     <div className="mobile-shell">
       {!snapshot || snapshot.probe.journalMode === 'memory' ? <div className="preview-ribbon">Podgląd UI · Android zapisuje do SQLite</div> : null}
-      {route === 'home' && <HomePage startWorkout={() => void startWorkout()} openJournal={() => setRoute('journal')} openHistory={() => setRoute('history')} />}
-      {route === 'workout' && <WorkoutPage workoutId={workoutId ?? activeWorkoutForToday(data.workouts)?.id} goBack={() => setRoute('home')} />}
+      {route === 'home' && <HomePage previewWorkout={openWorkout} openJournal={() => setRoute('journal')} openHistory={() => setRoute('history')} />}
+      {route === 'workout-preview' && <WorkoutPreviewPage startWorkout={() => void startWorkout()} goBack={() => setRoute('home')} />}
+      {route === 'workout' && <WorkoutPage workoutId={workoutId ?? activeWorkoutForToday(data.workouts)?.id} goBack={() => { setWorkoutId(undefined); setRoute('home') }} />}
       {route === 'journal' && <JournalPage />}
       {route === 'history' && <HistoryPage goBack={() => setRoute('home')} />}
       {route === 'progress' && <ProgressPage />}
       {route === 'settings' && <SettingsPage openHistory={() => setRoute('history')} />}
       {route !== 'history' && <nav className="bottom-navigation" aria-label="Główna nawigacja">{navigation.map(({ route: itemRoute, label, icon: Icon }) => (
-        <button className={route === itemRoute ? 'active' : ''} key={itemRoute} type="button" onClick={() => itemRoute === 'workout' ? openWorkout() : setRoute(itemRoute)}><Icon size={21} strokeWidth={2} /><span>{label}</span></button>
+        <button className={route === itemRoute || (itemRoute === 'workout' && route === 'workout-preview') ? 'active' : ''} key={itemRoute} type="button" onClick={() => itemRoute === 'workout' ? openWorkout() : setRoute(itemRoute)}><Icon size={21} strokeWidth={2} /><span>{label}</span></button>
       ))}</nav>}
     </div>
   )

@@ -88,6 +88,13 @@ h2 { margin: 7px 0 4px; font-size: 28px; letter-spacing: -.035em; }
 .set-progress.positive { color: var(--gg-color-success); }
 .secondary-button { display: flex; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--gg-color-border); border-radius: 13px; background: var(--gg-color-surface); font-weight: 800; }
 .timer-placeholder, .finish-workout { width: 100%; margin-top: 10px; }
+.workout-preview-list { overflow: hidden; }
+.workout-preview-list > div { display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--gg-color-border); }
+.workout-preview-list > div:last-child { border-bottom: 0; }
+.workout-preview-list > div > span { color: var(--gg-color-text-subtle); font-size: 12px; font-weight: 800; }
+.workout-preview-list p, .workout-preview-list small { display: block; margin: 0; }
+.workout-preview-list small { margin-top: 4px; color: var(--gg-color-text-muted); }
+.workout-preview-start { width: 100%; margin-top: 12px; }
 .timer-error { margin: 8px 4px 0; color: var(--gg-color-warning); font-size: 11px; text-align: center; }
 .mobile-form { display: grid; gap: 16px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; }

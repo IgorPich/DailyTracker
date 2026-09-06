@@ -1,1 +1,1 @@
-export type MobileRoute = 'home' | 'workout' | 'journal' | 'history' | 'progress' | 'settings'
+export type MobileRoute = 'home' | 'workout-preview' | 'workout' | 'journal' | 'history' | 'progress' | 'settings'
