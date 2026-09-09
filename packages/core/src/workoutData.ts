@@ -21,6 +21,7 @@ export const exercisesMatch = (
 export interface ExerciseOccurrence {
   workout: Workout
   exercise: WorkoutExercise
+  exercises: WorkoutExercise[]
 }
 
 const hasVisibleSet = (exercise: WorkoutExercise) => exercise.sets.some((set) => set.weight !== undefined || set.reps !== undefined)
@@ -46,15 +47,13 @@ export const exerciseOccurrencesByWorkout = (
 ): ExerciseOccurrence[] => {
   if (!exerciseId || !exerciseLibrary.some((definition) => definition.id === exerciseId)) return []
   return workouts.flatMap((workout) => {
-    const exercise = mergeWorkoutExercises(
-      workout.exercises.filter((candidate) => (
-        resolvedExerciseDefinitionId(exerciseLibrary, candidate) === exerciseId
-        && !candidate.skipped
-        && hasVisibleSet(candidate)
-      )),
-      sensitivityCheck,
-    )
-    return exercise ? [{ workout, exercise }] : []
+    const exercises = workout.exercises.filter((candidate) => (
+      resolvedExerciseDefinitionId(exerciseLibrary, candidate) === exerciseId
+      && !candidate.skipped
+      && hasVisibleSet(candidate)
+    ))
+    const exercise = mergeWorkoutExercises(exercises, sensitivityCheck)
+    return exercise ? [{ workout, exercise, exercises }] : []
   })
 }
 

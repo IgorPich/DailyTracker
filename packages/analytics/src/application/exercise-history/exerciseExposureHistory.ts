@@ -1,6 +1,7 @@
 import {
   classifyExerciseComparability,
   classifyExerciseIdentity,
+  exerciseOccurrencesByWorkout,
   UNRESOLVED_EXERCISE_IDENTITY,
   type WorkoutExercise,
 } from '@greekgod/core'
@@ -23,10 +24,6 @@ export interface ExerciseExposureHistoryQuery {
   limit?: number
   comparisonGymContext?: string
 }
-
-const hasWorkingSetData = (exercise: WorkoutExercise) => exercise.sets.some((set) => (
-  set.weight !== undefined || set.reps !== undefined
-))
 
 const workingSetsFor = (
   exercise: WorkoutExercise,
@@ -85,30 +82,32 @@ export const exerciseExposureHistory = (
 
   const definition = query.snapshot.exerciseLibrary.find((item) => item.id === targetIdentity.exerciseId)!
   const issues: ExerciseExposureIdentityIssue[] = []
-  const exposures: ExerciseExposure[] = []
   const eligibleWorkouts = query.snapshot.workouts
     .map((workout, sourceOrder) => ({ workout, sourceOrder }))
     .filter(({ workout }) => workout.date <= query.asOf)
     .sort((left, right) => right.workout.date.localeCompare(left.workout.date) || left.sourceOrder - right.sourceOrder)
+    .map(({ workout }) => workout)
 
-  for (const { workout } of eligibleWorkouts) {
-    const matchingReferences: Array<{ exercise: WorkoutExercise; exerciseOrder: number }> = []
-    workout.exercises.forEach((exercise, exerciseOrder) => {
+  eligibleWorkouts.forEach((workout) => {
+    workout.exercises.forEach((exercise) => {
       const resolution = classifyExerciseIdentity(query.snapshot.exerciseLibrary, exercise)
       if (resolution.classification === UNRESOLVED_EXERCISE_IDENTITY) {
         issues.push(identityIssue(workout.id, exercise, resolution.reason, resolution.exerciseId))
-        return
-      }
-      if (
-        resolution.exerciseId === targetIdentity.exerciseId
-        && !exercise.skipped
-        && hasWorkingSetData(exercise)
-      ) {
-        matchingReferences.push({ exercise, exerciseOrder })
       }
     })
-    if (!matchingReferences.length) continue
-    if (exposures.length >= limit) continue
+  })
+
+  const occurrences = exerciseOccurrencesByWorkout(
+    eligibleWorkouts,
+    targetIdentity.exerciseId,
+    query.snapshot.exerciseLibrary,
+  ).slice(0, limit)
+
+  const exposures: ExerciseExposure[] = occurrences.map(({ workout, exercises }) => {
+    const matchingReferences = exercises.map((exercise) => ({
+      exercise,
+      exerciseOrder: workout.exercises.indexOf(exercise),
+    }))
 
     const references: ExerciseExposureReference[] = matchingReferences.map(({ exercise, exerciseOrder }) => ({
       workoutExerciseId: exercise.id,
@@ -120,7 +119,7 @@ export const exerciseExposureHistory = (
     const first = references[0]
     const equipmentSensitive = definition.equipmentSensitive
       || matchingReferences.some(({ exercise }) => exercise.equipmentSensitive === true)
-    exposures.push({
+    return {
       exerciseId: targetIdentity.exerciseId,
       workoutId: workout.id,
       workoutExerciseId: first.workoutExerciseId,
@@ -143,8 +142,8 @@ export const exerciseExposureHistory = (
         workoutExerciseIds: references.map((reference) => reference.workoutExerciseId),
         setIds: workingSets.map((set) => set.setId),
       },
-    })
-  }
+    }
+  })
 
   return {
     status: 'READY',

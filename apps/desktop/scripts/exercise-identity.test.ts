@@ -256,6 +256,11 @@ assertDeepEqual(
   ['shared-copy-set-1', 'shared-copy-set-2'],
   'agregat zachowuje wszystkie widoczne serie i ich kolejność, pomijając skipped/puste refy',
 )
+assertDeepEqual(
+  groupedSharedOccurrences[0].exercises.map((item) => item.id),
+  ['shared-copy-1', 'shared-copy-2'],
+  'agregat zachowuje źródłowe referencje canonical w kolejności treningu',
+)
 assertEqual(JSON.stringify(duplicateCanonicalSession), duplicateSessionSnapshot, 'agregacja nie może mutować treningu wejściowego')
 
 const cableSessions = migrated.workouts.filter((item) => item.exercises.some((exercise) => (
