@@ -47,6 +47,13 @@ export {
 export type { ExerciseOccurrence } from './workoutData.ts'
 export { classifyExerciseComparability } from './exerciseComparability.ts'
 export type { ExerciseComparability } from './exerciseComparability.ts'
+export { classifySetPerformance } from './setPerformanceComparison.ts'
+export type {
+  RepRange,
+  SetPerformanceComparison,
+  SetPerformanceOutcome,
+  SetPerformanceReason,
+} from './setPerformanceComparison.ts'
 export {
   compareExercises,
   compareSets,

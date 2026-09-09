@@ -2,16 +2,14 @@ import type { WorkoutExercise, WorkoutSet } from './types'
 import { classifyExerciseComparability } from './exerciseComparability.ts'
 import { canonicalExerciseId } from './exerciseIdentity.ts'
 import { formatDecimal } from './numbers.ts'
+import { classifySetPerformance, prescriptionRepRange } from './setPerformanceComparison.ts'
+
+export { prescriptionRepRange } from './setPerformanceComparison.ts'
 
 export interface ProgressResult {
   label: string
   tone: 'positive' | 'negative' | 'warning' | 'neutral'
   incomparable?: boolean
-}
-
-interface RepRange {
-  min: number
-  max: number
 }
 
 const completeSets = (exercise: WorkoutExercise) => exercise.sets
@@ -48,18 +46,6 @@ export const isEquipmentSensitive = (exercise?: Pick<WorkoutExercise, 'id' | 'ex
     BUILTIN_EQUIPMENT_SENSITIVE_IDS.has(canonicalExerciseId(exercise) ?? '')
   )),
 )
-
-export const prescriptionRepRange = (prescription?: string): RepRange | undefined => {
-  if (!prescription) return undefined
-  const ranges = [...prescription.matchAll(/(\d+)\s*[–-]\s*(\d+)/g)]
-    .map((match) => ({ min: Number(match[1]), max: Number(match[2]) }))
-    .filter((range) => Number.isFinite(range.min) && Number.isFinite(range.max))
-  if (!ranges.length) return undefined
-  return {
-    min: Math.min(...ranges.map((range) => range.min)),
-    max: Math.max(...ranges.map((range) => range.max)),
-  }
-}
 
 const bestSetWithIndex = (exercise: WorkoutExercise) => {
   const sets = completeSets(exercise)
@@ -101,29 +87,26 @@ export const equipmentComparisonIssue = (
 }
 
 export const compareSets = (current?: WorkoutSet, previous?: WorkoutSet, prescription?: string): ProgressResult => {
-  if (!current || !previous || current.weight === undefined || current.reps === undefined || previous.weight === undefined || previous.reps === undefined) {
-    return { label: '—', tone: 'neutral' }
-  }
-
-  const weightDelta = Number((current.weight - previous.weight).toFixed(2))
-  const repsDelta = current.reps - previous.reps
-
-  if (weightDelta === 0) {
-    if (repsDelta > 0) return { label: `+${repsDelta} powt.`, tone: 'positive' }
-    if (repsDelta < 0) return { label: `${repsDelta} powt.`, tone: 'negative' }
-    return { label: 'bez zmiany', tone: 'neutral' }
-  }
-
-  if (weightDelta > 0) {
-    const range = prescriptionRepRange(prescription)
-    const sensibleFloor = range?.min ?? Math.max(1, previous.reps - 2)
-    if (current.reps < sensibleFloor) return { label: 'większy ciężar, poza zakresem', tone: 'warning' }
-    return { label: `+${formatDecimal(weightDelta)} kg`, tone: repsDelta >= 0 ? 'positive' : 'neutral' }
-  }
-
-  return {
-    label: repsDelta > 0 ? 'więcej powt., niższy ciężar' : `${formatDecimal(weightDelta)} kg`,
-    tone: repsDelta > 0 ? 'neutral' : 'negative',
+  const comparison = classifySetPerformance(current, previous, prescription)
+  switch (comparison.reason) {
+    case 'MORE_REPS_SAME_LOAD':
+      return { label: `+${comparison.repsDelta} powt.`, tone: 'positive' }
+    case 'LOWER_REPS_SAME_LOAD':
+      return { label: `${comparison.repsDelta} powt.`, tone: 'negative' }
+    case 'SAME_LOAD_AND_REPS':
+      return { label: 'bez zmiany', tone: 'neutral' }
+    case 'LOAD_INCREASE_WITH_REPS_MAINTAINED':
+      return { label: `+${formatDecimal(comparison.weightDelta)} kg`, tone: 'positive' }
+    case 'LOAD_INCREASE_WITH_LOWER_REPS':
+      return { label: `+${formatDecimal(comparison.weightDelta)} kg`, tone: 'neutral' }
+    case 'LOAD_INCREASE_BELOW_REP_FLOOR':
+      return { label: 'większy ciężar, poza zakresem', tone: 'warning' }
+    case 'LOAD_DECREASE_WITH_MORE_REPS':
+      return { label: 'więcej powt., niższy ciężar', tone: 'neutral' }
+    case 'LOAD_DECREASE_WITHOUT_REP_IMPROVEMENT':
+      return { label: `${formatDecimal(comparison.weightDelta)} kg`, tone: 'negative' }
+    case 'INCOMPLETE_SET_DATA':
+      return { label: '—', tone: 'neutral' }
   }
 }
 

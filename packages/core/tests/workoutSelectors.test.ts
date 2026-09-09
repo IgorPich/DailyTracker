@@ -4,6 +4,7 @@ import type { AppData, ExerciseDefinition, TemplateExercise, Workout, WorkoutExe
 import { classifyExerciseComparability } from '../src/exerciseComparability.ts'
 import { auditExerciseIdentities } from '../src/exerciseIdentityAudit.ts'
 import { resolveTemplateExerciseId, UNRESOLVED_EXERCISE_IDENTITY } from '../src/exerciseIdentity.ts'
+import { classifySetPerformance } from '../src/setPerformanceComparison.ts'
 import { previousExerciseOccurrence as selectPreviousExerciseOccurrence } from '../src/workoutData.ts'
 import { compareExercises } from '../src/workoutProgress.ts'
 
@@ -112,6 +113,27 @@ test('progress tones distinguish regressions, neutral trade-offs, and warnings',
   assert.deepEqual(
     compareExercises(exercise('bench-press', 92.5, 5), exercise('bench-press', 90, 8)),
     { label: 'większy ciężar, poza zakresem', tone: 'warning' },
+  )
+})
+
+test('structured set comparison preserves accepted progress semantics without presentation colors', () => {
+  assert.deepEqual(
+    classifySetPerformance({ id: 'current', weight: 90, reps: 9 }, { id: 'previous', weight: 90, reps: 8 }),
+    { outcome: 'BETTER', reason: 'MORE_REPS_SAME_LOAD', weightDelta: 0, repsDelta: 1 },
+  )
+  assert.deepEqual(
+    classifySetPerformance({ id: 'current', weight: 92.5, reps: 8 }, { id: 'previous', weight: 90, reps: 8 }, '3 × 6–10'),
+    {
+      outcome: 'BETTER',
+      reason: 'LOAD_INCREASE_WITH_REPS_MAINTAINED',
+      weightDelta: 2.5,
+      repsDelta: 0,
+      sensibleRepFloor: 6,
+    },
+  )
+  assert.equal(
+    classifySetPerformance({ id: 'current', weight: 92.5, reps: 5 }, { id: 'previous', weight: 90, reps: 8 }, '3 × 6–10').outcome,
+    'WARNING',
   )
 })
 
