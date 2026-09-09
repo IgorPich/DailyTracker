@@ -1,0 +1,21 @@
+{
+  "name": "@greekgod/analytics",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "test": "npm run build && node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@greekgod/core": "*"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
