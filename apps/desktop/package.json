@@ -10,8 +10,9 @@
     "build:bundle:production-authority": "node scripts/prepare-sync-service.mjs && npm run build -- --mode production-authority",
     "prepare:sync-service": "node scripts/prepare-sync-service.mjs",
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
-    "test": "npm run test:identity && npm run test:dev-storage && npm run test:storage && npm run test:windows-lifecycle",
+    "test": "npm run test:identity && npm run test:progress-analytics && npm run test:dev-storage && npm run test:storage && npm run test:windows-lifecycle",
     "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
+    "test:progress-analytics": "node --experimental-strip-types scripts/progress-exposure-history.test.ts",
     "test:dev-storage": "node scripts/development-storage-config.test.mjs",
     "test:storage": "node --experimental-strip-types --experimental-sqlite scripts/storage/run-storage-tests.ts",
     "test:windows-lifecycle": "node scripts/windows-lifecycle.test.mjs",
@@ -28,6 +29,7 @@
     "tauri:build": "tauri build --features native-sqlite-production-authority"
   },
   "dependencies": {
+    "@greekgod/analytics": "*",
     "@greekgod/core": "*",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.2",

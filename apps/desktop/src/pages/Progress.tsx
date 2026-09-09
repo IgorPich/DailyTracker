@@ -4,21 +4,15 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { useApp } from '../context/AppContext'
-import type { ExerciseDefinition, Workout, WorkoutExercise, WorkoutSet } from '../types'
-import { daysAgoIso, formatLongDate } from '../utils/date'
-import { canonicalExerciseId, normalizeExerciseName, resolvedExerciseDefinitionId } from '../utils/exerciseIdentity'
+import type { ExerciseDefinition, WorkoutSet } from '../types'
+import { progressExerciseExposureHistory, type ProgressExerciseExposure } from '../adapters/progressExerciseExposureHistory'
+import { daysAgoIso, formatLongDate, isoToday } from '../utils/date'
+import { canonicalExerciseId, normalizeExerciseName } from '../utils/exerciseIdentity'
 import { formatDecimal } from '../utils/numbers'
-import { formatGymName, formatSet, getBestSet } from '../utils/workoutProgress'
+import { formatGymName, formatSet } from '../utils/workoutProgress'
 
 type ProgressMetric = 'weight' | 'reps' | 'estimated'
 type ProgressRange = '30' | '90' | '180' | 'all'
-
-interface ProgressOccurrence {
-  workout: Workout
-  exercise: WorkoutExercise
-  exercises: WorkoutExercise[]
-  bestSet: WorkoutSet
-}
 
 interface ProgressExercise extends ExerciseDefinition {
   label: string
@@ -73,26 +67,18 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
     if (!exercises.some((exercise) => exercise.id === exerciseId) && exercises[0]) setExerciseId(exercises[0].id)
   }, [exerciseId, exercises])
 
-  const allOccurrences = useMemo<ProgressOccurrence[]>(() => data.workouts
-    .flatMap((workout) => {
-      const candidates = workout.exercises
-        .filter((exercise) => resolvedExerciseDefinitionId(data.exerciseLibrary, exercise) === selectedExercise?.id && !exercise.skipped)
-        .map((exercise) => ({ workout, exercise, bestSet: getBestSet(exercise) }))
-        .filter((item): item is Omit<ProgressOccurrence, 'exercises'> => Boolean(item.bestSet && item.exercise.sets.some(completeSet)))
-        .sort((left, right) => estimatedResult(right.bestSet) - estimatedResult(left.bestSet))
-      const best = candidates[0]
-      return best ? [{ ...best, exercises: candidates.map((item) => item.exercise) }] : []
-    })
-    .sort((a, b) => a.workout.date.localeCompare(b.workout.date)), [data.exerciseLibrary, data.workouts, selectedExercise?.id])
+  const allOccurrences = useMemo<ProgressExerciseExposure[]>(() => selectedExercise
+    ? progressExerciseExposureHistory(data, selectedExercise.id, isoToday()).occurrences
+    : [], [data.exerciseLibrary, data.workouts, selectedExercise?.id])
 
   const occurrenceGymNames = useMemo(() => [...new Set(
-    allOccurrences.map((item) => item.workout.gymLocation?.trim()).filter((name): name is string => Boolean(name)),
+    allOccurrences.map((item) => item.gymContext?.trim()).filter((name): name is string => Boolean(name)),
   )], [allOccurrences])
   const gymNames = useMemo(() => [...new Set([
     ...(data.settings.gymLocations ?? []),
     ...occurrenceGymNames,
   ])], [occurrenceGymNames, data.settings.gymLocations])
-  const hasMissingGym = allOccurrences.some((item) => !item.workout.gymLocation?.trim())
+  const hasMissingGym = allOccurrences.some((item) => !item.gymContext?.trim())
 
   useEffect(() => {
     if (!selectedExercise?.equipmentSensitive) {
@@ -110,24 +96,24 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
   const cutoff = range === 'all' ? undefined : daysAgoIso(Number(range) - 1)
   const selectedGym = gymFromToken(gymFilter)
   const occurrences = allOccurrences.filter((item) => {
-    if (cutoff && item.workout.date < cutoff) return false
+    if (cutoff && item.occurredOn < cutoff) return false
     if (!selectedExercise?.equipmentSensitive || gymFilter === ALL_GYMS) return true
-    if (gymFilter === MISSING_GYM) return !item.workout.gymLocation?.trim()
-    return item.workout.gymLocation?.trim() === selectedGym
+    if (gymFilter === MISSING_GYM) return !item.gymContext?.trim()
+    return item.gymContext?.trim() === selectedGym
   })
   const displayedGymSeries = [...new Map(occurrences.map((item) => {
-    const gym = item.workout.gymLocation?.trim()
+    const gym = item.gymContext?.trim()
     const identity = gym || MISSING_GYM
     return [identity, { identity, label: gym || 'Nie podano' }]
   })).values()].map((gym, index) => ({ ...gym, key: `gym_${index}` }))
   const chartData = occurrences.map((occurrence, index) => ({
     index,
-    date: occurrence.workout.date,
-    label: occurrence.workout.date.slice(5).replace('-', '.'),
+    date: occurrence.occurredOn,
+    label: occurrence.occurredOn.slice(5).replace('-', '.'),
     value: metricValue(occurrence.bestSet, metric),
     occurrence,
     ...(selectedExercise?.equipmentSensitive && gymFilter === ALL_GYMS
-      ? { [displayedGymSeries.find((gym) => gym.identity === (occurrence.workout.gymLocation?.trim() || MISSING_GYM))!.key]: metricValue(occurrence.bestSet, metric) }
+      ? { [displayedGymSeries.find((gym) => gym.identity === (occurrence.gymContext?.trim() || MISSING_GYM))!.key]: metricValue(occurrence.bestSet, metric) }
       : {}),
   }))
   const values = chartData.map((item) => item.value).filter((value): value is number => typeof value === 'number')
@@ -150,8 +136,8 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
 
     {selectedExercise && <>
       <section className="progress-summary">
-        <article><span>OSTATNIO</span><strong>{latest ? formatSet(latest.bestSet) : '—'}</strong><small>{latest ? formatLongDate(latest.workout.date) : 'brak danych'}</small></article>
-        <article><span>NAJLEPSZY WYNIK</span><strong>{best ? formatSet(best.bestSet) : '—'}</strong><small>{best ? formatLongDate(best.workout.date) : 'brak danych'}</small></article>
+        <article><span>OSTATNIO</span><strong>{latest ? formatSet(latest.bestSet) : '—'}</strong><small>{latest ? formatLongDate(latest.occurredOn) : 'brak danych'}</small></article>
+        <article><span>NAJLEPSZY WYNIK</span><strong>{best ? formatSet(best.bestSet) : '—'}</strong><small>{best ? formatLongDate(best.occurredOn) : 'brak danych'}</small></article>
         <article><span>TRENINGÓW</span><strong>{occurrences.length}</strong><small>{selectedExercise.equipmentSensitive && selectedGym ? selectedGym : range === 'all' ? 'w całej historii' : `ostatnie ${range} dni`}</small></article>
       </section>
 
@@ -161,13 +147,13 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
         {chartData.length ? <div className="progress-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartData} margin={{ top: 18, right: 18, left: 0, bottom: 0 }}><CartesianGrid stroke="rgba(255,255,255,.055)" strokeDasharray="3 5" vertical={false} /><XAxis dataKey="label" stroke="#6f767d" tickLine={false} axisLine={false} minTickGap={28} /><YAxis domain={yDomain} stroke="#6f767d" tickLine={false} axisLine={false} width={55} tickFormatter={(value) => formatDecimal(Number(value), metric === 'reps' ? 0 : 2)} /><Tooltip content={<ProgressTooltip metric={metric} />} cursor={{ stroke: 'rgba(255,255,255,.12)', strokeDasharray: '3 3' }} />{selectedExercise.equipmentSensitive && gymFilter === ALL_GYMS ? displayedGymSeries.map((gym, index) => <Line key={gym.key} type="monotone" dataKey={gym.key} name={gym.label} stroke={SERIES_COLORS[index % SERIES_COLORS.length]} strokeWidth={2.4} dot={{ r: 3.5, fill: SERIES_COLORS[index % SERIES_COLORS.length], strokeWidth: 0 }} connectNulls />) : <Line type="monotone" dataKey="value" stroke="#30d158" strokeWidth={2.7} dot={{ r: 3.5, fill: '#30d158', strokeWidth: 0 }} />}</LineChart></ResponsiveContainer></div> : <EmptyState icon={BarChart3} title="Brak wyników w tym zakresie" description="Zapisz serie tego ćwiczenia albo wybierz dłuższy zakres czasu." />}
       </section>
 
-      <section className="card progress-history"><div className="card-heading"><div><span className="section-kicker">SZCZEGÓŁY</span><h2>Historia ćwiczenia</h2></div><strong>{occurrences.length}</strong></div>{occurrences.length ? <div className="progress-history__list">{[...occurrences].reverse().map((occurrence) => <button type="button" key={occurrence.workout.id} onClick={() => onOpenWorkout(occurrence.workout.id)}><div><strong>{formatLongDate(occurrence.workout.date)}</strong>{selectedExercise.equipmentSensitive && <small><MapPin size={12} /> {formatGymName(occurrence.workout.gymLocation)}</small>}</div><span>{occurrence.exercises.map((exercise) => exercise.sets.filter(completeSet).map(formatSet).join('   ')).filter(Boolean).join('   |   ')}</span><small>Zobacz trening</small></button>)}</div> : <div className="history-empty"><Dumbbell size={22} /><p>Jeszcze brak historii</p><span>Wyniki pojawią się tutaj po zapisaniu treningu.</span></div>}</section>
+      <section className="card progress-history"><div className="card-heading"><div><span className="section-kicker">SZCZEGÓŁY</span><h2>Historia ćwiczenia</h2></div><strong>{occurrences.length}</strong></div>{occurrences.length ? <div className="progress-history__list">{[...occurrences].reverse().map((occurrence) => <button type="button" key={occurrence.workoutId} onClick={() => onOpenWorkout(occurrence.workoutId)}><div><strong>{formatLongDate(occurrence.occurredOn)}</strong>{selectedExercise.equipmentSensitive && <small><MapPin size={12} /> {formatGymName(occurrence.gymContext)}</small>}</div><span>{occurrence.references.map((reference) => reference.workingSets.filter(completeSet).map(formatSet).join('   ')).filter(Boolean).join('   |   ')}</span><small>Zobacz trening</small></button>)}</div> : <div className="history-empty"><Dumbbell size={22} /><p>Jeszcze brak historii</p><span>Wyniki pojawią się tutaj po zapisaniu treningu.</span></div>}</section>
     </>}
   </div>
 }
 
-function ProgressTooltip({ active, payload, metric }: { active?: boolean; payload?: Array<{ payload?: { occurrence?: ProgressOccurrence } }>; metric: ProgressMetric }) {
+function ProgressTooltip({ active, payload, metric }: { active?: boolean; payload?: Array<{ payload?: { occurrence?: ProgressExerciseExposure } }>; metric: ProgressMetric }) {
   const occurrence = payload?.find((item) => item.payload?.occurrence)?.payload?.occurrence
   if (!active || !occurrence) return null
-  return <div className="chart-tooltip progress-tooltip"><strong>{formatLongDate(occurrence.workout.date)}</strong><span>{occurrence.workout.templateCode} — {occurrence.workout.templateName}</span><small>{formatGymName(occurrence.workout.gymLocation)}</small><div>{occurrence.exercises.flatMap((exercise, exerciseIndex) => exercise.sets.filter(completeSet).map((set, setIndex) => <p key={set.id}>{occurrence.exercises.length > 1 ? `${exerciseIndex + 1}.` : ''}{setIndex + 1}. {formatSet(set)}</p>))}</div>{metric === 'estimated' && <em>Szacowany wynik: {formatDecimal(estimatedResult(occurrence.bestSet))}</em>}</div>
+  return <div className="chart-tooltip progress-tooltip"><strong>{formatLongDate(occurrence.occurredOn)}</strong><span>{occurrence.templateCode} — {occurrence.templateName}</span><small>{formatGymName(occurrence.gymContext)}</small><div>{occurrence.references.flatMap((reference, exerciseIndex) => reference.workingSets.filter(completeSet).map((set, setIndex) => <p key={set.id}>{occurrence.references.length > 1 ? `${exerciseIndex + 1}.` : ''}{setIndex + 1}. {formatSet(set)}</p>))}</div>{metric === 'estimated' && <em>Szacowany wynik: {formatDecimal(estimatedResult(occurrence.bestSet))}</em>}</div>
 }
