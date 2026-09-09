@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, Plus, RefreshCw, Save, Trash2, X } from 'lucide-rea
 import { insertTemplateExercise, removeTemplateExercise } from '@greekgod/core'
 import { confirmAction } from '../services/fileService'
 import type { ExerciseDefinition, TemplateExercise, TrainingTemplate } from '../types'
-import { canonicalExerciseId, exerciseDefinitionFor, findExerciseDefinitionByName, matchingExerciseDefinitionsByName, normalizeExerciseName } from '../utils/exerciseIdentity'
+import { canonicalExerciseId, exerciseDefinitionFor } from '../utils/exerciseIdentity'
 import { createId } from '../utils/id'
 import { moveExercise } from '../utils/workoutData'
 import { prescriptionRepRange } from '../utils/workoutProgress'
@@ -68,12 +68,11 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
   }
 
   const replaceExercise = (exercise: TemplateExercise) => {
-    const query = window.prompt('Wpisz dokładną nazwę lub ID ćwiczenia z globalnej biblioteki:', exercise.name)?.trim()
-    if (!query) return
-    const definition = findExerciseDefinitionByName(draftLibrary, query)
-      ?? draftLibrary.find((item) => item.id === query)
+    const selectedExerciseId = window.prompt('Wpisz dokładny ID ćwiczenia z globalnej biblioteki:', canonicalExerciseId(exercise))?.trim()
+    if (!selectedExerciseId) return
+    const definition = draftLibrary.find((item) => item.id === selectedExerciseId)
     if (!definition) {
-      window.alert('Nie znaleziono jednej takiej pozycji w bibliotece. Nowe ćwiczenie dodaj w sekcji poniżej.')
+      window.alert('Nie znaleziono ćwiczenia o tym ID. Nowe ćwiczenie dodaj w sekcji poniżej.')
       return
     }
     if (definition.id === canonicalExerciseId(exercise)) return
@@ -87,18 +86,12 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
   const addExercise = () => {
     const name = newName.trim()
     if (!name) return
-    const matches = matchingExerciseDefinitionsByName(draftLibrary, name)
-    if (matches.length > 1) {
-      window.alert('Ta nazwa należy do kilku odrębnych ćwiczeń. Użyj przycisku „Zamień ćwiczenie”, aby wskazać konkretną pozycję.')
-      return
-    }
     if (newMin > newMax) {
       window.alert('Dolny zakres powtórzeń nie może być większy od górnego.')
       return
     }
     const safePosition = Number.isFinite(newPosition) ? newPosition : draft.exercises.length + 1
-    const existingDefinition = matches[0]
-    const definition: ExerciseDefinition = existingDefinition ?? {
+    const definition: ExerciseDefinition = {
       id: `exercise-${createId()}`,
       name,
       equipmentSensitive: newSensitive,
@@ -107,7 +100,7 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
       window.alert('To ćwiczenie jest już w tym szablonie.')
       return
     }
-    if (!existingDefinition) setDraftLibrary((current) => [...current, definition])
+    setDraftLibrary((current) => [...current, definition])
     const exercise: TemplateExercise = {
       id: `custom-${createId()}`,
       exerciseId: definition.id,
@@ -135,25 +128,15 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
       window.alert('Każde ćwiczenie musi mieć nazwę.')
       return
     }
+    if (draft.exercises.some((exercise) => !canonicalExerciseId(exercise))) {
+      window.alert('Szablon zawiera ćwiczenie bez jednoznacznej tożsamości. Wybierz właściwą definicję przez operację „Zamień ćwiczenie”.')
+      return
+    }
     if (draft.exercises.some((exercise) => {
       const range = rangeFor(exercise)
       return range.min > range.max
     })) {
       window.alert('Dolny zakres powtórzeń nie może być większy od górnego.')
-      return
-    }
-    const finalNameOwners = new Map<string, string>()
-    const renameCollision = draft.exercises.find((exercise) => {
-      const exerciseId = canonicalExerciseId(exercise)
-      const normalizedName = normalizeExerciseName(exercise.name)
-      const draftOwner = finalNameOwners.get(normalizedName)
-      if (draftOwner !== undefined && draftOwner !== exerciseId) return true
-      finalNameOwners.set(normalizedName, exerciseId)
-      return matchingExerciseDefinitionsByName(draftLibrary, exercise.name)
-        .some((definition) => definition.id !== exerciseId)
-    })
-    if (renameCollision) {
-      window.alert(`Nazwa „${renameCollision.name.trim()}” należy już do innego ćwiczenia. Użyj operacji „Zamień ćwiczenie”.`)
       return
     }
     onSave({ ...draft, exercises: draft.exercises.map((exercise) => ({ ...exercise, name: exercise.name.trim() })) })

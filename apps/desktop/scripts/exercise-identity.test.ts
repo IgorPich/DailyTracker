@@ -1,4 +1,4 @@
-import type { TemplateExercise, TrainingTemplate, Workout, WorkoutExercise } from '../src/types'
+import type { ExerciseDefinition, TemplateExercise, TrainingTemplate, Workout, WorkoutExercise } from '../src/types'
 import {
   fixtureSet as set,
   fixtureTemplateExercise as templateExercise,
@@ -10,7 +10,8 @@ import {
 } from './fixtures/exercise-identity.fixture.ts'
 
 const runAssertions = async () => {
-const [exerciseIdentity, dataMigration, workoutData, workoutProgress, storage] = await Promise.all([
+const [core, exerciseIdentity, dataMigration, workoutData, workoutProgress, storage] = await Promise.all([
+  import('@greekgod/core'),
   import('../src/utils/exerciseIdentity'),
   import('../src/utils/dataMigration'),
   import('../src/utils/workoutData'),
@@ -19,14 +20,13 @@ const [exerciseIdentity, dataMigration, workoutData, workoutProgress, storage] =
 ])
 const {
   canonicalExerciseId,
-  findExerciseDefinitionByName,
   normalizeExerciseName,
-  withRegisteredExercise,
+  registerExerciseDefinition,
 } = exerciseIdentity
-const { migrateExerciseIdentity } = dataMigration
+const { migrateLegacyExerciseIdentity } = dataMigration
 const { exerciseOccurrencesByWorkout, exercisesMatch, previousExerciseOccurrence, replaceWorkoutById } = workoutData
 const { equipmentComparisonIssue } = workoutProgress
-const { normalizeData } = storage
+const { createInitialData, normalizeData } = storage
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(`FAIL: ${message}`)
@@ -44,6 +44,26 @@ const assertDeepEqual = (actual: unknown, expected: unknown, message: string) =>
 
 const clone = <T,>(value: T): T => structuredClone(value)
 
+const initialDesktopData = createInitialData()
+const initialDesktopRelationships = [
+  ['machine-row', 'chest-supported-row'],
+  ['reverse-fly', 'rear-delt-machine'],
+  ['overhead-triceps-extension-d', 'overhead-triceps-extension'],
+] as const
+for (const [slotId, exerciseId] of initialDesktopRelationships) {
+  const references = initialDesktopData.templates
+    .flatMap((template) => template.exercises)
+    .filter((exercise) => exercise.id === slotId)
+  assertEqual(references.length, 1, `Desktop seed zawiera dokładnie jeden slot ${slotId}`)
+  assertEqual(references[0].exerciseId, exerciseId, `Desktop seed jawnie zachowuje canonical ID dla ${slotId}`)
+}
+assertEqual(initialDesktopData.exerciseLibrary.length, 28, 'Desktop seed zachowuje 28 canonical ExerciseDefinitions z v3')
+assertEqual(
+  new Set(initialDesktopData.templates.flatMap((template) => template.exercises.map((exercise) => exercise.exerciseId))).size,
+  28,
+  'Desktop seed nie tworzy duplikatów ExerciseDefinitions dla współdzielonych ćwiczeń',
+)
+
 const legacyTemplates = clone(legacyTemplatesFixture)
 const legacyWorkouts = clone(legacyWorkoutsFixture)
 
@@ -51,7 +71,7 @@ const templatesBefore = clone(legacyTemplates)
 const workoutsBefore = clone(legacyWorkouts)
 const sourceSnapshot = JSON.stringify({ templates: legacyTemplates, workouts: legacyWorkouts })
 
-const migrated = migrateExerciseIdentity(legacyTemplates, legacyWorkouts)
+const migrated = migrateLegacyExerciseIdentity(legacyTemplates, legacyWorkouts)
 
 assertEqual(
   JSON.stringify({ templates: legacyTemplates, workouts: legacyWorkouts }),
@@ -69,6 +89,10 @@ const withoutExerciseIds = <T extends TrainingTemplate[] | Workout[]>(items: T):
   }),
 })) as T
 
+const previousDesktopSeed = migrateLegacyExerciseIdentity(withoutExerciseIds(clone(core.DEFAULT_TEMPLATES)), [])
+assertDeepEqual(initialDesktopData.templates, previousDesktopSeed.templates, 'Desktop seed zachowuje dokładne canonical semantics z v3')
+assertDeepEqual(initialDesktopData.exerciseLibrary, previousDesktopSeed.exerciseLibrary, 'Desktop seed zachowuje dokładną bibliotekę 28 definicji z v3')
+
 assertDeepEqual(
   withoutExerciseIds(migrated.templates),
   templatesBefore,
@@ -80,7 +104,7 @@ assertDeepEqual(
   'migracja musi zachować workout/set IDs, daty, siłownie, serie, notatki i snapshoty nazw',
 )
 
-const migratedAgain = migrateExerciseIdentity(migrated.templates, migrated.workouts, migrated.exerciseLibrary)
+const migratedAgain = migrateLegacyExerciseIdentity(migrated.templates, migrated.workouts, migrated.exerciseLibrary)
 assertDeepEqual(migratedAgain, migrated, 'migracja musi być idempotentna')
 
 assertEqual(normalizeExerciseName('  WIOSŁO   na WYCIĄGU  '), 'wiosło na wyciągu', 'normalizacja trim/case/spaces')
@@ -89,7 +113,7 @@ assert(
   'normalizacja nie może wykonywać fuzzy merge',
 )
 
-const semanticReplacement = migrateExerciseIdentity(
+const semanticReplacement = migrateLegacyExerciseIdentity(
   [{ id: 'replacement-test', code: 'A', name: 'A', exercises: [templateExercise('shared-legacy-id', 'Ćwiczenie A')] }],
   [workout('replacement-history', '2026-01-01', 'replacement-test', 'A', 'A', 'Siłownia Alfa', [
     workoutExercise('shared-legacy-id', 'Ćwiczenie B', [set('replacement-set', 10, 10)]),
@@ -109,10 +133,22 @@ assertEqual(legacyV2.dailyEntries[0].date, '2026-01-01', 'import v2 zachowuje da
 assertEqual(legacyV2.dailyEntries[0].fat, 71, 'import v2 zachowuje tłuszcz')
 assertEqual(legacyV2.coachNotes.fixture, 'Synthetic coach note', 'import v2 zachowuje notatki trenera')
 
+const currentV4WithUnresolved = {
+  ...clone(legacyV2Fixture),
+  version: 4,
+  exerciseLibrary: [] as ExerciseDefinition[],
+}
+const currentV4Snapshot = clone(currentV4WithUnresolved)
+const normalizedCurrentV4 = normalizeData(currentV4WithUnresolved)
+assertDeepEqual(normalizedCurrentV4.workouts, currentV4Snapshot.workouts, 'Store v4 nie może automatycznie poprawiać historii bez exerciseId')
+assertDeepEqual(normalizedCurrentV4.templates, currentV4Snapshot.templates, 'Store v4 nie może automatycznie poprawiać szablonów bez exerciseId')
+assertDeepEqual(currentV4WithUnresolved, currentV4Snapshot, 'normalizacja Store v4 nie może mutować danych wejściowych')
+
 const definition = (name: string) => {
-  const found = findExerciseDefinitionByName(migrated.exerciseLibrary, name)
-  assert(found, `brak definicji: ${name}`)
-  return found
+  const normalized = normalizeExerciseName(name)
+  const matches = migrated.exerciseLibrary.filter((item) => normalizeExerciseName(item.name) === normalized)
+  assertEqual(matches.length, 1, `brak jednoznacznej definicji fixture: ${name}`)
+  return matches[0]
 }
 
 const cableRow = definition('  WIOSŁO   NA WYCIĄGU ')
@@ -166,8 +202,11 @@ const activeReference = (exercise: TemplateExercise): WorkoutExercise => ({
 const sharedPressPrevious = previousExerciseOccurrence(
   migrated.workouts,
   activeReference(sharedPressA),
-  '2026-01-04',
-  'Klub Północ',
+  {
+    beforeOrOn: '2026-01-04',
+    exerciseLibrary: migrated.exerciseLibrary,
+    gymLocation: 'Klub Północ',
+  },
 )
 assertEqual(sharedPressPrevious.latest?.workout.id, 'fixture-workout-d-2', 'A→D→A: najnowszy wynik ma pochodzić z D')
 assertEqual(sharedPressPrevious.comparable?.workout.id, 'fixture-workout-d-2', 'wolny ciężar porównuje wynik między siłowniami')
@@ -176,13 +215,16 @@ assertEqual(sharedPressPrevious.comparable?.exercise.sets[0].reps, 12, 'A→D→
 const cablePrevious = previousExerciseOccurrence(
   migrated.workouts,
   activeReference(cableRowA),
-  '2026-01-04',
-  'Klub Północ',
+  {
+    beforeOrOn: '2026-01-04',
+    exerciseLibrary: migrated.exerciseLibrary,
+    gymLocation: 'Klub Północ',
+  },
 )
 assertEqual(cablePrevious.latest?.workout.id, 'fixture-workout-d-2', 'latest pokazuje najnowsze wykonanie canonical exercise')
 assertEqual(cablePrevious.comparable?.workout.id, 'fixture-workout-a-1', 'maszyna/wyciąg wybiera ostatni wynik z tej samej siłowni')
 assertEqual(cablePrevious.comparable?.exercise.sets[0].weight, 80, 'powrót do Klubu Północ zwraca 80×8')
-assert(!exercisesMatch(machineWorkoutExercise, activeReference(cableRowA)), '100×9 z Wiosła na maszynie nie może wejść do historii wyciągu')
+assert(!exercisesMatch(machineWorkoutExercise, activeReference(cableRowA), migrated.exerciseLibrary), '100×9 z Wiosła na maszynie nie może wejść do historii wyciągu')
 assert(
   equipmentComparisonIssue(
     { ...activeReference(cableRowA), equipmentSensitive: false },
@@ -203,7 +245,8 @@ const duplicateCanonicalSession = workout('fixture-workout-duplicate-canonical',
 const duplicateSessionSnapshot = JSON.stringify(duplicateCanonicalSession)
 const groupedSharedOccurrences = exerciseOccurrencesByWorkout(
   [...migrated.workouts, duplicateCanonicalSession].sort((a, b) => b.date.localeCompare(a.date)),
-  (exercise) => canonicalExerciseId(exercise) === sharedPress.id,
+  sharedPress.id,
+  migrated.exerciseLibrary,
 )
 assertEqual(groupedSharedOccurrences.length, 3, 'dwa refy canonical w jednej sesji liczą się jako jedna occurrence')
 assertEqual(groupedSharedOccurrences[0].workout.id, duplicateCanonicalSession.id, 'agregat zachowuje najnowszą sesję jako current')
@@ -227,23 +270,18 @@ assertEqual(
   'biblioteka nie może zawierać powtórzonych nazw canonical',
 )
 
-const reused = withRegisteredExercise(
+const sameNameLibrary = registerExerciseDefinition(
   migrated.exerciseLibrary,
-  '  wiosło   NA wyciągu ',
-  true,
-  'nie-tworz-tego-id',
+  { id: 'same-name-separate-id', name: cableRow.name, equipmentSensitive: true },
 )
-assertEqual(reused.definition.id, cableRow.id, 'dodanie exact-name musi użyć istniejącej definicji')
-assert(reused.library === migrated.exerciseLibrary, 'reuse exact-name nie powinien przebudowywać biblioteki')
+assertEqual(sameNameLibrary.at(-1)?.id, 'same-name-separate-id', 'ta sama nazwa nie może zostać zamieniona na istniejące exerciseId')
 
-const newExercise = withRegisteredExercise(
+const newExerciseLibrary = registerExerciseDefinition(
   migrated.exerciseLibrary,
-  'Wiosło na wyciągu jednorącz',
-  true,
-  'single-arm-cable-row',
+  { id: 'single-arm-cable-row', name: 'Wiosło na wyciągu jednorącz', equipmentSensitive: true },
 )
-assertEqual(newExercise.definition.id, 'single-arm-cable-row', 'rzeczywiście nowe ćwiczenie dostaje nowy ID')
-assertEqual(newExercise.library.length, migrated.exerciseLibrary.length + 1, 'nowa definicja trafia do globalnej biblioteki')
+assertEqual(newExerciseLibrary.at(-1)?.id, 'single-arm-cable-row', 'rzeczywiście nowe ćwiczenie dostaje jawny ID')
+assertEqual(newExerciseLibrary.length, migrated.exerciseLibrary.length + 1, 'nowa definicja trafia do globalnej biblioteki')
 
 const customDefinition = definition('Unoszenie bokiem z hantlami')
 const progressReferenceIds = new Set([
@@ -257,7 +295,8 @@ assert(
 )
 const customProgressOccurrences = exerciseOccurrencesByWorkout(
   migrated.workouts,
-  (exercise) => canonicalExerciseId(exercise) === customDefinition.id,
+  customDefinition.id,
+  migrated.exerciseLibrary,
 )
 assertEqual(customProgressOccurrences.length, 1, 'custom exercise musi pozostać dostępne dla danych Progresu')
 assertEqual(

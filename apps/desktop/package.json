@@ -15,7 +15,7 @@
     "test:dev-storage": "node scripts/development-storage-config.test.mjs",
     "test:storage": "node --experimental-strip-types --experimental-sqlite scripts/storage/run-storage-tests.ts",
     "test:windows-lifecycle": "node scripts/windows-lifecycle.test.mjs",
-    "audit:store": "node --experimental-strip-types scripts/live-store-audit.ts --read-only",
+    "audit:store": "node --experimental-strip-types --experimental-sqlite scripts/live-store-audit.ts --read-only",
     "audit:production-storage-bundle": "node scripts/audit-production-storage-bundle.mjs",
     "preview": "vite preview",
     "tauri": "tauri",

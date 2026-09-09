@@ -3,45 +3,89 @@ import type { ExerciseDefinition, TemplateExercise, WorkoutExercise } from './ty
 export type ExerciseReference = Pick<WorkoutExercise, 'id' | 'exerciseId' | 'name' | 'equipmentSensitive'>
   | Pick<TemplateExercise, 'id' | 'exerciseId' | 'name' | 'equipmentSensitive'>
 
+export const UNRESOLVED_EXERCISE_IDENTITY = 'UNRESOLVED_EXERCISE_IDENTITY' as const
+
+export type ExerciseIdentityIssueReason =
+  | 'MISSING_EXERCISE_ID'
+  | 'INVALID_EXERCISE_ID'
+  | 'UNKNOWN_EXERCISE_DEFINITION'
+  | 'DUPLICATE_EXERCISE_DEFINITION_ID'
+
+export type ExerciseIdentityResolution =
+  | { classification: 'RESOLVED'; exerciseId: string }
+  | {
+      classification: typeof UNRESOLVED_EXERCISE_IDENTITY
+      exerciseId?: string
+      reason: ExerciseIdentityIssueReason
+    }
+
 export const normalizeExerciseName = (name: string) => name
   .trim()
   .replace(/\s+/g, ' ')
   .toLocaleLowerCase('pl-PL')
 
-export const canonicalExerciseId = (exercise: Pick<ExerciseReference, 'id' | 'exerciseId'>) =>
-  exercise.exerciseId?.trim() || exercise.id
-
-const definitionNames = (definition: ExerciseDefinition) => [definition.name, ...(definition.aliases ?? [])]
-
-export const matchingExerciseDefinitionsByName = (library: ExerciseDefinition[], name: string) => {
-  const normalized = normalizeExerciseName(name)
-  if (!normalized) return []
-  return library.filter((definition) => definitionNames(definition)
-    .some((candidate) => normalizeExerciseName(candidate) === normalized))
+export const canonicalExerciseId = (
+  exercise: Pick<ExerciseReference, 'exerciseId'>,
+): string | undefined => {
+  const exerciseId = exercise.exerciseId
+  if (typeof exerciseId !== 'string' || !exerciseId.trim()) return undefined
+  return exerciseId === exerciseId.trim() ? exerciseId : undefined
 }
 
-export const findExerciseDefinitionByName = (library: ExerciseDefinition[], name: string) => {
-  const matches = matchingExerciseDefinitionsByName(library, name)
-  return matches.length === 1 ? matches[0] : undefined
+export const classifyExerciseIdentity = (
+  library: readonly ExerciseDefinition[],
+  exercise: Pick<ExerciseReference, 'exerciseId'>,
+): ExerciseIdentityResolution => {
+  const suppliedId = exercise.exerciseId
+  if (typeof suppliedId !== 'string' || !suppliedId.trim()) {
+    return { classification: UNRESOLVED_EXERCISE_IDENTITY, reason: 'MISSING_EXERCISE_ID' }
+  }
+  const exerciseId = canonicalExerciseId(exercise)
+  if (!exerciseId) {
+    return {
+      classification: UNRESOLVED_EXERCISE_IDENTITY,
+      exerciseId: suppliedId,
+      reason: 'INVALID_EXERCISE_ID',
+    }
+  }
+  const definitions = library.filter((definition) => definition.id === exerciseId)
+  if (!definitions.length) {
+    return {
+      classification: UNRESOLVED_EXERCISE_IDENTITY,
+      exerciseId,
+      reason: 'UNKNOWN_EXERCISE_DEFINITION',
+    }
+  }
+  if (definitions.length > 1) {
+    return {
+      classification: UNRESOLVED_EXERCISE_IDENTITY,
+      exerciseId,
+      reason: 'DUPLICATE_EXERCISE_DEFINITION_ID',
+    }
+  }
+  return { classification: 'RESOLVED', exerciseId }
+}
+
+export const resolvedExerciseDefinitionId = (
+  library: readonly ExerciseDefinition[],
+  exercise: Pick<ExerciseReference, 'exerciseId'>,
+) => {
+  const resolution = classifyExerciseIdentity(library, exercise)
+  return resolution.classification === 'RESOLVED' ? resolution.exerciseId : undefined
 }
 
 export const exerciseDefinitionFor = (
-  library: ExerciseDefinition[],
-  exercise?: Pick<ExerciseReference, 'id' | 'exerciseId'>,
-) => exercise ? library.find((definition) => definition.id === canonicalExerciseId(exercise)) : undefined
+  library: readonly ExerciseDefinition[],
+  exercise?: Pick<ExerciseReference, 'exerciseId'>,
+) => {
+  if (!exercise) return undefined
+  const exerciseId = resolvedExerciseDefinitionId(library, exercise)
+  return exerciseId ? library.find((definition) => definition.id === exerciseId) : undefined
+}
 
 export const resolveTemplateExerciseId = (
-  library: ExerciseDefinition[],
   exercise: TemplateExercise,
-  previous?: TemplateExercise,
-) => {
-  const explicitId = exercise.exerciseId?.trim()
-  const previousId = previous && canonicalExerciseId(previous)
-  if (!previousId || (explicitId && explicitId !== previousId)) return explicitId || previousId
-  if (normalizeExerciseName(exercise.name) === normalizeExerciseName(previous.name)) return explicitId || previousId
-  const exactReplacement = findExerciseDefinitionByName(library, exercise.name)
-  return exactReplacement?.id ?? explicitId ?? previousId
-}
+) => canonicalExerciseId(exercise)
 
 const uniqueNameList = (names: string[]) => {
   const seen = new Set<string>()
@@ -53,29 +97,17 @@ const uniqueNameList = (names: string[]) => {
   })
 }
 
-const availableDefinitionId = (library: ExerciseDefinition[], preferredId: string) => {
-  if (!library.some((definition) => definition.id === preferredId)) return preferredId
-  let suffix = 2
-  while (library.some((definition) => definition.id === `${preferredId}-${suffix}`)) suffix += 1
-  return `${preferredId}-${suffix}`
-}
-
-export const withRegisteredExercise = (
-  library: ExerciseDefinition[],
-  name: string,
-  equipmentSensitive: boolean,
-  preferredId: string,
-): { definition: ExerciseDefinition; library: ExerciseDefinition[] } => {
-  const matches = matchingExerciseDefinitionsByName(library, name)
-  if (matches.length > 1) throw new Error('Ta nazwa pasuje do kilku odrębnych ćwiczeń. Wybierz konkretną pozycję z biblioteki.')
-  const existing = matches[0]
-  if (existing) return { definition: existing, library }
-  const definition: ExerciseDefinition = {
-    id: availableDefinitionId(library, preferredId),
-    name: name.trim().replace(/\s+/g, ' '),
-    equipmentSensitive,
-  }
-  return { definition, library: [...library, definition] }
+export const registerExerciseDefinition = (
+  library: readonly ExerciseDefinition[],
+  definition: ExerciseDefinition,
+): ExerciseDefinition[] => {
+  const exerciseId = definition.id.trim()
+  if (!exerciseId || exerciseId !== definition.id) throw new Error('Nowe ćwiczenie wymaga prawidłowego ExerciseDefinitionId.')
+  if (library.some((item) => item.id === exerciseId)) throw new Error('ExerciseDefinitionId już istnieje w bibliotece.')
+  return [...library, {
+    ...definition,
+    name: definition.name.trim().replace(/\s+/g, ' '),
+  }]
 }
 
 export const renameExerciseDefinition = (
@@ -84,9 +116,6 @@ export const renameExerciseDefinition = (
   name: string,
   equipmentSensitive: boolean,
 ) => {
-  const collision = matchingExerciseDefinitionsByName(library, name)
-    .some((definition) => definition.id !== exerciseId)
-  if (collision) throw new Error('Ta nazwa należy już do innego ćwiczenia. Użyj operacji „Zamień ćwiczenie”.')
   return library.map((definition) => {
     if (definition.id !== exerciseId) return definition
     const nextName = name.trim().replace(/\s+/g, ' ')

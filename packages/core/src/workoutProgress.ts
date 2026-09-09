@@ -44,7 +44,7 @@ const BUILTIN_EQUIPMENT_SENSITIVE_IDS = new Set([
 
 export const isEquipmentSensitive = (exercise?: Pick<WorkoutExercise, 'id' | 'exerciseId' | 'equipmentSensitive'>) => Boolean(
   exercise && (exercise.equipmentSensitive ?? (
-    BUILTIN_EQUIPMENT_SENSITIVE_IDS.has(canonicalExerciseId(exercise)) || BUILTIN_EQUIPMENT_SENSITIVE_IDS.has(exercise.id)
+    BUILTIN_EQUIPMENT_SENSITIVE_IDS.has(canonicalExerciseId(exercise) ?? '')
   )),
 )
 

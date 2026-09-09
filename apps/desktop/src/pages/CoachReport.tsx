@@ -22,7 +22,7 @@ import { useToast } from '../context/ToastContext'
 import { savePngDataUrl } from '../services/fileService'
 import { average, entriesBetween, formatInteger, formatNumber, latestMeasurement, signed, waistChange, weightChartData, windowFor, workoutsBetween } from '../utils/calculations'
 import { formatLongDate, formatShortDate, isoToday, parseDate } from '../utils/date'
-import { canonicalExerciseId, exerciseDefinitionFor } from '../utils/exerciseIdentity'
+import { exerciseDefinitionFor } from '../utils/exerciseIdentity'
 import { phaseLabel } from '../utils/labels'
 import { exerciseOccurrencesByWorkout } from '../utils/workoutData'
 import { compareExercises, formatGymName, formatSet, getBestSet } from '../utils/workoutProgress'
@@ -98,7 +98,8 @@ export function CoachReport() {
       [...data.workouts]
         .filter((workout) => workout.date <= range.to)
         .sort((a, b) => b.date.localeCompare(a.date)),
-      (exercise) => keyExercise.ids.includes(canonicalExerciseId(exercise)),
+      keyExercise.ids[0],
+      data.exerciseLibrary,
       (exercise) => Boolean(exerciseDefinitionFor(data.exerciseLibrary, exercise)?.equipmentSensitive || exercise.equipmentSensitive),
     )
     const current = occurrences[0]

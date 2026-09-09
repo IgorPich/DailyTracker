@@ -1,5 +1,13 @@
 import type { ExerciseDefinition, TrainingTemplate, Workout } from '../types'
-import { findExerciseDefinitionByName, normalizeExerciseName } from './exerciseIdentity'
+import { normalizeExerciseName } from './exerciseIdentity'
+
+/**
+ * LEGACY BACKUP RESTORE BOUNDARY.
+ *
+ * Name, alias and occurrence-ID compatibility below exists only to import data
+ * written before the canonical exercise-library format. Runtime selectors and
+ * 4.0 identity decisions must not depend on this module.
+ */
 
 export const upgradeBuiltInTemplates = (
   templates: TrainingTemplate[],
@@ -93,13 +101,20 @@ const uniqueNames = (names: string[]) => {
   })
 }
 
+const findLegacyDefinitionByExactName = (library: ExerciseDefinition[], name: string) => {
+  const normalized = normalizeExerciseName(name)
+  const matches = library.filter((definition) => [definition.name, ...(definition.aliases ?? [])]
+    .some((candidate) => normalizeExerciseName(candidate) === normalized))
+  return matches.length === 1 ? matches[0] : undefined
+}
+
 export interface ExerciseIdentityMigration {
   templates: TrainingTemplate[]
   workouts: Workout[]
   exerciseLibrary: ExerciseDefinition[]
 }
 
-export const migrateExerciseIdentity = (
+export const migrateLegacyExerciseIdentity = (
   templates: TrainingTemplate[],
   workouts: Workout[],
   existingLibrary: ExerciseDefinition[] = [],
@@ -168,7 +183,7 @@ export const migrateExerciseIdentity = (
     const normalizedName = normalizeExerciseName(exercise.name)
     const known = knownExerciseIdentities.get(normalizedName)
     if (known) return known.id
-    const existing = findExerciseDefinitionByName(existingLibrary, exercise.name)
+    const existing = findLegacyDefinitionByExactName(existingLibrary, exercise.name)
     if (existing) return existing.id
     const knownAlias = knownLegacyNameAliases.get(legacyNameAliasKey(exercise.id, exercise.name))
     if (knownAlias) return knownAlias
