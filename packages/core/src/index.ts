@@ -45,6 +45,8 @@ export {
   replaceWorkoutById,
 } from './workoutData.ts'
 export type { ExerciseOccurrence } from './workoutData.ts'
+export { classifyExerciseComparability } from './exerciseComparability.ts'
+export type { ExerciseComparability } from './exerciseComparability.ts'
 export {
   compareExercises,
   compareSets,

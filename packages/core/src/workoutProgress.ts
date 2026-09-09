@@ -1,4 +1,5 @@
 import type { WorkoutExercise, WorkoutSet } from './types'
+import { classifyExerciseComparability } from './exerciseComparability.ts'
 import { canonicalExerciseId } from './exerciseIdentity.ts'
 import { formatDecimal } from './numbers.ts'
 
@@ -81,8 +82,6 @@ export const formatSet = (set?: WorkoutSet) => {
   return `${formatDecimal(set.weight)}×${formatDecimal(set.reps, 0)}`
 }
 
-const normalizedGymName = (name?: string) => name?.trim().toLocaleLowerCase('pl-PL') || undefined
-
 export const formatGymName = (name?: string) => name?.trim() || 'nie podano'
 
 export const equipmentComparisonIssue = (
@@ -93,16 +92,12 @@ export const equipmentComparisonIssue = (
 ): ProgressResult | undefined => {
   if (!current || !previous) return undefined
   const equipmentSensitive = isEquipmentSensitive(current) || isEquipmentSensitive(previous)
-  if (!equipmentSensitive) return undefined
-  const currentGym = normalizedGymName(currentGymLocation)
-  const previousGym = normalizedGymName(previousGymLocation)
-  if (!currentGym || !previousGym) {
+  const comparability = classifyExerciseComparability(equipmentSensitive, currentGymLocation, previousGymLocation)
+  if (comparability.status === 'COMPARABLE') return undefined
+  if (comparability.reason === 'MISSING_GYM_CONTEXT') {
     return { label: 'Brak informacji o siłowni — nie porównuję ciężaru', tone: 'neutral', incomparable: true }
   }
-  if (currentGym !== previousGym) {
-    return { label: 'Inna siłownia — nie porównuję ciężaru', tone: 'neutral', incomparable: true }
-  }
-  return undefined
+  return { label: 'Inna siłownia — nie porównuję ciężaru', tone: 'neutral', incomparable: true }
 }
 
 export const compareSets = (current?: WorkoutSet, previous?: WorkoutSet, prescription?: string): ProgressResult => {

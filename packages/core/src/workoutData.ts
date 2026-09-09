@@ -1,4 +1,5 @@
 import type { ExerciseDefinition, Workout, WorkoutExercise } from './types'
+import { classifyExerciseComparability } from './exerciseComparability.ts'
 import {
   resolvedExerciseDefinitionId,
   UNRESOLVED_EXERCISE_IDENTITY,
@@ -57,10 +58,6 @@ export const exerciseOccurrencesByWorkout = (
   })
 }
 
-const sameGym = (left?: string, right?: string) => Boolean(
-  left?.trim() && right?.trim() && left.trim().localeCompare(right.trim(), 'pl', { sensitivity: 'accent' }) === 0,
-)
-
 export const previousExerciseOccurrence = (
   workouts: Workout[],
   reference: WorkoutExercise,
@@ -94,6 +91,8 @@ export const previousExerciseOccurrence = (
   if (!equipmentSensitive) return { latest, comparable: latest }
   return {
     latest,
-    comparable: options.gymLocation ? occurrences.find((item) => sameGym(item.workout.gymLocation, options.gymLocation)) : undefined,
+    comparable: occurrences.find((item) => (
+      classifyExerciseComparability(true, item.workout.gymLocation, options.gymLocation).status === 'COMPARABLE'
+    )),
   }
 }

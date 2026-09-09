@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { AppData, ExerciseDefinition, TemplateExercise, Workout, WorkoutExercise } from '../src/types.ts'
+import { classifyExerciseComparability } from '../src/exerciseComparability.ts'
 import { auditExerciseIdentities } from '../src/exerciseIdentityAudit.ts'
 import { resolveTemplateExerciseId, UNRESOLVED_EXERCISE_IDENTITY } from '../src/exerciseIdentity.ts'
 import { previousExerciseOccurrence as selectPreviousExerciseOccurrence } from '../src/workoutData.ts'
@@ -47,6 +48,25 @@ const previousExerciseOccurrence = (
   beforeOrOn,
   exerciseLibrary: libraryFor(workouts, reference),
   gymLocation,
+})
+
+test('structured comparability preserves the accepted gym and equipment rules', () => {
+  assert.deepEqual(classifyExerciseComparability(false, 'Gym A', 'Gym B'), {
+    status: 'COMPARABLE',
+    reason: 'EQUIPMENT_INDEPENDENT',
+  })
+  assert.deepEqual(classifyExerciseComparability(true, ' Gym A ', 'gym a'), {
+    status: 'COMPARABLE',
+    reason: 'SAME_GYM',
+  })
+  assert.deepEqual(classifyExerciseComparability(true, 'Gym A', 'Gym B'), {
+    status: 'NOT_COMPARABLE',
+    reason: 'DIFFERENT_GYM',
+  })
+  assert.deepEqual(classifyExerciseComparability(true, 'Gym A'), {
+    status: 'NOT_COMPARABLE',
+    reason: 'MISSING_GYM_CONTEXT',
+  })
 })
 
 test('free weight previous result crosses gyms and keeps exact exercise identity', () => {
