@@ -121,6 +121,7 @@ export const exerciseExposureHistory = (
       || matchingReferences.some(({ exercise }) => exercise.equipmentSensitive === true)
     return {
       exerciseId: targetIdentity.exerciseId,
+      equipmentSensitive,
       workoutId: workout.id,
       workoutExerciseId: first.workoutExerciseId,
       occurredOn: workout.date,

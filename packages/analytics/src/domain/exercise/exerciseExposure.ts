@@ -22,6 +22,7 @@ export interface ExerciseExposureReference {
 
 export interface ExerciseExposure {
   exerciseId: string
+  equipmentSensitive: boolean
   workoutId: string
   workoutExerciseId: string
   occurredOn: string
