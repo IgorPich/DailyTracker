@@ -1,6 +1,6 @@
 [package]
 name = "greekgod"
-version = "3.0.2"
+version = "3.0.3"
 description = "GreekGod — prywatny dziennik treningowy"
 authors = ["Igor Pich"]
 edition = "2021"
