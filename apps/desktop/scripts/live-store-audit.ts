@@ -13,7 +13,7 @@ const runAudit = async () => {
     import('../src/utils/dataMigration'),
     import('../src/utils/exerciseIdentity'),
   ])
-  const { migrateExerciseIdentity } = dataMigration
+  const { migrateLegacyExerciseIdentity } = dataMigration
   const { normalizeExerciseName } = exerciseIdentity
 
   const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
@@ -62,7 +62,7 @@ const runAudit = async () => {
     exerciseLibrary: liveLibrary,
   })
 
-  const migrated = migrateExerciseIdentity(liveTemplates, liveWorkouts, liveLibrary)
+  const migrated = migrateLegacyExerciseIdentity(liveTemplates, liveWorkouts, liveLibrary)
   assertDeepEqual(
     { templates: liveTemplates, workouts: liveWorkouts, exerciseLibrary: liveLibrary },
     sourceSnapshot,
@@ -88,7 +88,7 @@ const runAudit = async () => {
     )
   }
 
-  const migratedAgain = migrateExerciseIdentity(migrated.templates, migrated.workouts, migrated.exerciseLibrary)
+  const migratedAgain = migrateLegacyExerciseIdentity(migrated.templates, migrated.workouts, migrated.exerciseLibrary)
   assertDeepEqual(migratedAgain, migrated, 'migracja nie jest idempotentna')
   const normalizedNames = migrated.exerciseLibrary.map((definition) => normalizeExerciseName(definition.name))
   assert(new Set(normalizedNames).size === normalizedNames.length, 'biblioteka zawiera powtórzone nazwy canonical')

@@ -6,9 +6,9 @@ import { PageHeader } from '../components/PageHeader'
 import { useApp } from '../context/AppContext'
 import type { ExerciseDefinition, Workout, WorkoutExercise, WorkoutSet } from '../types'
 import { daysAgoIso, formatLongDate } from '../utils/date'
-import { canonicalExerciseId, normalizeExerciseName } from '../utils/exerciseIdentity'
+import { canonicalExerciseId, normalizeExerciseName, resolvedExerciseDefinitionId } from '../utils/exerciseIdentity'
 import { formatDecimal } from '../utils/numbers'
-import { formatGymName, formatSet, getBestSet, isEquipmentSensitive } from '../utils/workoutProgress'
+import { formatGymName, formatSet, getBestSet } from '../utils/workoutProgress'
 
 type ProgressMetric = 'weight' | 'reps' | 'estimated'
 type ProgressRange = '30' | '90' | '180' | 'all'
@@ -40,18 +40,11 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
       ...data.templates.flatMap((template) => template.exercises),
       ...[...data.workouts].sort((a, b) => b.date.localeCompare(a.date)).flatMap((workout) => workout.exercises),
     ]
-    const referencedIds = new Set(references.map(canonicalExerciseId))
+    const referencedIds = new Set(references
+      .map(canonicalExerciseId)
+      .filter((id): id is string => Boolean(id)))
     const byId = new Map<string, ExerciseDefinition>()
     data.exerciseLibrary.filter((definition) => referencedIds.has(definition.id)).forEach((definition) => byId.set(definition.id, definition))
-    references.forEach((exercise) => {
-      const id = canonicalExerciseId(exercise)
-      if (byId.has(id)) return
-      byId.set(id, {
-        id,
-        name: exercise.name,
-        equipmentSensitive: isEquipmentSensitive(exercise),
-      })
-    })
     const sorted = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl') || a.id.localeCompare(b.id))
     const nameCounts = sorted.reduce((counts, exercise) => {
       const name = normalizeExerciseName(exercise.name)
@@ -83,14 +76,14 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
   const allOccurrences = useMemo<ProgressOccurrence[]>(() => data.workouts
     .flatMap((workout) => {
       const candidates = workout.exercises
-        .filter((exercise) => canonicalExerciseId(exercise) === selectedExercise?.id && !exercise.skipped)
+        .filter((exercise) => resolvedExerciseDefinitionId(data.exerciseLibrary, exercise) === selectedExercise?.id && !exercise.skipped)
         .map((exercise) => ({ workout, exercise, bestSet: getBestSet(exercise) }))
         .filter((item): item is Omit<ProgressOccurrence, 'exercises'> => Boolean(item.bestSet && item.exercise.sets.some(completeSet)))
         .sort((left, right) => estimatedResult(right.bestSet) - estimatedResult(left.bestSet))
       const best = candidates[0]
       return best ? [{ ...best, exercises: candidates.map((item) => item.exercise) }] : []
     })
-    .sort((a, b) => a.workout.date.localeCompare(b.workout.date)), [data.workouts, selectedExercise?.id])
+    .sort((a, b) => a.workout.date.localeCompare(b.workout.date)), [data.exerciseLibrary, data.workouts, selectedExercise?.id])
 
   const occurrenceGymNames = useMemo(() => [...new Set(
     allOccurrences.map((item) => item.workout.gymLocation?.trim()).filter((name): name is string => Boolean(name)),

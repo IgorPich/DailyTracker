@@ -28,10 +28,10 @@ import { useToast } from '../context/ToastContext'
 import { confirmAction } from '../services/fileService'
 import type { ExerciseDefinition, TemplateExercise, TrainingTemplate, Workout, WorkoutExercise, WorkoutSet } from '../types'
 import { formatLongDate, isoToday } from '../utils/date'
-import { canonicalExerciseId, exerciseDefinitionFor, findExerciseDefinitionByName, matchingExerciseDefinitionsByName } from '../utils/exerciseIdentity'
+import { canonicalExerciseId, exerciseDefinitionFor } from '../utils/exerciseIdentity'
 import { createId } from '../utils/id'
 import { formatDecimal } from '../utils/numbers'
-import { exerciseOccurrencesByWorkout, exercisesMatch, moveExercise, previousExerciseOccurrence } from '../utils/workoutData'
+import { exerciseOccurrencesByWorkout, moveExercise, previousExerciseOccurrence } from '../utils/workoutData'
 import { compareSets, equipmentComparisonIssue, formatGymName, formatSet, getBestSet, isEquipmentSensitive } from '../utils/workoutProgress'
 
 const emptySet = (): WorkoutSet => ({ id: createId() })
@@ -86,11 +86,14 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
   const previousFor = (exercise: WorkoutExercise) => previousExerciseOccurrence(
     data.workouts,
     exercise,
-    date,
-    gymLocation,
-    (candidate) => candidate === exercise
-      ? (candidate.equipmentSensitive ?? equipmentSensitivityFor(candidate))
-      : equipmentSensitivityFor(candidate),
+    {
+      beforeOrOn: date,
+      exerciseLibrary: data.exerciseLibrary,
+      gymLocation,
+      sensitivityCheck: (candidate) => candidate === exercise
+        ? (candidate.equipmentSensitive ?? equipmentSensitivityFor(candidate))
+        : equipmentSensitivityFor(candidate),
+    },
   )
 
   const selectTemplate = (template: TrainingTemplate) => {
@@ -143,12 +146,11 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
   }
 
   const replaceActiveExercise = (exercise: WorkoutExercise) => {
-    const query = window.prompt('Wpisz dokładną nazwę lub ID ćwiczenia z globalnej biblioteki:', exercise.name)?.trim()
-    if (!query) return
-    const definition = findExerciseDefinitionByName(data.exerciseLibrary, query)
-      ?? data.exerciseLibrary.find((item) => item.id === query)
+    const selectedExerciseId = window.prompt('Wpisz dokładny ID ćwiczenia z globalnej biblioteki:', canonicalExerciseId(exercise))?.trim()
+    if (!selectedExerciseId) return
+    const definition = data.exerciseLibrary.find((item) => item.id === selectedExerciseId)
     if (!definition) {
-      window.alert('Nie znaleziono jednej takiej pozycji w bibliotece.')
+      window.alert('Nie znaleziono ćwiczenia o tym ID.')
       return
     }
     if (definition.id === canonicalExerciseId(exercise)) return
@@ -204,18 +206,11 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
     const name = customName.trim()
     if (!name) return
     const id = `custom-${createId()}`
-    const matches = matchingExerciseDefinitionsByName(data.exerciseLibrary, name)
-    if (matches.length > 1) {
-      window.alert('Ta nazwa należy do kilku odrębnych ćwiczeń. Użyj unikalnej nazwy albo wybierz ćwiczenie w edytorze szablonu.')
-      return
-    }
-    const existingDefinition = matches[0]
-    const exerciseId = existingDefinition?.id ?? `exercise-${createId()}`
+    const exerciseId = `exercise-${createId()}`
     if (exercises.some((exercise) => canonicalExerciseId(exercise) === exerciseId)) {
       window.alert('To ćwiczenie jest już w aktywnym treningu.')
       return
     }
-    const equipmentSensitive = existingDefinition?.equipmentSensitive ?? customEquipmentSensitive
     setExercises((current) => [...current, {
       id,
       exerciseId,
@@ -223,7 +218,7 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
       prescription: 'Własne ćwiczenie',
       sets: [emptySet(), emptySet(), emptySet()],
       isCustom: true,
-      equipmentSensitive,
+      equipmentSensitive: customEquipmentSensitive,
     }])
     setExpanded((current) => new Set(current).add(id))
     setCustomName('')
@@ -345,7 +340,7 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
       </form>
 
       <WorkoutHistory workouts={data.workouts} onOpen={setSelectedWorkoutId} />
-      {historyExercise && <ExerciseHistoryModal reference={historyExercise} workouts={data.workouts} onClose={() => setHistoryExercise(null)} />}
+      {historyExercise && <ExerciseHistoryModal reference={historyExercise} workouts={data.workouts} exerciseLibrary={data.exerciseLibrary} onClose={() => setHistoryExercise(null)} />}
       {selectedWorkout && <WorkoutDetailsModal workout={selectedWorkout} templates={data.templates} exerciseLibrary={data.exerciseLibrary} gymLocations={savedGymLocations} onUpdate={updateWorkout} onDelete={deleteWorkout} onClose={() => setSelectedWorkoutId(null)} />}
       {templateEditorTarget && data.templates.find((template) => template.id === templateEditorTarget.templateId) && <TemplateEditor template={data.templates.find((template) => template.id === templateEditorTarget.templateId)!} exerciseLibrary={data.exerciseLibrary} initialExerciseId={templateEditorTarget.exerciseId} onSave={(template) => { updateTemplate(template); showToast('Szablon zapisany') }} onClose={() => setTemplateEditorTarget(null)} />}
     </div>
@@ -412,7 +407,14 @@ function WorkoutDetailsModal({ workout, templates, exerciseLibrary, gymLocations
 
   const addDraftExercise = () => setDraft((current) => ({
     ...current,
-    exercises: [...current.exercises, { id: `custom-${createId()}`, name: '', prescription: 'Własne ćwiczenie', sets: [emptySet()], isCustom: true }],
+    exercises: [...current.exercises, {
+      id: `custom-${createId()}`,
+      exerciseId: `exercise-${createId()}`,
+      name: '',
+      prescription: 'Własne ćwiczenie',
+      sets: [emptySet()],
+      isCustom: true,
+    }],
   }))
 
   const removeDraftExercise = (exerciseId: string) => setDraft((current) => ({ ...current, exercises: current.exercises.filter((exercise) => exercise.id !== exerciseId) }))
@@ -423,12 +425,11 @@ function WorkoutDetailsModal({ workout, templates, exerciseLibrary, gymLocations
   })
 
   const replaceDraftExercise = (exercise: WorkoutExercise) => {
-    const query = window.prompt('Wpisz dokładną nazwę lub ID ćwiczenia z globalnej biblioteki:', exercise.name)?.trim()
-    if (!query) return
-    const definition = findExerciseDefinitionByName(exerciseLibrary, query)
-      ?? exerciseLibrary.find((item) => item.id === query)
+    const selectedExerciseId = window.prompt('Wpisz dokładny ID ćwiczenia z globalnej biblioteki:', canonicalExerciseId(exercise))?.trim()
+    if (!selectedExerciseId) return
+    const definition = exerciseLibrary.find((item) => item.id === selectedExerciseId)
     if (!definition) {
-      window.alert('Nie znaleziono jednej takiej pozycji w bibliotece.')
+      window.alert('Nie znaleziono ćwiczenia o tym ID.')
       return
     }
     updateDraftExercise(exercise.id, {
@@ -450,13 +451,6 @@ function WorkoutDetailsModal({ workout, templates, exerciseLibrary, gymLocations
   }
 
   const saveChanges = () => {
-    const ambiguousNewExercise = draft.exercises.find((exercise) => (
-      !exercise.exerciseId && matchingExerciseDefinitionsByName(exerciseLibrary, exercise.name).length > 1
-    ))
-    if (ambiguousNewExercise) {
-      window.alert(`Nazwa „${ambiguousNewExercise.name}” pasuje do kilku ćwiczeń. Użyj przycisku „Zamień ćwiczenie”, aby wskazać właściwą tożsamość.`)
-      return
-    }
     const exercises = draft.exercises.map((exercise) => ({
       ...exercise,
       name: exercise.name.trim() || 'Ćwiczenie',
@@ -521,12 +515,13 @@ const ALL_GYMS_FILTER = 'all'
 const MISSING_GYM_FILTER = 'missing'
 const gymFilterToken = (name: string) => `gym:${encodeURIComponent(name)}`
 
-function ExerciseHistoryModal({ reference, workouts, onClose }: { reference: WorkoutExercise; workouts: Workout[]; onClose: () => void }) {
+function ExerciseHistoryModal({ reference, workouts, exerciseLibrary, onClose }: { reference: WorkoutExercise; workouts: Workout[]; exerciseLibrary: ExerciseDefinition[]; onClose: () => void }) {
   const [gymFilter, setGymFilter] = useState(ALL_GYMS_FILTER)
   const history = useMemo(() => exerciseOccurrencesByWorkout(
     [...workouts].sort((a, b) => a.date.localeCompare(b.date)),
-    (exercise) => exercisesMatch(exercise, reference),
-  ), [reference, workouts])
+    canonicalExerciseId(reference),
+    exerciseLibrary,
+  ), [exerciseLibrary, reference, workouts])
   const gymNames = [...new Set(history.map((item) => item.workout.gymLocation?.trim()).filter((name): name is string => Boolean(name)))]
   const hasMissingGym = history.some((item) => !item.workout.gymLocation?.trim())
   const selectedGym = gymFilter.startsWith('gym:') ? decodeURIComponent(gymFilter.slice(4)) : undefined

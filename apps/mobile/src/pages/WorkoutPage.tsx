@@ -55,7 +55,15 @@ export const WorkoutPage = ({ workoutId, goBack }: { workoutId?: string; goBack:
   const [now, setNow] = useState(Date.now())
   const nativeStore = useMemo(() => isNative ? new NativeMobileStore() : undefined, [isNative])
   const exercise = workout?.exercises[exerciseIndex]
-  const previous = useMemo(() => data && workout && exercise ? previousExerciseOccurrence(data.workouts.filter((item) => item.id !== workout.id), exercise, workout.date, workout.gymLocation).comparable : undefined, [data, workout, exercise])
+  const previous = useMemo(() => data && workout && exercise ? previousExerciseOccurrence(
+    data.workouts.filter((item) => item.id !== workout.id),
+    exercise,
+    {
+      beforeOrOn: workout.date,
+      exerciseLibrary: data.exerciseLibrary,
+      gymLocation: workout.gymLocation,
+    },
+  ).comparable : undefined, [data, workout, exercise])
   useEffect(() => {
     if (!nativeStore) return
     void nativeStore.timerStatus().then(setTimer).catch(() => undefined)

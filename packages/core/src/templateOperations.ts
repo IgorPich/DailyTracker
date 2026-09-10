@@ -1,4 +1,4 @@
-import type { TemplateExercise, TrainingTemplate } from './types'
+import type { ExerciseDefinition, TemplateExercise, TrainingTemplate } from './types'
 
 export const moveItem = <T,>(items: T[], fromIndex: number, toIndex: number): T[] => {
   if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex >= items.length || fromIndex === toIndex) {
@@ -25,6 +25,17 @@ export const insertTemplateExercise = (
   next.splice(Math.max(0, Math.min(next.length, safePosition - 1)), 0, exercise)
   return next
 }
+
+export const replaceTemplateExerciseDefinition = (
+  exercises: readonly TemplateExercise[],
+  slotId: string,
+  definition: ExerciseDefinition,
+): TemplateExercise[] => exercises.map((exercise) => exercise.id !== slotId ? exercise : {
+  ...exercise,
+  exerciseId: definition.id,
+  name: definition.name,
+  equipmentSensitive: definition.equipmentSensitive,
+})
 
 export const replaceTrainingTemplate = (
   templates: readonly TrainingTemplate[],

@@ -3,7 +3,8 @@ import { DEFAULT_TEMPLATES, type AppData, type ExerciseDefinition } from '@greek
 const exerciseLibrary = DEFAULT_TEMPLATES
   .flatMap((template) => template.exercises)
   .reduce<ExerciseDefinition[]>((definitions, exercise) => {
-    const id = exercise.exerciseId ?? exercise.id
+    const id = exercise.exerciseId
+    if (!id) return definitions
     if (definitions.some((item) => item.id === id)) return definitions
     return [...definitions, {
       id,

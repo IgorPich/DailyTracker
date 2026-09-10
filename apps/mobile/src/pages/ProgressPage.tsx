@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { canonicalExerciseId, exerciseOccurrencesByWorkout, formatSet, getBestSet, isEquipmentSensitive } from '@greekgod/core'
+import { exerciseOccurrencesByWorkout, formatSet, getBestSet, isEquipmentSensitive, resolvedExerciseDefinitionId } from '@greekgod/core'
 import { useMobileData } from '../context/MobileDataContext'
 
 export const ProgressPage = () => {
@@ -11,7 +11,8 @@ export const ProgressPage = () => {
     const options = new Map<string, { id: string; name: string; equipmentSensitive?: boolean }>()
     for (const item of data?.exerciseLibrary ?? []) options.set(item.id, item)
     for (const workout of data?.workouts ?? []) for (const exercise of workout.exercises) {
-      const id = canonicalExerciseId(exercise)
+      const id = resolvedExerciseDefinitionId(data?.exerciseLibrary ?? [], exercise)
+      if (!id) continue
       if (!options.has(id)) options.set(id, { id, name: exercise.name, equipmentSensitive: isEquipmentSensitive(exercise) })
     }
     return [...options.values()].sort((left, right) => left.name.localeCompare(right.name, 'pl'))
@@ -19,7 +20,7 @@ export const ProgressPage = () => {
   const selected = exerciseOptions.find((item) => item.id === exerciseId) ?? exerciseOptions[0]
   const sensitive = isEquipmentSensitive(selected)
   const allOccurrences = useMemo(() => data && selected
-    ? exerciseOccurrencesByWorkout(data.workouts, (exercise) => canonicalExerciseId(exercise) === selected.id, isEquipmentSensitive)
+    ? exerciseOccurrencesByWorkout(data.workouts, selected.id, data.exerciseLibrary, isEquipmentSensitive)
       .sort((left, right) => left.workout.date.localeCompare(right.workout.date))
     : [], [data, selected])
   const occurrences = allOccurrences.filter((item) => !sensitive || (Boolean(gym) && item.workout.gymLocation === gym))

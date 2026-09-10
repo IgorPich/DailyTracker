@@ -15,19 +15,20 @@ export type { AppDataStore } from './appDataStore.ts'
 
 export { deleteDailyEntry, findDailyEntryByDate, upsertDailyEntry } from './dailyEntryOperations.ts'
 export { addGymLocation, deleteGymLocation, renameGymLocation } from './gymOperations.ts'
-export { insertTemplateExercise, moveItem, removeTemplateExercise, replaceTrainingTemplate } from './templateOperations.ts'
+export { insertTemplateExercise, moveItem, removeTemplateExercise, replaceTemplateExerciseDefinition, replaceTrainingTemplate } from './templateOperations.ts'
 export { addWorkout, deleteWorkout, findWorkoutById, updateWorkout } from './workoutOperations.ts'
 export {
   canonicalExerciseId,
+  classifyExerciseIdentity,
   exerciseDefinitionFor,
-  findExerciseDefinitionByName,
-  matchingExerciseDefinitionsByName,
   normalizeExerciseName,
+  registerExerciseDefinition,
   renameExerciseDefinition,
+  resolvedExerciseDefinitionId,
   resolveTemplateExerciseId,
-  withRegisteredExercise,
+  UNRESOLVED_EXERCISE_IDENTITY,
 } from './exerciseIdentity.ts'
-export type { ExerciseReference } from './exerciseIdentity.ts'
+export type { ExerciseIdentityIssueReason, ExerciseIdentityResolution, ExerciseReference } from './exerciseIdentity.ts'
 export {
   decimalInputValue,
   formatDecimal,
@@ -53,4 +54,4 @@ export {
   prescriptionRepRange,
 } from './workoutProgress.ts'
 export type { ProgressResult } from './workoutProgress.ts'
-export { DEFAULT_TEMPLATES } from './defaultTemplates.ts'
+export { DEFAULT_TEMPLATES, DESKTOP_DEFAULT_TEMPLATES } from './defaultTemplates.ts'

@@ -1,7 +1,7 @@
 import { DEFAULT_TEMPLATES } from '../data/templates'
 import { saveTextExport } from '../services/fileService'
-import type { AppData, DailyEntry, Settings, Workout } from '../types'
-import { migrateExerciseIdentity } from './dataMigration'
+import type { AppData, DailyEntry, ExerciseDefinition, Settings, Workout } from '../types'
+import { migrateLegacyExerciseIdentity } from './dataMigration'
 
 export const STORAGE_KEY = 'formlog.data.v1'
 export const CURRENT_DATA_VERSION = 4
@@ -17,18 +17,28 @@ export const DEFAULT_SETTINGS: Settings = {
   },
 }
 
-export const createInitialData = (): AppData => {
-  const identity = migrateExerciseIdentity(DEFAULT_TEMPLATES, [])
-  return {
+const exerciseLibraryFromCanonicalTemplates = (): ExerciseDefinition[] => DEFAULT_TEMPLATES
+  .flatMap((template) => template.exercises)
+  .reduce<ExerciseDefinition[]>((definitions, exercise) => {
+    const exerciseId = exercise.exerciseId
+    if (!exerciseId) throw new Error(`Brak ExerciseDefinitionId w domyślnym szablonie: ${exercise.id}`)
+    if (definitions.some((definition) => definition.id === exerciseId)) return definitions
+    return [...definitions, {
+      id: exerciseId,
+      name: exercise.name,
+      equipmentSensitive: Boolean(exercise.equipmentSensitive),
+    }]
+  }, [])
+
+export const createInitialData = (): AppData => ({
     version: CURRENT_DATA_VERSION,
     dailyEntries: [],
     workouts: [],
-    templates: identity.templates,
-    exerciseLibrary: identity.exerciseLibrary,
+    templates: structuredClone(DEFAULT_TEMPLATES),
+    exerciseLibrary: exerciseLibraryFromCanonicalTemplates(),
     settings: DEFAULT_SETTINGS,
     coachNotes: {},
-  }
-}
+})
 
 export const normalizeData = (value: unknown): AppData => {
   if (!value || typeof value !== 'object') throw new Error('Nieprawidłowy format pliku.')
@@ -43,11 +53,12 @@ export const normalizeData = (value: unknown): AppData => {
   if (!Array.isArray(candidate.templates) || !candidate.templates.length) {
     throw new Error('Plik nie zawiera zapisanych szablonów treningowych.')
   }
-  const identity = migrateExerciseIdentity(
-    candidate.templates,
-    candidate.workouts as Workout[],
-    Array.isArray(candidate.exerciseLibrary) ? candidate.exerciseLibrary : [],
-  )
+  const templates = candidate.templates
+  const workouts = candidate.workouts as Workout[]
+  const exerciseLibrary = Array.isArray(candidate.exerciseLibrary) ? candidate.exerciseLibrary : []
+  const identity = sourceVersion < CURRENT_DATA_VERSION
+    ? migrateLegacyExerciseIdentity(templates, workouts, exerciseLibrary)
+    : { templates, workouts, exerciseLibrary }
   return {
     version: CURRENT_DATA_VERSION,
     dailyEntries: candidate.dailyEntries as DailyEntry[],

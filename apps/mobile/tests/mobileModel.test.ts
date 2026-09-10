@@ -4,6 +4,22 @@ import { DEFAULT_TEMPLATES, upsertDailyEntry, type AppData } from '@greekgod/cor
 import { applyJournalNumericDraft, appendWorkoutSet, createWorkoutFromTemplate, deleteMobileWorkout, finalizeWorkout, journalNumericDraft, nextTemplate, upsertWorkoutSet, workoutDestination } from '../src/domain/mobileModel.ts'
 import { INITIAL_MOBILE_DATA } from '../src/data/initialData.ts'
 
+test('mobile empty-store seed keeps its existing slot identities', () => {
+  const exercises = INITIAL_MOBILE_DATA.templates.flatMap((template) => template.exercises)
+  assert.equal(INITIAL_MOBILE_DATA.exerciseLibrary.length, 31)
+  assert.equal(exercises.every((exercise) => exercise.exerciseId === exercise.id), true)
+  assert.deepEqual(
+    exercises
+      .filter((exercise) => ['machine-row', 'reverse-fly', 'overhead-triceps-extension-d'].includes(exercise.id))
+      .map((exercise) => [exercise.id, exercise.exerciseId]),
+    [
+      ['machine-row', 'machine-row'],
+      ['reverse-fly', 'reverse-fly'],
+      ['overhead-triceps-extension-d', 'overhead-triceps-extension-d'],
+    ],
+  )
+})
+
 test('next workout follows the shared A/B/C/D template order', () => {
   const data = structuredClone(INITIAL_MOBILE_DATA)
   assert.equal(nextTemplate(data)?.code, 'A')
