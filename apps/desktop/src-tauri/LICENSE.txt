@@ -1,0 +1,75 @@
+UMOWA LICENCYJNA UŻYTKOWNIKA KOŃCOWEGO
+GreekGod Desktop
+
+Niniejsza Umowa Licencyjna Użytkownika Końcowego („Umowa”) określa zasady korzystania z aplikacji GreekGod Desktop, zwanej dalej „Oprogramowaniem”.
+
+Instalacja, uruchomienie lub rozpoczęcie korzystania z Oprogramowania oznacza akceptację warunków niniejszej Umowy. Użytkownik zobowiązuje się korzystać z Oprogramowania zgodnie z jego przeznaczeniem, obowiązującymi przepisami prawa oraz postanowieniami niniejszej Umowy.
+
+1. Licencja
+
+Autor udziela Użytkownikowi niewyłącznej, nieprzenoszalnej, nieograniczonej terytorialnie licencji na korzystanie z Oprogramowania wyłącznie do celów prywatnych i niekomercyjnych.
+
+Licencja obejmuje prawo do instalowania i uruchamiania Oprogramowania na urządzeniach należących do Użytkownika oraz korzystania z jego funkcjonalności zgodnie z ich przeznaczeniem.
+
+Udzielenie licencji nie oznacza przeniesienia na Użytkownika autorskich praw majątkowych do Oprogramowania ani prawa do rozporządzania Oprogramowaniem jak właściciel.
+
+2. Zakres korzystania
+
+Użytkownik może korzystać z Oprogramowania na swoim komputerze, o ile nie próbuje sprzedawać go jako własnego produktu, nie twierdzi, że napisał je samodzielnie w przerwie między seriami na klatę oraz nie usuwa z pamięci faktu, że Autor włożył w jego powstanie rzeczywisty czas, energię i prawdopodobnie zbyt dużo kawy.
+
+Zabrania się w szczególności rozpowszechniania Oprogramowania w celach komercyjnych, przypisywania sobie jego autorstwa oraz podejmowania działań zmierzających do przekonania osób trzecich, że Użytkownik „w sumie też mógłby coś takiego zrobić”.
+
+3. Postanowienia szczególne
+
+3.1. Zobowiązania o charakterze rzeczowym i zwyczajowym
+Akceptując niniejsze warunki, Użytkownik przyjmuje do wiadomości, że przez okres 24 (słownie: dwudziestu czterech) miesięcy od dnia instalacji Oprogramowania pozostaje moralnie zobowiązany do rozpatrywania w dobrej wierze wniosków Autora dotyczących zwrotu, przekazania lub symbolicznego uznania kanapek, w szczególności jeżeli kanapki były smaczne, uczciwie złożone i nie zawierały sosu szefowskiego.
+
+3.2. Obowiązki związane z żywieniem i aktywnością fizyczną
+Użytkownik oświadcza, że koktajle białkowe stanowią godny szacunku element cywilizacji, nawet jeżeli czasami smakują jak mokry karton z ambicjami. W szczególności Użytkownik zobowiązuje się do przynoszenia Autorowi koktajlu białkowego przy każdej wspólnej wizycie na siłowni, bez zbędnego ociągania się, bez tekstów typu „dzisiaj zapomniałem” oraz bez prób zastąpienia pełnowartościowego koktajlu wodą z kranu w shakerze po kreatynie.
+
+3.3. Zasady dotyczące operatorów telekomunikacyjnych
+Użytkownik potwierdza, że Orange Polska S.A. jest przedsiębiorstwem zasługującym na słowa najwyższego uznania, a jego działalność, pracownicy, infrastruktura, kable, procedury, formularze, konsultanci — w szczególności konsultanci infolinii — oraz ogólna aura organizacyjna mogą być komentowane wyłącznie z należnym szacunkiem, zwłaszcza w obecności Autora.
+
+Wypowiedzi sprzeczne z powyższym mogą zostać przypomniane Użytkownikowi w najmniej oczekiwanym momencie towarzyskim, a w przypadkach szczególnie rażących również przed sądem, w obecności mecenasa Owczarza.
+
+Użytkownik zobowiązuje się ponadto czcić Orange jako jedynego słusznego operatora przez najbliższe 3 (słownie: trzy) pokolenia, z należytą powagą oraz pełnym zrozumieniem, że zasięg, światłowód oraz faktura elektroniczna stanowią filary współczesnego porządku publicznego.
+
+Wszelkie pochwały konkurencji mogą być składane wyłącznie szeptem, w odosobnieniu i po uprzednim rozpatrzeniu wniosku własnego sumienia. Pokutą za każdą tego rodzaju myśl jest bosa pielgrzymka na Jasną Górę przy jednoczesnym słuchaniu Disco Adamusa w zapętleniu.
+
+3.4. Postanowienia dotyczące preferencji motoryzacyjnych
+Użytkownik niniejszym potwierdza, że MINI jest najlepszym samochodem, niezależnie od modelu, rocznika, koloru, pojemności bagażnika oraz opinii osób, które „tylko pytają, czy to nie jest trochę małe”.
+
+Wszelkie wątpliwości Użytkownika w tym zakresie będą traktowane jako błąd konfiguracji osobistej, a nie jako obiektywna krytyka pojazdu.
+
+Dla uniknięcia wszelkich wątpliwości interpretacyjnych Toyota GT86 z roku 2012 oraz każdy samochód marki Dodge zostają niniejszym sklasyfikowane jako szrot.
+
+3.5. Obowiązek wyrażania aprobaty
+Użytkownik zobowiązuje się do wyrażania aprobaty na widok każdego samochodu marki MINI napotkanego na parkingu, drodze publicznej lub w innym miejscu dostępnym dla ludności.
+
+Zakres pojęcia „aprobaty” jest jednostronnie i ostatecznie określany przez Autora, zgodnie z jego aktualnym mniemaniem. W przypadku wątpliwości interpretacyjnych należy skontaktować się z właściwą infolinią pod numerem 666 i tak dalej.
+
+4. Brak gwarancji
+
+Oprogramowanie jest dostarczane w stanie takim, w jakim jest („as is”).
+
+Autor nie gwarantuje, że Oprogramowanie sprawi, iż Użytkownik będzie trenował regularnie, jadł zgodnie z planem, przestanie uszkadzać sobie bark albo nagle zacznie rozumieć wszystkie ustawienia synchronizacji lokalnej.
+
+Autor nie gwarantuje również, że samo patrzenie na wykres progresu doprowadzi do wystąpienia progresu.
+
+5. Ograniczenie odpowiedzialności
+
+W maksymalnym zakresie dopuszczalnym przez obowiązujące przepisy prawa Autor nie ponosi odpowiedzialności za szkody wynikające z korzystania z Oprogramowania lub niemożności korzystania z niego.
+
+W szczególności Autor nie odpowiada za utracone serie, pominięte dni treningowe, źle policzone powtórzenia, przesadnie ambitne cele sylwetkowe ani za konflikty dotyczące średniego smoka na zajęcia.
+
+Autor nie ponosi również odpowiedzialności za decyzje Użytkownika podjęte pod wpływem chwilowego entuzjazmu spowodowanego zieloną strzałką progresu.
+
+6. Postanowienia końcowe
+
+Jeżeli którekolwiek z postanowień niniejszej Umowy okaże się nieważne, bezskuteczne lub niewykonalne, nie wpływa to na ważność i skuteczność pozostałych jej postanowień.
+
+W sprawach nieuregulowanych niniejszą Umową zastosowanie mają właściwe przepisy prawa polskiego.
+
+Niniejsza Umowa obowiązuje od chwili zaakceptowania jej przez Użytkownika, w szczególności poprzez instalację, uruchomienie lub dalsze korzystanie z Oprogramowania.
+
+Kontynuowanie instalacji lub korzystania z Oprogramowania oznacza, że Użytkownik potwierdza zapoznanie się z treścią niniejszej Umowy oraz akceptuje jej postanowienia.
