@@ -38,6 +38,7 @@
     "active": true,
     "targets": ["nsis"],
     "externalBin": ["binaries/greekgod-sync-service"],
+    "licenseFile": "LICENSE.txt",
     "resources": {
       "windows/sync-service-lifecycle.ps1": "sync-service-lifecycle.ps1"
     },
