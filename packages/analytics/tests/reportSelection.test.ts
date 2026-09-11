@@ -149,3 +149,25 @@ test('validates dates and limits without using wall-clock time', () => {
     assert.throws(() => reportSelection(q), RangeError)
   }
 })
+
+test('comparison can use a comparable exposure beyond the default five-history limit', () => {
+  const q = query(['history'], [], [
+    workout('history', '2026-02-20', [9], 20, 'original'),
+    ...Array.from({ length: 6 }, (_, i) => workout('history', `2026-02-${19 - i}`, [8], 20, 'other')),
+    workout('history', '2026-01-01', [8], 20, 'original'),
+  ])
+  q.snapshot.exerciseLibrary[0].equipmentSensitive = true
+  const selected = reportSelection(q).selectedExercises[0]
+  assert.equal(selected.progress.status, 'PROGRESS')
+  assert.equal(selected.progress.evidence.comparisonWorkoutId, 'history-2026-01-01')
+})
+
+test('partial latest exposure preserves insufficient status without borrowing older performance', () => {
+  const q = query(['partial-latest'], [], pair('partial-latest', [8], [8]))
+  q.snapshot.workouts[0].exercises[0].sets[0].reps = undefined
+  q.snapshot.workouts = [...q.snapshot.workouts, workout('partial-latest', '2026-02-10', [8])]
+  const selected = reportSelection(q).selectedExercises[0]
+  assert.equal(selected.progress.status, 'INSUFFICIENT_DATA')
+  assert.ok(!selected.selectionReasons.includes('MEANINGFUL_CHANGE'))
+  assert.equal(selected.ranking.priority, 'RECENT_INSUFFICIENT_DATA')
+})

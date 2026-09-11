@@ -18,7 +18,7 @@ const [core, exerciseIdentity, dataMigration, workoutData, workoutProgress, stor
   import('../src/utils/workoutProgress'),
   import('../src/utils/storage'),
   import('../src/utils/templateIdentity'),
-  import('../src/utils/reportExerciseCandidates'),
+  import('../src/adapters/coachReportSelection'),
 ])
 const {
   canonicalExerciseId,
@@ -30,7 +30,11 @@ const { exerciseOccurrencesByWorkout, exercisesMatch, previousExerciseOccurrence
 const { equipmentComparisonIssue } = workoutProgress
 const { createInitialData, normalizeData } = storage
 const { updateTemplateAndLibrary } = templateIdentity
-const { activeReportExerciseDefinitions } = reportExerciseCandidates
+const { coachReportSelection } = reportExerciseCandidates
+// Retain reconciliation regressions against the report's actual Analytics adapter.
+const activeReportExerciseDefinitions = (templates: TrainingTemplate[], exerciseLibrary: ExerciseDefinition[]) =>
+  coachReportSelection({ templates, exerciseLibrary, workouts: [] }, '2026-01-01', '2026-01-31')
+    .selectedExercises.map((selected) => selected.definition)
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(`FAIL: ${message}`)
@@ -106,6 +110,12 @@ const identityUpdateData = {
   ])],
 }
 const identityUpdateSnapshot = clone(identityUpdateData)
+const selectedReport = coachReportSelection(identityUpdateData, '2026-01-01', '2026-01-31')
+assertEqual(selectedReport.selectedExercises[0].exerciseId, sharedDefinition.id, 'CoachReport consumes recent exposure selection')
+assertEqual(selectedReport.selectedExercises[0].definition.name, sharedDefinition.name, 'CoachReport labels come from the current definition')
+assert(selectedReport.selectedExercises[0].selectionReasons.includes('RECENT_EXPOSURE'), 'CoachReport preserves Analytics selection reasons')
+assertEqual(selectedReport.selectedExercises[0].progress.status, 'INSUFFICIENT_DATA', 'CoachReport preserves progress status')
+assertDeepEqual(identityUpdateData, identityUpdateSnapshot, 'report adapter does not mutate Tracking data')
 const replacedTemplateD = {
   ...templateD,
   exercises: core.replaceTemplateExerciseDefinition(

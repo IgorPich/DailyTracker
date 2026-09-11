@@ -23,7 +23,7 @@ import { savePngDataUrl } from '../services/fileService'
 import { average, entriesBetween, formatInteger, formatNumber, latestMeasurement, signed, waistChange, weightChartData, windowFor, workoutsBetween } from '../utils/calculations'
 import { formatLongDate, formatShortDate, isoToday, parseDate } from '../utils/date'
 import { exerciseDefinitionFor } from '../utils/exerciseIdentity'
-import { activeReportExerciseDefinitions } from '../utils/reportExerciseCandidates'
+import { coachReportSelection } from '../adapters/coachReportSelection'
 import { phaseLabel } from '../utils/labels'
 import { exerciseOccurrencesByWorkout } from '../utils/workoutData'
 import { compareExercises, formatGymName, formatSet, getBestSet } from '../utils/workoutProgress'
@@ -84,7 +84,8 @@ export function CoachReport() {
   const weightData = useMemo(() => weightChartData(data.dailyEntries, range.from, range.to), [data.dailyEntries, range.from, range.to])
   const waistData = useMemo(() => periodEntries.filter((entry) => typeof entry.waist === 'number').map((entry) => ({ date: entry.date, label: entry.date.slice(5).replace('-', '.'), waist: entry.waist })), [periodEntries])
 
-  const exerciseRows = activeReportExerciseDefinitions(data.templates, data.exerciseLibrary).map((definition) => {
+  const selection = useMemo(() => coachReportSelection(data, range.from, range.to), [data, range.from, range.to])
+  const exerciseRows = selection.selectedExercises.map(({ definition }) => {
     const occurrences = exerciseOccurrencesByWorkout(
       [...data.workouts]
         .filter((workout) => workout.date <= range.to)
@@ -187,7 +188,7 @@ ${coachNote.trim() || '—'}`
 
       {screenshotMode && <button className="screenshot-exit" onClick={() => setScreenshotMode(false)}><X size={16} /> Wyjdź z trybu zrzutu</button>}
 
-      <div className="report-controls"><div className="segmented-control segmented-control--large"><button className={period === '7' ? 'active' : ''} onClick={() => setPeriod('7')}>7 dni</button><button className={period === '14' ? 'active' : ''} onClick={() => setPeriod('14')}>14 dni</button><button className={period === 'custom' ? 'active' : ''} onClick={() => setPeriod('custom')}>Własny zakres</button></div>{period === 'custom' && <div className="custom-range"><label>Od <input type="date" value={customFrom} max={customTo} onChange={(event) => setCustomFrom(event.target.value)} /></label><label>Do <input type="date" value={customTo} min={customFrom} onChange={(event) => setCustomTo(event.target.value)} /></label></div>}</div>
+      <div className="report-controls"><div className="segmented-control segmented-control--large"><button className={period === '7' ? 'active' : ''} onClick={() => setPeriod('7')}>7 dni</button><button className={period === '14' ? 'active' : ''} onClick={() => setPeriod('14')}>14 dni</button><button className={period === 'custom' ? 'active' : ''} onClick={() => setPeriod('custom')}>Własny zakres</button></div>{period === 'custom' && <div className="custom-range"><label>Od <input type="date" value={customFrom} max={customTo} onChange={(event) => { if (event.target.value && event.target.value <= customTo) setCustomFrom(event.target.value) }} /></label><label>Do <input type="date" value={customTo} min={customFrom} onChange={(event) => { if (event.target.value && event.target.value >= customFrom) setCustomTo(event.target.value) }} /></label></div>}</div>
 
       <section className="report-sheet report-sheet-v2" ref={reportRef}>
         <header className="report-sheet__header">
