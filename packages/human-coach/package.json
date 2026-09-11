@@ -1,0 +1,14 @@
+{
+  "name": "@greekgod/human-coach",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run build && node --experimental-strip-types --test src/tests/*.test.ts"
+  },
+  "devDependencies": { "typescript": "^7.0.2" }
+}
