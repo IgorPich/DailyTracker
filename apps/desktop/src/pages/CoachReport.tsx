@@ -23,21 +23,12 @@ import { savePngDataUrl } from '../services/fileService'
 import { average, entriesBetween, formatInteger, formatNumber, latestMeasurement, signed, waistChange, weightChartData, windowFor, workoutsBetween } from '../utils/calculations'
 import { formatLongDate, formatShortDate, isoToday, parseDate } from '../utils/date'
 import { exerciseDefinitionFor } from '../utils/exerciseIdentity'
+import { activeReportExerciseDefinitions } from '../utils/reportExerciseCandidates'
 import { phaseLabel } from '../utils/labels'
 import { exerciseOccurrencesByWorkout } from '../utils/workoutData'
 import { compareExercises, formatGymName, formatSet, getBestSet } from '../utils/workoutProgress'
 
 type Period = '7' | '14' | 'custom'
-
-const keyExercises = [
-  { label: 'Wyciskanie sztangi na ławce', short: 'Wyciskanie sztangi', ids: ['bench-press'] },
-  { label: 'Wyciskanie hantli na skosie', short: 'Wyciskanie hantli', ids: ['incline-dumbbell-press'] },
-  { label: 'Podciąganie', short: 'Podciąganie', ids: ['pull-up'] },
-  { label: 'Wiosło na wyciągu', short: 'Wiosło na wyciągu', ids: ['chest-supported-row'] },
-  { label: 'Przysiad na hack-maszynie', short: 'Hack-maszyna', ids: ['hack-squat'] },
-  { label: 'Martwy ciąg rumuński', short: 'Martwy ciąg rumuński', ids: ['romanian-deadlift'] },
-  { label: 'Unoszenie ramion bokiem', short: 'Unoszenie bokiem', ids: ['lateral-raise-machine'] },
-]
 
 const reportRangeLabel = (from: string, to: string) => {
   const start = parseDate(from)
@@ -93,12 +84,12 @@ export function CoachReport() {
   const weightData = useMemo(() => weightChartData(data.dailyEntries, range.from, range.to), [data.dailyEntries, range.from, range.to])
   const waistData = useMemo(() => periodEntries.filter((entry) => typeof entry.waist === 'number').map((entry) => ({ date: entry.date, label: entry.date.slice(5).replace('-', '.'), waist: entry.waist })), [periodEntries])
 
-  const exerciseRows = keyExercises.map((keyExercise) => {
+  const exerciseRows = activeReportExerciseDefinitions(data.templates, data.exerciseLibrary).map((definition) => {
     const occurrences = exerciseOccurrencesByWorkout(
       [...data.workouts]
         .filter((workout) => workout.date <= range.to)
         .sort((a, b) => b.date.localeCompare(a.date)),
-      keyExercise.ids[0],
+      definition.id,
       data.exerciseLibrary,
       (exercise) => Boolean(exerciseDefinitionFor(data.exerciseLibrary, exercise)?.equipmentSensitive || exercise.equipmentSensitive),
     )
@@ -113,7 +104,9 @@ export function CoachReport() {
       equipmentSensitive: Boolean(exerciseDefinitionFor(data.exerciseLibrary, previous.exercise)?.equipmentSensitive || previous.exercise.equipmentSensitive),
     } : undefined
     return {
-      ...keyExercise,
+      exerciseId: definition.id,
+      label: definition.name,
+      short: definition.name,
       current,
       previous,
       currentSet: current ? getBestSet(current.exercise) : undefined,
@@ -224,7 +217,7 @@ ${coachNote.trim() || '—'}`
           <article><div className="mini-heading"><div><span className="section-kicker">POMIARY</span><h3>Talia</h3></div><strong>{formatNumber(latestWaist?.waist)} cm</strong></div><div className="report-chart report-chart--waist">{waistData.length ? <ResponsiveContainer width="100%" height="100%"><AreaChart data={waistData} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}><defs><linearGradient id="reportWaistAreaV2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2997ff" stopOpacity={0.15} /><stop offset="100%" stopColor="#2997ff" stopOpacity={0} /></linearGradient></defs><CartesianGrid stroke="rgba(255,255,255,.05)" strokeDasharray="3 5" vertical={false} /><XAxis dataKey="label" stroke="#6f767d" tickLine={false} axisLine={false} /><YAxis domain={['dataMin - 1', 'dataMax + 1']} stroke="#6f767d" tickLine={false} axisLine={false} width={42} /><Tooltip contentStyle={{ background: '#171a1e', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12 }} formatter={(value) => [`${formatNumber(Number(value ?? 0))} cm`, 'Talia']} /><Area type="monotone" dataKey="waist" stroke="#2997ff" strokeWidth={2.1} fill="url(#reportWaistAreaV2)" dot={{ r: 2.4, fill: '#2997ff', strokeWidth: 0 }} /></AreaChart></ResponsiveContainer> : <p className="report-chart__empty">Jeszcze brak pomiarów talii.</p>}</div></article>
         </div>
 
-        <div className="report-lower"><article className="report-workouts"><div className="mini-heading"><div><span className="section-kicker">WYKONANE SESJE</span><h3>Treningi</h3></div><strong>{periodWorkouts.length}</strong></div><div className="report-gym-summary">{!gymCounts.length ? <span>Siłownie: —</span> : gymCounts.length === 1 ? <span>Siłownia: <strong>{gymCounts[0][0]}</strong></span> : gymCounts.map(([gym, count]) => <span key={gym}>{gym}: <strong>{count}</strong></span>)}</div>{periodWorkouts.length ? <div className="report-workout-list">{periodWorkouts.map((workout) => <div key={workout.id}><span className="template-code template-code--small">{workout.templateCode}</span><strong>{formatShortDate(workout.date)}</strong><p>{workout.templateName}</p><small>{formatGymName(workout.gymLocation)} · {workout.duration ? `${workout.duration} min` : 'czas —'}</small></div>)}</div> : <p className="report-list-empty">Brak treningów w wybranym okresie.</p>}</article><article className="report-exercises"><div className="mini-heading"><div><span className="section-kicker">PROGRES TRENINGOWY</span><h3>Najważniejsze ćwiczenia</h3></div></div><div className="table-scroll"><table className="data-table report-exercise-table"><thead><tr><th>Ćwiczenie</th><th>Poprzednio</th><th>Teraz</th><th>Zmiana</th></tr></thead><tbody>{exerciseRows.map((row) => <tr key={row.label}><td><strong>{row.label}</strong></td><td>{formatSet(row.previousSet)}{row.previous && <small>{formatShortDate(row.previous.workout.date)} · {formatGymName(row.previous.workout.gymLocation)}</small>}</td><td>{formatSet(row.currentSet)}{row.current && <small>{formatShortDate(row.current.workout.date)} · {formatGymName(row.current.workout.gymLocation)}</small>}</td><td><span className={`change-pill change-pill--${row.change.tone}`}>{row.change.label}</span></td></tr>)}</tbody></table></div></article></div>
+        <div className="report-lower"><article className="report-workouts"><div className="mini-heading"><div><span className="section-kicker">WYKONANE SESJE</span><h3>Treningi</h3></div><strong>{periodWorkouts.length}</strong></div><div className="report-gym-summary">{!gymCounts.length ? <span>Siłownie: —</span> : gymCounts.length === 1 ? <span>Siłownia: <strong>{gymCounts[0][0]}</strong></span> : gymCounts.map(([gym, count]) => <span key={gym}>{gym}: <strong>{count}</strong></span>)}</div>{periodWorkouts.length ? <div className="report-workout-list">{periodWorkouts.map((workout) => <div key={workout.id}><span className="template-code template-code--small">{workout.templateCode}</span><strong>{formatShortDate(workout.date)}</strong><p>{workout.templateName}</p><small>{formatGymName(workout.gymLocation)} · {workout.duration ? `${workout.duration} min` : 'czas —'}</small></div>)}</div> : <p className="report-list-empty">Brak treningów w wybranym okresie.</p>}</article><article className="report-exercises"><div className="mini-heading"><div><span className="section-kicker">PROGRES TRENINGOWY</span><h3>Najważniejsze ćwiczenia</h3></div></div><div className="table-scroll"><table className="data-table report-exercise-table"><thead><tr><th>Ćwiczenie</th><th>Poprzednio</th><th>Teraz</th><th>Zmiana</th></tr></thead><tbody>{exerciseRows.map((row) => <tr key={row.exerciseId}><td><strong>{row.label}</strong></td><td>{formatSet(row.previousSet)}{row.previous && <small>{formatShortDate(row.previous.workout.date)} · {formatGymName(row.previous.workout.gymLocation)}</small>}</td><td>{formatSet(row.currentSet)}{row.current && <small>{formatShortDate(row.current.workout.date)} · {formatGymName(row.current.workout.gymLocation)}</small>}</td><td><span className={`change-pill change-pill--${row.change.tone}`}>{row.change.label}</span></td></tr>)}</tbody></table></div></article></div>
 
         <section className="coach-notes"><div><span className="section-kicker">DECYZJE I KOLEJNY KROK</span><h3>Notatki trenera</h3><p>Notatka jest przypisana do zakresu {formatShortDate(range.from)}–{formatShortDate(range.to)}.</p></div><textarea rows={4} placeholder="Utrzymujemy 2800 kcal. Cel na kolejny trening PUSH…" value={coachNote} onChange={(event) => setCoachNote(event.target.value)} onBlur={saveCoachNote} /></section>
 

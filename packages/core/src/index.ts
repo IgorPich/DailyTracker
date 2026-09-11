@@ -15,7 +15,7 @@ export type { AppDataStore } from './appDataStore.ts'
 
 export { deleteDailyEntry, findDailyEntryByDate, upsertDailyEntry } from './dailyEntryOperations.ts'
 export { addGymLocation, deleteGymLocation, renameGymLocation } from './gymOperations.ts'
-export { insertTemplateExercise, moveItem, removeTemplateExercise, replaceTrainingTemplate } from './templateOperations.ts'
+export { insertTemplateExercise, moveItem, removeTemplateExercise, replaceTrainingTemplate, replaceTemplateExerciseDefinition } from './templateOperations.ts'
 export { addWorkout, deleteWorkout, findWorkoutById, updateWorkout } from './workoutOperations.ts'
 export {
   canonicalExerciseId,

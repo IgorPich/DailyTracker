@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ArrowDown, ArrowUp, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
-import { insertTemplateExercise, removeTemplateExercise } from '@greekgod/core'
+import { insertTemplateExercise, removeTemplateExercise, replaceTemplateExerciseDefinition } from '@greekgod/core'
 import { confirmAction } from '../services/fileService'
 import type { ExerciseDefinition, TemplateExercise, TrainingTemplate } from '../types'
 import { canonicalExerciseId, exerciseDefinitionFor } from '../utils/exerciseIdentity'
@@ -23,6 +23,7 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
     exercises: template.exercises.map((exercise) => ({
       ...structuredClone(exercise),
       exerciseId: canonicalExerciseId(exercise),
+      name: exerciseDefinitionFor(exerciseLibrary, exercise)?.name ?? exercise.name,
       equipmentSensitive: exerciseDefinitionFor(exerciseLibrary, exercise)?.equipmentSensitive ?? exercise.equipmentSensitive,
     })),
   }))
@@ -76,11 +77,10 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
       return
     }
     if (definition.id === canonicalExerciseId(exercise)) return
-    updateExercise(exercise.id, {
-      exerciseId: definition.id,
-      name: definition.name,
-      equipmentSensitive: definition.equipmentSensitive,
-    })
+    setDraft((current) => ({
+      ...current,
+      exercises: replaceTemplateExerciseDefinition(current.exercises, exercise.id, definition),
+    }))
   }
 
   const addExercise = () => {
@@ -151,7 +151,7 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
         const range = rangeFor(exercise)
         return <article className={`template-editor__exercise ${exercise.id === initialExerciseId ? 'template-editor__exercise--focus' : ''}`} key={exercise.id}>
           <span className="template-editor__index">{String(index + 1).padStart(2, '0')}</span>
-          <label className="field template-editor__name"><span>Nazwa ćwiczenia</span><input type="text" value={exercise.name} onChange={(event) => updateExercise(exercise.id, { name: event.target.value })} /></label>
+          <label className="field template-editor__name"><span>Nazwa ćwiczenia</span><input type="text" value={exercise.name} readOnly aria-readonly="true" /></label>
           <label className="field"><span>Serie</span><input type="number" min="1" max="20" value={exercise.defaultSets} onChange={(event) => updateSets(exercise, Number(event.target.value))} /></label>
           <label className="field"><span>Powt. od</span><input type="number" min="1" max="100" value={range.min} onChange={(event) => updateRange(exercise, 'min', Number(event.target.value))} /></label>
           <label className="field"><span>Powt. do</span><input type="number" min="1" max="100" value={range.max} onChange={(event) => updateRange(exercise, 'max', Number(event.target.value))} /></label>

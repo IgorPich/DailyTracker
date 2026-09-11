@@ -10,13 +10,15 @@ import {
 } from './fixtures/exercise-identity.fixture.ts'
 
 const runAssertions = async () => {
-const [core, exerciseIdentity, dataMigration, workoutData, workoutProgress, storage] = await Promise.all([
+const [core, exerciseIdentity, dataMigration, workoutData, workoutProgress, storage, templateIdentity, reportExerciseCandidates] = await Promise.all([
   import('@greekgod/core'),
   import('../src/utils/exerciseIdentity'),
   import('../src/utils/dataMigration'),
   import('../src/utils/workoutData'),
   import('../src/utils/workoutProgress'),
   import('../src/utils/storage'),
+  import('../src/utils/templateIdentity'),
+  import('../src/utils/reportExerciseCandidates'),
 ])
 const {
   canonicalExerciseId,
@@ -27,6 +29,8 @@ const { migrateLegacyExerciseIdentity } = dataMigration
 const { exerciseOccurrencesByWorkout, exercisesMatch, previousExerciseOccurrence, replaceWorkoutById } = workoutData
 const { equipmentComparisonIssue } = workoutProgress
 const { createInitialData, normalizeData } = storage
+const { updateTemplateAndLibrary } = templateIdentity
+const { activeReportExerciseDefinitions } = reportExerciseCandidates
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(`FAIL: ${message}`)
@@ -64,7 +68,125 @@ assertEqual(
   'Desktop seed nie tworzy duplikatów ExerciseDefinitions dla współdzielonych ćwiczeń',
 )
 
+const sharedDefinition: ExerciseDefinition = {
+  id: 'synthetic-definition-a',
+  name: 'Synthetic definition A',
+  equipmentSensitive: false,
+}
+const replacementDefinition: ExerciseDefinition = {
+  id: 'synthetic-definition-b',
+  name: 'Synthetic definition B',
+  equipmentSensitive: true,
+}
+const sharedTemplateExercise = (slotId: string): TemplateExercise => ({
+  id: slotId,
+  exerciseId: sharedDefinition.id,
+  name: sharedDefinition.name,
+  prescription: '3 × 8–12',
+  defaultSets: 3,
+})
+const templateB: TrainingTemplate = {
+  id: 'synthetic-template-b',
+  code: 'B',
+  name: 'Synthetic template B',
+  exercises: [sharedTemplateExercise('synthetic-slot-b')],
+}
+const templateD: TrainingTemplate = {
+  id: 'synthetic-template-d',
+  code: 'D',
+  name: 'Synthetic template D',
+  exercises: [sharedTemplateExercise('synthetic-slot-d')],
+}
+const identityUpdateData = {
+  ...clone(initialDesktopData),
+  exerciseLibrary: [sharedDefinition, replacementDefinition],
+  templates: [templateB, templateD],
+  workouts: [workout('synthetic-history', '2026-01-01', templateB.id, 'B', templateB.name, 'Synthetic gym', [
+    workoutExercise('synthetic-slot-b', sharedDefinition.name, [set('synthetic-set', 10, 10)], false, { exerciseId: sharedDefinition.id }),
+  ])],
+}
+const identityUpdateSnapshot = clone(identityUpdateData)
+const replacedTemplateD = {
+  ...templateD,
+  exercises: core.replaceTemplateExerciseDefinition(
+    templateD.exercises,
+    'synthetic-slot-d',
+    replacementDefinition,
+  ),
+}
+const replacedIdentity = updateTemplateAndLibrary(identityUpdateData, replacedTemplateD)
+assertEqual(replacedIdentity.templates[0].exercises[0].exerciseId, sharedDefinition.id, 'replacement D nie może zmienić referencji B')
+assertEqual(replacedIdentity.templates[1].exercises[0].id, 'synthetic-slot-d', 'replacement zachowuje TemplateExerciseId')
+assertEqual(replacedIdentity.templates[1].exercises[0].exerciseId, replacementDefinition.id, 'replacement D wskazuje dokładny wybrany ExerciseDefinitionId')
+assertDeepEqual(replacedIdentity.library, [sharedDefinition, replacementDefinition], 'replacement nie mutuje żadnej definicji')
+assertDeepEqual(identityUpdateData, identityUpdateSnapshot, 'replacement nie mutuje templates, biblioteki ani historii wejściowej')
+
+const attemptedHiddenRename = updateTemplateAndLibrary(identityUpdateData, {
+  ...templateD,
+  exercises: templateD.exercises.map((exercise) => ({ ...exercise, name: 'Unsafe implicit rename' })),
+})
+assertEqual(attemptedHiddenRename.templates[0].exercises[0].name, sharedDefinition.name, 'zmiana label D nie może zmienić B')
+assertEqual(attemptedHiddenRename.templates[1].exercises[0].name, sharedDefinition.name, 'template slot pobiera nazwę z definicji')
+assertEqual(attemptedHiddenRename.library[0].name, sharedDefinition.name, 'template edit nie może globalnie przemianować definicji')
+
+const arbitraryDefinition: ExerciseDefinition = {
+  id: 'synthetic-arbitrary-definition',
+  name: 'Current arbitrary definition label',
+  equipmentSensitive: false,
+}
+const inactiveDefinition: ExerciseDefinition = {
+  id: 'synthetic-inactive-definition',
+  name: 'Inactive definition',
+  equipmentSensitive: false,
+}
+const reportCandidates = activeReportExerciseDefinitions(
+  [
+    templateB,
+    {
+      ...templateD,
+      exercises: [
+        { ...sharedTemplateExercise('synthetic-duplicate-slot'), name: 'Stale template label' },
+        {
+          id: 'synthetic-arbitrary-slot',
+          exerciseId: arbitraryDefinition.id,
+          name: 'Stale arbitrary label',
+          prescription: '2 × 10–12',
+          defaultSets: 2,
+        },
+      ],
+    },
+  ],
+  [sharedDefinition, arbitraryDefinition, inactiveDefinition],
+)
+assertDeepEqual(
+  reportCandidates.map((definition) => [definition.id, definition.name]),
+  [
+    [sharedDefinition.id, sharedDefinition.name],
+    [arbitraryDefinition.id, arbitraryDefinition.name],
+  ],
+  'CoachReport candidates pochodzą z aktywnych exact exerciseId, deduplikują ID i używają nazw definicji',
+)
+assert(
+  !reportCandidates.some((definition) => definition.id === inactiveDefinition.id),
+  'nieaktywna historyczna konfiguracja nie może wejść do CoachReport',
+)
+
 const legacyTemplates = clone(legacyTemplatesFixture)
+const sameNamedCandidates = activeReportExerciseDefinitions([
+  { ...templateB, exercises: [
+    sharedTemplateExercise('first'),
+    { ...sharedTemplateExercise('second'), exerciseId: replacementDefinition.id },
+    { ...sharedTemplateExercise(sharedDefinition.id), exerciseId: undefined },
+    { ...sharedTemplateExercise('unknown'), exerciseId: 'missing-definition' },
+  ] },
+], [sharedDefinition, { ...replacementDefinition, name: sharedDefinition.name, aliases: [sharedDefinition.name] }])
+assertDeepEqual(sameNamedCandidates.map((item) => item.id), [sharedDefinition.id, replacementDefinition.id], 'report keeps equal names/aliases separate and excludes unresolved references without slot fallback')
+const invalidReplacement = updateTemplateAndLibrary(identityUpdateData, {
+  ...templateD,
+  exercises: [{ ...templateD.exercises[0], exerciseId: 'missing-definition', name: 'Unknown' }],
+})
+assertDeepEqual(invalidReplacement.library, identityUpdateData.exerciseLibrary, 'invalid replacement cannot manufacture a definition')
+assertDeepEqual(invalidReplacement.templates, identityUpdateData.templates, 'invalid replacement preserves both templates')
 const legacyWorkouts = clone(legacyWorkoutsFixture)
 
 const templatesBefore = clone(legacyTemplates)

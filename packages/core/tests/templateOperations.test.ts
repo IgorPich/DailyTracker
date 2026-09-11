@@ -1,7 +1,7 @@
 import { deepStrictEqual, notStrictEqual, strictEqual } from 'node:assert/strict'
 import test from 'node:test'
-import { insertTemplateExercise, moveItem, removeTemplateExercise, replaceTrainingTemplate } from '../src/templateOperations.ts'
-import type { TemplateExercise, TrainingTemplate } from '../src/types.ts'
+import { insertTemplateExercise, moveItem, removeTemplateExercise, replaceTemplateExerciseDefinition, replaceTrainingTemplate } from '../src/templateOperations.ts'
+import type { ExerciseDefinition, TemplateExercise, TrainingTemplate } from '../src/types.ts'
 
 const exercise = (id: string): TemplateExercise => ({
   id,
@@ -66,4 +66,47 @@ test('template replacement preserves order, replaces all duplicate ids and never
 
   deepStrictEqual(result, [replacement, untouched, replacement])
   deepStrictEqual(replaceTrainingTemplate([untouched], replacement), [untouched])
+})
+
+test('exercise replacement changes only the selected slot reference', () => {
+  const sharedDefinition: ExerciseDefinition = {
+    id: 'definition-a',
+    name: 'Synthetic shared definition',
+    equipmentSensitive: false,
+  }
+  const replacementDefinition: ExerciseDefinition = {
+    id: 'definition-b',
+    name: 'Synthetic replacement definition',
+    equipmentSensitive: true,
+  }
+  const templateB: TrainingTemplate = {
+    id: 'template-b',
+    code: 'B',
+    name: 'Template B',
+    exercises: [{ ...exercise('slot-b'), exerciseId: sharedDefinition.id, name: sharedDefinition.name }],
+  }
+  const templateD: TrainingTemplate = {
+    id: 'template-d',
+    code: 'D',
+    name: 'Template D',
+    exercises: [{ ...exercise('slot-d'), exerciseId: sharedDefinition.id, name: sharedDefinition.name }],
+  }
+  const historySnapshot = structuredClone([templateB, templateD])
+
+  const nextTemplateD = {
+    ...templateD,
+    exercises: replaceTemplateExerciseDefinition(templateD.exercises, 'slot-d', replacementDefinition),
+  }
+
+  strictEqual(templateB.exercises[0].exerciseId, sharedDefinition.id)
+  strictEqual(nextTemplateD.exercises[0].id, 'slot-d')
+  strictEqual(nextTemplateD.exercises[0].exerciseId, replacementDefinition.id)
+  strictEqual(nextTemplateD.exercises[0].name, replacementDefinition.name)
+  strictEqual(nextTemplateD.exercises[0].equipmentSensitive, true)
+  deepStrictEqual([templateB, templateD], historySnapshot)
+  deepStrictEqual(sharedDefinition, {
+    id: 'definition-a',
+    name: 'Synthetic shared definition',
+    equipmentSensitive: false,
+  })
 })

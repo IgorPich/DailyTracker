@@ -7,14 +7,14 @@ import {
   deleteWorkout as deleteWorkoutFromHistory,
   findWorkoutById,
   renameGymLocation as renameGymLocationInData,
-  replaceTrainingTemplate,
   updateWorkout as updateWorkoutInHistory,
   upsertDailyEntry as upsertDailyEntryInList,
 } from '@greekgod/core'
 import type { AppData, DailyEntry, ExerciseDefinition, Settings, TrainingTemplate, Workout, WorkoutExercise } from '../types'
 import { appDataStore } from '../services/appDataStore'
-import { canonicalExerciseId, normalizeExerciseName, registerExerciseDefinition, renameExerciseDefinition, resolveTemplateExerciseId } from '../utils/exerciseIdentity'
+import { registerExerciseDefinition, renameExerciseDefinition } from '../utils/exerciseIdentity'
 import { createInitialData } from '../utils/storage'
+import { updateTemplateAndLibrary } from '../utils/templateIdentity'
 
 interface AppContextValue {
   data: AppData
@@ -69,59 +69,6 @@ const attachWorkoutExerciseIdentities = (
     return { ...exercise, exerciseId: explicitId }
   })
   return { library: nextLibrary, exercises: nextExercises }
-}
-
-const updateTemplateAndLibrary = (current: AppData, template: TrainingTemplate) => {
-  const previousTemplate = current.templates.find((item) => item.id === template.id)
-  let library = current.exerciseLibrary
-  const changedDefinitions = new Set<string>()
-
-  const exercises = template.exercises.map((exercise) => {
-    const previous = previousTemplate?.exercises.find((item) => item.id === exercise.id)
-    const exerciseId = resolveTemplateExerciseId(exercise)
-    if (!exerciseId) return exercise
-
-    const sameIdentity = previous?.exerciseId === exerciseId
-    if (!library.some((definition) => definition.id === exerciseId)) {
-      if (sameIdentity) return exercise
-      library = registerExerciseDefinition(library, {
-        id: exerciseId,
-        name: exercise.name.trim().replace(/\s+/g, ' '),
-        equipmentSensitive: Boolean(exercise.equipmentSensitive),
-      })
-    }
-
-    const definition = library.find((item) => item.id === exerciseId)!
-    const nextName = exercise.name.trim().replace(/\s+/g, ' ')
-    const sensitivityChanged = sameIdentity && Boolean(exercise.equipmentSensitive) !== definition.equipmentSensitive
-    const nameChanged = sameIdentity && normalizeExerciseName(nextName) !== normalizeExerciseName(previous.name)
-    if (nameChanged || sensitivityChanged) {
-      library = renameExerciseDefinition(library, exerciseId, nameChanged ? nextName : definition.name, Boolean(exercise.equipmentSensitive))
-      changedDefinitions.add(exerciseId)
-    }
-    const resolved = library.find((item) => item.id === exerciseId)!
-    return {
-      ...exercise,
-      exerciseId,
-      name: sameIdentity ? nextName : resolved.name,
-      equipmentSensitive: resolved.equipmentSensitive,
-    }
-  })
-
-  const replacedTemplates = replaceTrainingTemplate(
-    current.templates,
-    { ...structuredClone(template), exercises },
-  )
-  const templates = replacedTemplates.map((item) => ({
-    ...item,
-    exercises: item.exercises.map((exercise) => {
-      const exerciseId = canonicalExerciseId(exercise)
-      if (!exerciseId || !changedDefinitions.has(exerciseId)) return exercise
-      const definition = library.find((candidate) => candidate.id === exerciseId)!
-      return { ...exercise, name: definition.name, equipmentSensitive: definition.equipmentSensitive }
-    }),
-  }))
-  return { library, templates }
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
