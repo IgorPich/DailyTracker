@@ -12,7 +12,7 @@
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "npm run test:identity && npm run test:progress-analytics && npm run test:dev-storage && npm run test:storage && npm run test:windows-lifecycle",
     "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
-    "test:progress-analytics": "node --experimental-strip-types scripts/progress-exposure-history.test.ts",
+    "test:progress-analytics": "node --experimental-strip-types scripts/progress-exposure-history.test.ts && node --experimental-strip-types --test scripts/coach-report-progress.test.ts",
     "test:dev-storage": "node scripts/development-storage-config.test.mjs",
     "test:storage": "node --experimental-strip-types --experimental-sqlite scripts/storage/run-storage-tests.ts",
     "test:windows-lifecycle": "node scripts/windows-lifecycle.test.mjs",

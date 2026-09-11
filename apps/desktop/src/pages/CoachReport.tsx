@@ -22,11 +22,9 @@ import { useToast } from '../context/ToastContext'
 import { savePngDataUrl } from '../services/fileService'
 import { average, entriesBetween, formatInteger, formatNumber, latestMeasurement, signed, waistChange, weightChartData, windowFor, workoutsBetween } from '../utils/calculations'
 import { formatLongDate, formatShortDate, isoToday, parseDate } from '../utils/date'
-import { exerciseDefinitionFor } from '../utils/exerciseIdentity'
 import { coachReportSelection } from '../adapters/coachReportSelection'
 import { phaseLabel } from '../utils/labels'
-import { exerciseOccurrencesByWorkout } from '../utils/workoutData'
-import { compareExercises, formatGymName, formatSet, getBestSet } from '../utils/workoutProgress'
+import { formatGymName, formatSet } from '../utils/workoutProgress'
 
 type Period = '7' | '14' | 'custom'
 
@@ -85,36 +83,11 @@ export function CoachReport() {
   const waistData = useMemo(() => periodEntries.filter((entry) => typeof entry.waist === 'number').map((entry) => ({ date: entry.date, label: entry.date.slice(5).replace('-', '.'), waist: entry.waist })), [periodEntries])
 
   const selection = useMemo(() => coachReportSelection(data, range.from, range.to), [data, range.from, range.to])
-  const exerciseRows = selection.selectedExercises.map(({ definition }) => {
-    const occurrences = exerciseOccurrencesByWorkout(
-      [...data.workouts]
-        .filter((workout) => workout.date <= range.to)
-        .sort((a, b) => b.date.localeCompare(a.date)),
-      definition.id,
-      data.exerciseLibrary,
-      (exercise) => Boolean(exerciseDefinitionFor(data.exerciseLibrary, exercise)?.equipmentSensitive || exercise.equipmentSensitive),
-    )
-    const current = occurrences[0]
-    const previous = occurrences[1]
-    const currentForComparison = current ? {
-      ...current.exercise,
-      equipmentSensitive: Boolean(exerciseDefinitionFor(data.exerciseLibrary, current.exercise)?.equipmentSensitive || current.exercise.equipmentSensitive),
-    } : undefined
-    const previousForComparison = previous ? {
-      ...previous.exercise,
-      equipmentSensitive: Boolean(exerciseDefinitionFor(data.exerciseLibrary, previous.exercise)?.equipmentSensitive || previous.exercise.equipmentSensitive),
-    } : undefined
-    return {
-      exerciseId: definition.id,
-      label: definition.name,
-      short: definition.name,
-      current,
-      previous,
-      currentSet: current ? getBestSet(current.exercise) : undefined,
-      previousSet: previous ? getBestSet(previous.exercise) : undefined,
-      change: compareExercises(currentForComparison, previousForComparison, current?.workout.gymLocation, previous?.workout.gymLocation),
-    }
-  })
+  const exerciseRows = selection.selectedExercises.map((selected) => ({
+    ...selected,
+    label: selected.definition.name,
+    short: selected.definition.name,
+  }))
 
   const thresholds = data.settings.trendThresholds
   const weeklyStatus = weightDelta === undefined ? 'Za mało danych' : weightDelta < thresholds.lossBelow ? 'Masa spada' : weightDelta <= thresholds.stableUpper ? 'Masa stabilna' : weightDelta <= thresholds.slowGainUpper ? 'Powolny wzrost masy' : 'Szybki wzrost masy'
