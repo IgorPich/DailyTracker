@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "human-coach-local-context",
+  "description": "Read only the separate HumanCoach files; saves use the existing Store plugin",
+  "windows": ["main"],
+  "permissions": [
+    { "identifier": "fs:allow-exists", "allow": [
+      { "path": "$APPDATA/greekgod-human-coach.v1.json" },
+      { "path": "$APPDATA/greekgod-human-coach.dev.v1.json" }
+    ] },
+    { "identifier": "fs:allow-read-text-file", "allow": [
+      { "path": "$APPDATA/greekgod-human-coach.v1.json" },
+      { "path": "$APPDATA/greekgod-human-coach.dev.v1.json" }
+    ] }
+  ]
+}

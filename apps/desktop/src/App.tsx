@@ -16,9 +16,10 @@ const Journal = lazy(async () => ({ default: (await import('./pages/Journal')).J
 const Training = lazy(async () => ({ default: (await import('./pages/Training')).Training }))
 const Progress = lazy(async () => ({ default: (await import('./pages/Progress')).Progress }))
 const CoachReport = lazy(async () => ({ default: (await import('./pages/CoachReport')).CoachReport }))
+const HumanCoach = lazy(async () => ({ default: (await import('./pages/HumanCoach')).HumanCoach }))
 const Settings = lazy(async () => ({ default: (await import('./pages/Settings')).Settings }))
 
-export type View = 'dashboard' | 'training' | 'progress' | 'journal' | 'report' | 'settings'
+export type View = 'dashboard' | 'training' | 'progress' | 'journal' | 'report' | 'settings' | 'human-coach'
 
 const navItems = [
   { id: 'dashboard' as const, label: 'Panel', mobileLabel: 'Panel', icon: BarChart3 },
@@ -56,6 +57,9 @@ export default function App() {
               <Icon size={19} /> <span>{label}</span>
             </button>
           ))}
+        <button className={view === 'human-coach' ? 'active' : ''} onClick={() => navigate('human-coach')}>
+          <BookOpen size={19} /> <span>Kontekst trenera</span>
+        </button>
         </nav>
         <button className={`settings-link ${view === 'settings' ? 'active' : ''}`} onClick={() => navigate('settings')}>
           <SettingsIcon size={19} /> <span>Ustawienia</span>
@@ -78,6 +82,7 @@ export default function App() {
             {view === 'progress' && <Progress onOpenWorkout={(id) => { setRequestedWorkoutId(id); setView('training'); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />}
             {view === 'journal' && <Journal />}
             {view === 'report' && <CoachReport />}
+            {view === 'human-coach' && <HumanCoach />}
             {view === 'settings' && <Settings />}
           </Suspense>
         </main>

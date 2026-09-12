@@ -9,9 +9,9 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @greekgod/desktop --",
-    "build": "npm run build --workspace @greekgod/core && npm run build --workspace @greekgod/analytics && npm run build --workspace @greekgod/desktop && npm run build --workspace @greekgod/mobile",
-    "typecheck": "npm run typecheck --workspace @greekgod/core && npm run typecheck --workspace @greekgod/analytics && npm run typecheck --workspace @greekgod/desktop && npm run typecheck --workspace @greekgod/mobile",
-    "test": "npm run typecheck && npm test --workspace @greekgod/core && npm test --workspace @greekgod/analytics && npm test --workspace @greekgod/desktop && npm test --workspace @greekgod/mobile",
+    "build": "npm run build --workspace @greekgod/core && npm run build --workspace @greekgod/analytics && npm run build --workspace @greekgod/human-coach && npm run build --workspace @greekgod/desktop && npm run build --workspace @greekgod/mobile",
+    "typecheck": "npm run typecheck --workspace @greekgod/core && npm run typecheck --workspace @greekgod/analytics && npm run typecheck --workspace @greekgod/human-coach && npm run typecheck --workspace @greekgod/desktop && npm run typecheck --workspace @greekgod/mobile",
+    "test": "npm run typecheck && npm test --workspace @greekgod/core && npm test --workspace @greekgod/analytics && npm test --workspace @greekgod/human-coach && npm test --workspace @greekgod/desktop && npm test --workspace @greekgod/mobile",
     "test:identity": "npm run test:identity --workspace @greekgod/desktop",
     "test:dev-storage": "npm run test:dev-storage --workspace @greekgod/desktop",
     "audit:store": "npm run audit:store --workspace @greekgod/desktop",
