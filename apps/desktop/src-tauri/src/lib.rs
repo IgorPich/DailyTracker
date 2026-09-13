@@ -1,5 +1,8 @@
 use tauri::{RunEvent, WindowEvent};
 
+#[cfg(windows)]
+mod desktop_instance;
+
 #[cfg(any(feature = "native-sqlite-shadow", feature = "native-sqlite-authority"))]
 mod native_storage_shadow {
     use greekgod_storage::{
@@ -316,6 +319,13 @@ mod native_storage_shadow {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    #[cfg(windows)]
+    let _instance = match desktop_instance::acquire(&context.config().identifier) {
+        Ok(Some(guard)) => guard,
+        Ok(None) => return, // Normal double launch: no window, storage initialization or error dialog.
+        Err(error) => { eprintln!("Cannot acquire Desktop instance guard: {error}"); return; }
+    };
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -334,7 +344,7 @@ pub fn run() {
         native_storage_shadow::native_authority_backup_before_import
     ]);
     let app = builder
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("failed to initialize GreekGod");
 
     app.run(|app_handle, event| {

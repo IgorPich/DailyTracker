@@ -1,0 +1,7 @@
+{
+  "productName": "GreekGod HumanCoach Smoke",
+  "identifier": "com.igorpich.formlog.humancoachsmoke",
+  "build": { "beforeBuildCommand": "npm run build -- --mode human-coach-smoke" },
+  "app": { "windows": [{ "label": "main", "title": "GreekGod HumanCoach Smoke" }] },
+  "bundle": { "active": false }
+}
