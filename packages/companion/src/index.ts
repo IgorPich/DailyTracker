@@ -1,0 +1,5 @@
+export type { CompanionModel, TrainerExtractionRequest } from './ports/companionModel.ts'
+export { FakeCompanionModel } from './model/fakeCompanionModel.ts'
+export { proposeCoachDraftsFromNote } from './extraction/proposeCoachDraftsFromNote.ts'
+export type { ProposeCoachDraftsInput } from './extraction/proposeCoachDraftsFromNote.ts'
+export type { ProposedCoachDraft, ProposedDraftFields, ProposedTarget } from './extraction/proposal.ts'

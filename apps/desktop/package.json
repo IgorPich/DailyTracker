@@ -35,6 +35,7 @@
     "tauri:build": "tauri build --features native-sqlite-production-authority"
   },
   "dependencies": {
+    "@greekgod/companion": "*",
     "@greekgod/human-coach": "*",
     "@greekgod/analytics": "*",
     "@greekgod/core": "*",
