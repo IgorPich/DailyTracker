@@ -1,6 +1,14 @@
 import type { ProposedDraftFields } from '../extraction/proposal.ts'
 
 const fail = (): never => { throw new Error('Invalid Companion proposal response') }
+const array = (value: unknown, limit: number): unknown[] => {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || value.length > limit) return fail()
+  const keys = Reflect.ownKeys(value)
+  if (keys.length !== value.length + 1 || keys.some((key) => key !== 'length'
+    && (typeof key !== 'string' || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length
+      || !('value' in Object.getOwnPropertyDescriptor(value, key)!)))) return fail()
+  return value
+}
 const object = (value: unknown, required: string[], optional: string[] = []): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return fail()
   const keys = Reflect.ownKeys(value)
@@ -20,16 +28,15 @@ const link = (value: unknown, allowed: ReadonlySet<string>) => {
 
 /** Whole-response rejection. No coercion, unknown-field stripping, ID repair or partial success. */
 export const validateModelOutput = (raw: unknown, allowed: ReadonlySet<string>): ProposedDraftFields[] => {
-  if (!Array.isArray(raw) || raw.length > 20) return fail()
-  for (const value of raw) {
+  const response = array(raw, 20)
+  for (const value of response) {
     // Inspect kind through a data descriptor, before reading other properties.
     const kind = value && typeof value === 'object' ? Object.getOwnPropertyDescriptor(value, 'kind')?.value : undefined
     if (kind === 'TASK' || kind === 'DECISION') {
       const item = kind === 'TASK' ? object(value, ['kind', 'title', 'exerciseIds'], ['description']) : object(value, ['kind', 'text', 'exerciseIds'])
       text(kind === 'TASK' ? item.title : item.text)
       if (Object.prototype.hasOwnProperty.call(item, 'description')) text(item.description)
-      if (!Array.isArray(item.exerciseIds) || item.exerciseIds.length > 1) fail()
-      for (const id of item.exerciseIds as unknown[]) link(id, allowed)
+      for (const id of array(item.exerciseIds, 1)) link(id, allowed)
     } else if (kind === 'TARGET') {
       const item = object(value, ['kind', 'title', 'specification'])
       text(item.title)
@@ -47,5 +54,5 @@ export const validateModelOutput = (raw: unknown, allowed: ReadonlySet<string>):
       } else fail()
     } else fail()
   }
-  return structuredClone(raw) as ProposedDraftFields[]
+  return structuredClone(response) as ProposedDraftFields[]
 }

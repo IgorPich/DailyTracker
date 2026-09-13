@@ -14,7 +14,7 @@
     "test:training-time": "node scripts/training-time-summary.test.mjs",
     "test:picker-ux": "node scripts/exercise-picker-ux.test.mjs",
     "test:weight-window": "node scripts/weight-window.test.mjs",
-    "test:human-coach": "node --experimental-strip-types --test scripts/human-coach-storage.test.ts",
+    "test:human-coach": "node --experimental-strip-types --test scripts/human-coach-storage.test.ts scripts/coach-proposal-review.test.ts",
     "test:human-coach:native": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
     "tauri:human-coach-smoke:build": "tauri build --debug --no-bundle --config src-tauri/tauri.human-coach-smoke.conf.json",
     "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",

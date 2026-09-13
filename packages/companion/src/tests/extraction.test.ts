@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
+import { readFileSync, readdirSync } from 'node:fs'
 import { FakeCompanionModel, proposeCoachDraftsFromNote, type ProposeCoachDraftsInput } from '../index.ts'
 
 const input = (): ProposeCoachDraftsInput => {
@@ -77,4 +78,30 @@ test('all supported target kinds and decision accepted with closed units and sco
     { kind: 'TARGET', title: 'Synthetic', specification: { type: 'WAIST', scope: 'PERSON', value: 80, unit: 'cm' } },
   ]
   assert.deepEqual((await proposeCoachDraftsFromNote(query, new FakeCompanionModel(output))).map((item) => item.fields), output)
+})
+
+test('closed structured data rejects accessors, sparse arrays and extra array fields', async () => {
+  let getterCalls = 0
+  const accessor = { kind: 'TASK', get title() { getterCalls++; return 'Bad' }, exerciseIds: [] }
+  const extraArray = Object.assign([task], { sourceNoteId: 'spoof' })
+  for (const raw of [[accessor], extraArray, new Array(1), Array.from({ length: 21 }, () => task)]) {
+    await assert.rejects(proposeCoachDraftsFromNote(input(), { propose: async () => raw }))
+  }
+  assert.equal(getterCalls, 0)
+})
+
+test('Companion runtime has no persistence, platform, commands or reverse dependencies', () => {
+  for (const dir of ['extraction', 'model', 'ports', 'validation']) {
+    const base = new URL(`../${dir}/`, import.meta.url)
+    for (const file of readdirSync(base)) {
+      const source = readFileSync(new URL(file, base), 'utf8')
+      assert.doesNotMatch(source, /from ['"](?:react|@tauri|node:|@greekgod\/(?:core|analytics))/)
+      assert.doesNotMatch(source, /\b(?:fetch|invoke|localStorage|createHumanCoach|acceptCoachItem|createDraftFromNote)\b/)
+      for (const line of source.split('\n').filter((line) => line.includes("from '@greekgod/human-coach'"))) assert.match(line, /^import type /)
+    }
+  }
+  for (const pkg of ['core', 'analytics', 'human-coach']) {
+    const manifest = readFileSync(new URL(`../../../${pkg}/package.json`, import.meta.url), 'utf8')
+    assert.doesNotMatch(manifest, /@greekgod\/companion/)
+  }
 })

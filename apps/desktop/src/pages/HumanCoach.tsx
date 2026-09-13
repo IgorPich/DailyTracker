@@ -4,6 +4,10 @@ import { PageHeader } from '../components/PageHeader'
 import { ExercisePicker } from '../components/ExercisePicker'
 import { useApp } from '../context/AppContext'
 import { humanCoachRepository } from '../services/humanCoachStorage'
+import { proposeCoachDraftsFromNote, type ProposedCoachDraft, type ProposedDraftFields } from '@greekgod/companion'
+import { trainerProposalModel } from '../services/trainerProposalModel'
+import { reviewedProposalCommand } from '../utils/coachProposalReview'
+import { exerciseSearchOptions } from '../utils/exerciseSearch'
 
 const kindLabels = { NOTE: 'Notatka źródłowa', TASK: 'Zadanie', TARGET: 'Cel', DECISION: 'Decyzja' } as const
 const taskLabels = { OPEN: 'Otwarte', COMPLETED: 'Ukończone', CANCELLED: 'Anulowane' } as const
@@ -30,6 +34,9 @@ export function HumanCoach() {
   const [value, setValue] = useState('')
   const [minimum, setMinimum] = useState('')
   const [maximum, setMaximum] = useState('')
+  const [proposals, setProposals] = useState<ProposedCoachDraft[]>([])
+  const [reviewing, setReviewing] = useState<ProposedCoachDraft>()
+  const [proposalMessage, setProposalMessage] = useState('')
 
   const run = async (operation: () => Promise<HumanCoachContext>) => {
     if (busyRef.current) return false
@@ -54,6 +61,17 @@ export function HumanCoach() {
       },
     }
     const saved = await run(() => {
+      if (reviewing) {
+        if (kind === 'NOTE') throw new Error('Propozycja nie może tworzyć notatki źródłowej')
+        const edited: ProposedDraftFields = kind === 'TASK'
+          ? { kind, title, ...(text.trim() ? { description: text } : {}), exerciseIds: exerciseId ? [exerciseId] : [] }
+          : kind === 'DECISION' ? { kind, text, exerciseIds: exerciseId ? [exerciseId] : [] }
+          : { kind, title, specification: targetType === 'REP_RANGE'
+            ? { type: 'REP_RANGE', scope: 'EXERCISE', exerciseId: exerciseId || null, min: Number(minimum), max: Number(maximum), unit: 'reps' }
+            : targetType === 'BODYWEIGHT' ? { type: 'BODYWEIGHT', scope: 'PERSON', value: Number(value), unit: 'kg' }
+            : { type: 'WAIST', scope: 'PERSON', value: Number(value), unit: 'cm' } }
+        return service.createDraftFromNote(reviewedProposalCommand(reviewing, edited, command.id, command.provenance.createdAt))
+      }
       if (kind === 'NOTE') return noteSource === 'TRAINER_TEXT'
         ? service.ingestTrainerText({ id: command.id, text, createdAt: command.provenance.createdAt, ...(sourceReference.trim() ? { sourceDescription: sourceReference } : {}) })
         : service.createCoachNote({ ...command, text })
@@ -73,14 +91,51 @@ export function HumanCoach() {
           : { type: 'WAIST', scope: 'PERSON', value: Number(value), unit: 'cm' }
       return sourceNoteId ? service.createDraftFromNote({ ...source, kind, title, specification }) : service.createCoachTarget({ ...command, title, specification })
     })
-    if (saved) { setTitle(''); setText(''); setValue(''); setMinimum(''); setMaximum('') }
+    if (saved) {
+      setTitle(''); setText(''); setValue(''); setMinimum(''); setMaximum('')
+      if (reviewing) { setProposals((items) => items.filter((item) => item !== reviewing)); setReviewing(undefined) }
+    }
   }
   const notes = context?.items.filter((item) => item.kind === 'NOTE') ?? []
   const draftFrom = (id: string, nextKind: 'TASK' | 'TARGET' | 'DECISION') => {
     if ((title || text || value || minimum || maximum) && !window.confirm('Otworzyć nowy szkic i odrzucić niezapisane pola formularza?')) return
-    setKind(nextKind); setSourceNoteId(id); setTitle(''); setText(''); setExerciseId('')
+    setReviewing(undefined); setKind(nextKind); setSourceNoteId(id); setTitle(''); setText(''); setExerciseId('')
     setSourceReference(''); setValue(''); setMinimum(''); setMaximum(''); setTargetType('REP_RANGE')
     document.getElementById('coach-draft-form')?.scrollIntoView({ block: 'start' })
+  }
+  const requestProposals = async (noteId: string) => {
+    if (busyRef.current) return
+    const note = notes.find((item) => item.id === noteId)
+    if (!note) return
+    busyRef.current = true; setBusy(true); setError(''); setProposalMessage('')
+    try {
+      const next = await proposeCoachDraftsFromNote({ note,
+        exercises: library.current,
+        allowedExerciseIds: exerciseSearchOptions(library.current).map((option) => option.definition.id),
+      }, trainerProposalModel)
+      setProposals((items) => [...items, ...next])
+      setProposalMessage(next.length ? 'Propozycje demonstracyjne — nic nie zostało zapisane.' : 'Brak propozycji.')
+    } catch (error) { setError(error instanceof Error ? error.message : 'Nie udało się pobrać propozycji') }
+    finally { busyRef.current = false; setBusy(false) }
+  }
+  const editProposal = (proposal: ProposedCoachDraft) => {
+    if ((title || text || value || minimum || maximum) && !window.confirm('Otworzyć propozycję i odrzucić niezapisane pola formularza?')) return
+    const fields = proposal.fields
+    setReviewing(proposal); setKind(fields.kind); setSourceNoteId(proposal.sourceNoteId)
+    setTitle('title' in fields ? fields.title : '')
+    setText(fields.kind === 'DECISION' ? fields.text : fields.kind === 'TASK' ? fields.description ?? '' : '')
+    setSourceReference(''); setExerciseId(''); setValue(''); setMinimum(''); setMaximum('')
+    if (fields.kind === 'TARGET') {
+      const spec = fields.specification
+      setTargetType(spec.type)
+      if (spec.type === 'REP_RANGE') { setExerciseId(spec.exerciseId ?? ''); setMinimum(String(spec.min)); setMaximum(String(spec.max)) }
+      else setValue(String(spec.value))
+    } else setExerciseId(fields.exerciseIds[0] ?? '')
+    document.getElementById('coach-draft-form')?.scrollIntoView({ block: 'start' })
+  }
+  const rejectProposal = (proposal: ProposedCoachDraft) => {
+    setProposals((items) => items.filter((item) => item !== proposal))
+    if (reviewing === proposal) { setReviewing(undefined); setTitle(''); setText(''); setValue(''); setMinimum(''); setMaximum(''); setExerciseId(''); setSourceNoteId('') }
   }
   const exerciseLabel = (id: string) => {
     const matches = data.exerciseLibrary.filter((definition) => definition.id === id)
@@ -95,11 +150,12 @@ export function HumanCoach() {
     <form id="coach-draft-form" onSubmit={submit} className="human-coach-form">
       <fieldset disabled={busy || !context}>
         <legend>{kind === 'NOTE' ? 'Zapisz niezmienną notatkę źródłową' : 'Nowy szkic — wymaga osobnego zatwierdzenia'}</legend>
-        <label>Rodzaj<select value={kind} onChange={(event) => setKind(event.target.value as HumanCoachItem['kind'])}>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        {reviewing && <p>Przegląd propozycji fake: popraw pola, a następnie jawnie przyjmij jako DRAFT. To nie jest zatwierdzenie ustalenia.</p>}
+        <label>Rodzaj<select value={kind} onChange={(event) => setKind(event.target.value as HumanCoachItem['kind'])}>{Object.entries(kindLabels).filter(([value]) => !reviewing || value !== 'NOTE').map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         {(kind === 'TASK' || kind === 'TARGET') && <label>Tytuł<input required value={title} onChange={(event) => setTitle(event.target.value)} /></label>}
         {kind !== 'TARGET' && <label>{kind === 'NOTE' ? 'Wklej wiadomość / zalecenia trenera' : kind === 'TASK' ? 'Opis (opcjonalnie)' : 'Treść decyzji — wpisz ręcznie'}<textarea required={kind !== 'TASK'} rows={4} value={text} onChange={(event) => setText(event.target.value)} /></label>}
         {kind === 'NOTE' ? <label>Sposób wprowadzenia<select value={noteSource} onChange={(event) => setNoteSource(event.target.value as typeof noteSource)}><option value="MANUAL">Wpisano ręcznie</option><option value="TRAINER_TEXT">Wklejono tekst trenera</option></select></label>
-          : <label>Na podstawie notatki<select value={sourceNoteId} onChange={(event) => setSourceNoteId(event.target.value)}><option value="">Ręczne ustalenie bez notatki źródłowej</option>{notes.map((note) => <option key={note.id} value={note.id}>{note.text.slice(0, 60)} ({note.id})</option>)}</select></label>}
+          : <label>Na podstawie notatki<select disabled={!!reviewing} value={sourceNoteId} onChange={(event) => setSourceNoteId(event.target.value)}><option value="">Ręczne ustalenie bez notatki źródłowej</option>{notes.map((note) => <option key={note.id} value={note.id}>{note.text.slice(0, 60)} ({note.id})</option>)}</select></label>}
         {kind !== 'NOTE' && sourceNoteId && <p>Źródło: <a href={`#coach-${sourceNoteId}`}>{sourceNoteId}</a>. Wpisz interpretację ręcznie. Zapis nie zatwierdza ustalenia.</p>}
         {(kind === 'NOTE' || !sourceNoteId) && <label>Źródło / odnośnik (opcjonalnie)<input value={sourceReference} onChange={(event) => setSourceReference(event.target.value)} /></label>}
         {kind === 'TARGET' && <label>Typ celu<select value={targetType} onChange={(event) => setTargetType(event.target.value as typeof targetType)}><option value="REP_RANGE">Zakres powtórzeń</option><option value="BODYWEIGHT">Masa ciała (kg)</option><option value="WAIST">Talia (cm)</option></select></label>}
@@ -112,9 +168,30 @@ export function HumanCoach() {
         {kind === 'TARGET' && (targetType === 'REP_RANGE'
           ? <><label>Od<input required type="number" min="1" step="1" value={minimum} onChange={(event) => setMinimum(event.target.value)} /></label><label>Do<input required type="number" min="1" step="1" value={maximum} onChange={(event) => setMaximum(event.target.value)} /></label></>
           : <label>Wartość<input required type="number" min="0.01" step="any" value={value} onChange={(event) => setValue(event.target.value)} /></label>)}
-        <button className="button button--primary" type="submit" disabled={kind === 'TARGET' && targetType === 'REP_RANGE' && !exerciseId}>{kind === 'NOTE' ? 'Zapisz notatkę źródłową' : 'Zapisz szkic'}</button>
+        <button className="button button--primary" type="submit" disabled={kind === 'TARGET' && targetType === 'REP_RANGE' && !exerciseId}>{reviewing ? 'Przyjmij propozycję jako szkic (DRAFT)' : kind === 'NOTE' ? 'Zapisz notatkę źródłową' : 'Zapisz szkic'}</button>
+        {reviewing && <button type="button" className="button button--ghost" onClick={() => rejectProposal(reviewing)}>Odrzuć propozycję bez zapisu</button>}
       </fieldset>
     </form>
+    <section aria-label="Nietrwałe propozycje fake">
+      <p>Fake model — demonstracja przeglądu, bez analizy tekstu. Propozycje znikają po opuszczeniu ekranu; nie są zapisanymi szkicami.</p>
+      {proposalMessage && <p role="status">{proposalMessage}</p>}
+      {proposals.map((proposal, index) => {
+        const fields = proposal.fields
+        const ids = fields.kind === 'TARGET' ? fields.specification.type === 'REP_RANGE' && fields.specification.exerciseId ? [fields.specification.exerciseId] : [] : fields.exerciseIds
+        return <article className="human-coach-item" key={index}>
+          <h3>Propozycja: {kindLabels[fields.kind]}</h3>
+          <a href={`#coach-${proposal.sourceNoteId}`}>Źródłowa notatka: {proposal.sourceNoteId}</a>
+          {'title' in fields && <p>{fields.title}</p>}
+          {fields.kind === 'TASK' && fields.description && <p>{fields.description}</p>}
+          {fields.kind === 'DECISION' && <p>{fields.text}</p>}
+          {fields.kind === 'TARGET' && <p>{fields.specification.type === 'REP_RANGE' ? `${fields.specification.min}–${fields.specification.max} powt.` : `${fields.specification.value} ${fields.specification.unit}`}</p>}
+          {ids.map((id) => <p key={id}>{exerciseLabel(id)}</p>)}
+          {!ids.length && (fields.kind !== 'TARGET' || fields.specification.type === 'REP_RANGE') && <p>Ćwiczenie niewskazane — bez zgadywania. {fields.kind === 'TARGET' ? 'Wybierz je przed przyjęciem celu.' : 'Możesz wskazać je w edycji lub pozostawić bez powiązania.'}</p>}
+          <button type="button" className="button button--secondary" disabled={busy} onClick={() => editProposal(proposal)}>Przejrzyj / edytuj i przyjmij…</button>
+          <button type="button" className="button button--ghost" disabled={busy} onClick={() => rejectProposal(proposal)}>Odrzuć</button>
+        </article>
+      })}
+    </section>
     <section className="human-coach-items" aria-label="Zapisany kontekst trenera">
       {context?.items.length === 0 && <p>Brak zapisanych ustaleń.</p>}
       {context?.items.map((item) => <article className="human-coach-item" key={item.id} id={`coach-${item.id}`}>
@@ -127,6 +204,7 @@ export function HumanCoach() {
         <small>ID: {item.id} · Utworzono: {item.createdAt} · {item.provenance.sourceType === 'MANUAL' ? 'Wpis ręczny' : 'Tekst trenera'}{item.provenance.sourceReference && ` · Źródło: ${item.provenance.sourceReference}`}</small>
         {item.provenance.sourceNoteId && <a href={`#coach-${item.provenance.sourceNoteId}`}>Notatka źródłowa: {item.provenance.sourceNoteId}</a>}
         {item.kind === 'NOTE' && <div>{(['TASK', 'TARGET', 'DECISION'] as const).map((draftKind) => <button key={draftKind} type="button" className="button button--ghost" disabled={busy} onClick={() => draftFrom(item.id, draftKind)}>Utwórz szkic: {kindLabels[draftKind]}</button>)}</div>}
+        {item.kind === 'NOTE' && item.provenance.sourceType === 'TRAINER_TEXT' && <button type="button" className="button button--ghost" disabled={busy} onClick={() => void requestProposals(item.id)}>Zaproponuj szkice (fake — demonstracja)</button>}
         {item.kind !== 'NOTE' && item.acceptance.state === 'DRAFT' && <button className="button button--ghost" disabled={busy} onClick={() => { if (window.confirm('Odrzucić szkic? Notatka źródłowa pozostanie zachowana.')) void run(() => service.discardCoachDraft({ id: item.id })) }}>Odrzuć szkic</button>}
         {item.acceptance.state === 'AUTHORITATIVE' && <small>Zatwierdzono: {item.acceptance.acceptedAt}</small>}
         {item.acceptance.state === 'DRAFT' && <button className="button button--secondary" disabled={busy} onClick={() => void run(() => service.acceptCoachItem({ id: item.id, acceptedAt: new Date().toISOString() }))}>Zatwierdź jako ustalenie trenera</button>}
