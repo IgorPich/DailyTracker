@@ -26,6 +26,7 @@ import {
 import type { View } from '../App'
 import { EmptyState } from '../components/EmptyState'
 import { WeightTooltip } from '../components/ChartTooltip'
+import { TrainingTimeSummaryCard } from '../components/TrainingTimeSummaryCard'
 import { useApp } from '../context/AppContext'
 import type { Phase } from '../types'
 import {
@@ -186,6 +187,8 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
           </article>
         </aside>
       </section>
+
+      <TrainingTimeSummaryCard workouts={data.workouts} today={today} />
 
       <article className="card waist-card-v2">
         <div className="card-heading"><div><span className="section-kicker">POMIARY</span><h2>Obwód talii</h2></div><strong>{formatNumber(latestWaist?.waist)} <small>cm</small></strong></div>

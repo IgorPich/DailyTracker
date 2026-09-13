@@ -1076,3 +1076,7 @@ body.report-screenshot-mode .report-sheet { border-radius: 8px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+.training-time-card { padding: 20px; }
+.training-time-card p, .training-time-card small, .training-time-metrics dt { color: var(--muted); }
+.training-time-dates, .training-time-metrics { display: flex; flex-wrap: wrap; gap: 20px; margin: 16px 0; }
+.training-time-metrics dd { margin: 6px 0 0; font-size: 1.25rem; font-weight: 600; }
