@@ -66,3 +66,5 @@ export {
 } from './workoutProgress.ts'
 export type { ProgressResult } from './workoutProgress.ts'
 export { DEFAULT_TEMPLATES, DESKTOP_DEFAULT_TEMPLATES } from './defaultTemplates.ts'
+export { prepareTemplateRepRange, changeTemplateRepRange, templateStateVersion } from './changeTemplateRepRange.ts'
+export type { TemplateRepRangePlan } from './changeTemplateRepRange.ts'

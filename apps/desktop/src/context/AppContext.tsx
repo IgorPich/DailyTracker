@@ -15,8 +15,11 @@ import { appDataStore } from '../services/appDataStore'
 import { registerExerciseDefinition, renameExerciseDefinition } from '../utils/exerciseIdentity'
 import { createInitialData } from '../utils/storage'
 import { updateTemplateAndLibrary } from '../utils/templateIdentity'
+import { DesktopDataCoordinator } from '../services/desktopDataCoordinator'
+import type { ConfirmedTrackingPersistence } from '../services/confirmedTrackingMutation'
 
 interface AppContextValue {
+  trackingCommands: ConfirmedTrackingPersistence
   data: AppData
   upsertDailyEntry: (entry: DailyEntry) => void
   deleteDailyEntry: (id: string) => void
@@ -72,7 +75,10 @@ const attachWorkoutExerciseIdentities = (
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData>(createInitialData)
+  const [data, publishData] = useState<AppData>(createInitialData)
+  const coordinator = useMemo(() => new DesktopDataCoordinator(data, appDataStore, publishData,
+    (error) => console.error('Nie udało się zapisać danych GreekGod.', error)), [])
+  const setData = coordinator.update
   const [hydrated, setHydrated] = useState(false)
   const [loadError, setLoadError] = useState(false)
 
@@ -81,7 +87,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void appDataStore.load()
       .then((stored) => {
         if (!active) return
-        setData(stored)
+        coordinator.initialize(stored)
+        void appDataStore.save(stored).catch((error) => console.error('Nie udało się zapisać danych GreekGod.', error))
         setHydrated(true)
       })
       .catch(() => {
@@ -91,11 +98,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (!hydrated) return
-    void appDataStore.save(data).catch((error) => console.error('Nie udało się zapisać danych GreekGod.', error))
-  }, [data, hydrated])
-
-  useEffect(() => {
     if (!hydrated || !appDataStore.loadIfChanged) return
     let active = true
     let polling = false
@@ -103,8 +105,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (polling) return
       polling = true
       try {
-        const changed = await appDataStore.loadIfChanged?.()
-        if (active && changed) setData(changed)
+        if (active) await coordinator.poll()
       } catch (error) {
         console.error('Nie udało się odświeżyć danych GreekGod po synchronizacji.', error)
       } finally {
@@ -120,6 +121,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppContextValue>(() => ({
     data,
+    trackingCommands: {
+      get supportsConfirmedTrackingMutations() { return coordinator.supportsConfirmedTrackingMutations },
+      changeTemplateRepRange: (plan) => coordinator.changeTemplateRepRange(plan),
+    },
     upsertDailyEntry: (entry) => {
       setData((current) => ({
         ...current,

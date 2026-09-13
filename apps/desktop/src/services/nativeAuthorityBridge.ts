@@ -1,4 +1,6 @@
 import type { AppData, AppDataStore } from '@greekgod/core'
+import { changeTemplateRepRange as applyRepRange, type TemplateRepRangePlan } from '@greekgod/core'
+import type { ConfirmedTrackingPersistence, TrackingMutationResult } from './confirmedTrackingMutation.ts'
 import { normalizeData } from '../utils/storage'
 import { jsonBoundaryValue, semanticJsonDifference } from './nativeStorageBridge'
 
@@ -59,7 +61,7 @@ const requiredSnapshot = (response: NativeAuthorityResponse): { data: AppData; r
   return { data: parsedAppData(response.data), revision: response.revision }
 }
 
-export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
+export class DevelopmentAuthoritativeAppDataStore implements AppDataStore, ConfirmedTrackingPersistence {
   private revision: number | undefined
   private initialization: Promise<AppData> | undefined
   private saveQueue: Promise<void> = Promise.resolve()
@@ -70,6 +72,46 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
     private readonly nativeBridge: NativeAuthorityBridge,
     private readonly options: { fallbackToLegacyOnBootstrapFailure?: boolean } = {},
   ) {}
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.saveQueue.catch(() => undefined).then(operation)
+    this.saveQueue = next.then(() => undefined, () => undefined)
+    return next
+  }
+
+  get supportsConfirmedTrackingMutations() { return this.revision !== undefined && !this.legacyFallback }
+
+  changeTemplateRepRange(plan: TemplateRepRangePlan): Promise<TrackingMutationResult> {
+    const confirmed = structuredClone(plan)
+    return this.enqueue(async () => {
+      if (!this.supportsConfirmedTrackingMutations) return { status: 'BLOCKED', message: 'Safe authoritative storage is required' }
+      try {
+        const current = requiredSnapshot(await this.nativeBridge.loadAuthority())
+        this.revision = current.revision
+        let desired: AppData
+        try { desired = applyRepRange(current.data, confirmed) }
+        catch { return { status: 'STALE', message: 'Target changed or is no longer valid; create a new preview' } }
+        let saved: { data: AppData; revision: number }
+        try {
+          saved = requiredSnapshot(await this.nativeBridge.replaceAuthority(desired, current.revision))
+        } catch {
+          // CAS can lose a race to Sync Service even inside the Desktop queue.
+          const latest = requiredSnapshot(await this.nativeBridge.loadAuthority())
+          this.revision = latest.revision
+          return latest.revision !== current.revision
+            ? { status: 'STALE', message: 'Authority changed during execution; refresh and preview again' }
+            : { status: 'FAILED', message: 'Persistence did not acknowledge the confirmed write' }
+        }
+        this.verifyExpected(desired, saved.data, 'confirmed template rep range')
+        this.revision = saved.revision
+        return { status: 'APPLIED', data: saved.data, receipt: {
+          action: confirmed.action, templateId: confirmed.templateId, templateExerciseId: confirmed.templateExerciseId,
+          exerciseId: confirmed.exerciseId, beforePrescription: confirmed.beforePrescription,
+          afterPrescription: confirmed.afterPrescription, appliedAt: new Date().toISOString(), resultingRevision: saved.revision,
+        } }
+      } catch { return { status: 'FAILED', message: 'Unable to verify authoritative persistence; refresh before retrying' } }
+    })
+  }
 
   private verifyExpected(expected: AppData, actual: AppData, operation: string) {
     const difference = semanticJsonDifference(jsonBoundaryValue(expected), jsonBoundaryValue(actual))
@@ -109,7 +151,7 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
   }
 
   async load(): Promise<AppData> {
-    await this.saveQueue.catch(() => undefined)
+    return this.enqueue(async () => {
     if (this.revision === undefined) {
       const initialized = await this.ensureInitialized()
       return this.legacyFallback ? this.legacy.load() : structuredClone(initialized)
@@ -117,11 +159,12 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
     const snapshot = requiredSnapshot(await this.nativeBridge.loadAuthority())
     this.revision = snapshot.revision
     return snapshot.data
+    })
   }
 
   save(data: AppData): Promise<void> {
     const desired = structuredClone(data)
-    const operation = this.saveQueue.catch(() => undefined).then(async () => {
+    return this.enqueue(async () => {
       await this.ensureInitialized()
       if (this.legacyFallback) {
         await this.legacy.save(desired)
@@ -134,13 +177,11 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
       this.verifyExpected(desired, snapshot.data, 'desktop write')
       this.revision = snapshot.revision
     })
-    this.saveQueue = operation
-    return operation
   }
 
   backupBeforeImport(data: AppData): Promise<void> {
     const expected = structuredClone(data)
-    const operation = this.saveQueue.catch(() => undefined).then(async () => {
+    return this.enqueue(async () => {
       await this.ensureInitialized()
       if (this.legacyFallback) {
         await this.legacy.backupBeforeImport(expected)
@@ -154,12 +195,10 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
       }
       this.revision = snapshot.revision
     })
-    this.saveQueue = operation
-    return operation
   }
 
   async loadIfChanged(): Promise<AppData | undefined> {
-    await this.saveQueue.catch(() => undefined)
+    return this.enqueue(async () => {
     await this.ensureInitialized()
     if (this.legacyFallback) return undefined
     const status = requiredStatus(await this.nativeBridge.authorityStatus())
@@ -167,6 +206,7 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore {
     const snapshot = requiredSnapshot(await this.nativeBridge.loadAuthority())
     this.revision = snapshot.revision
     return snapshot.data
+    })
   }
 }
 

@@ -1,6 +1,9 @@
 import { deepStrictEqual, equal, rejects } from 'node:assert/strict'
 import test from 'node:test'
 import type { AppData } from '@greekgod/core'
+import { prepareTemplateRepRange } from '@greekgod/core'
+import { randomUUID } from 'node:crypto'
+import { DesktopDataCoordinator } from '../../src/services/desktopDataCoordinator.ts'
 import {
   DevelopmentAuthoritativeAppDataStore,
   ProductionSafeAuthoritativeAppDataStore,
@@ -106,6 +109,93 @@ class FakeAuthorityBridge implements NativeAuthorityBridge {
     this.revision += 1
   }
 }
+
+const commandFixture = async () => {
+  const data = normalizeData(fullAppDataFixture())
+  const template = data.templates[0], row = template.exercises[0]
+  template.id = randomUUID(); row.id = randomUUID(); row.exerciseId = randomUUID(); row.prescription = '3 × 8–12'
+  data.exerciseLibrary.push({ id: row.exerciseId, name: row.name, equipmentSensitive: false })
+  const bridge = new FakeAuthorityBridge()
+  bridge.bootstrapped = true; bridge.revision = 40; bridge.data = clone(data)
+  const store = new DevelopmentAuthoritativeAppDataStore(new LegacyMigrationSource(data), bridge)
+  await store.load()
+  const plan = prepareTemplateRepRange(data, { templateId: template.id, templateExerciseId: row.id, exerciseId: row.exerciseId }, 10, 15)
+  return { data, bridge, store, plan }
+}
+
+test('confirmed rep change persists exactly once with receipt; histories/IDs/other rows preserved', async () => {
+  const { data, bridge, store, plan } = await commandFixture()
+  bridge.mutateExternally((current) => { current.settings.calorieTarget += 1 })
+  const result = await store.changeTemplateRepRange(plan)
+  equal(result.status, 'APPLIED'); equal(bridge.replacements, 1)
+  if (result.status !== 'APPLIED') return
+  equal(result.receipt.resultingRevision, bridge.revision)
+  equal(result.receipt.beforePrescription, '3 × 8–12'); equal(result.receipt.afterPrescription, '3 × 10–15')
+  equal(result.data.templates[0].exercises[0].exerciseId, plan.exerciseId)
+  deepStrictEqual(result.data.workouts, data.workouts)
+  deepStrictEqual(result.data.templates.slice(1), data.templates.slice(1))
+  deepStrictEqual(result.data.templates[0].exercises.slice(1), data.templates[0].exercises.slice(1))
+  equal(result.data.settings.calorieTarget, data.settings.calorieTarget + 1)
+})
+
+for (const change of ['prescription', 'identity', 'deleted', 'queued'] as const) {
+  test(`target ${change} after preview is STALE with zero command writes`, async () => {
+    const { bridge, store, plan, data } = await commandFixture()
+    if (change === 'queued') {
+      const edited = clone(data); edited.templates[0].exercises[0].prescription = '3 × 5–7'
+      const ordinary = store.save(edited)
+      const command = store.changeTemplateRepRange(plan)
+      await ordinary; equal((await command).status, 'STALE'); equal(bridge.replacements, 1)
+    } else {
+      bridge.mutateExternally((current) => {
+        if (change === 'deleted') current.templates[0].exercises.shift()
+        else if (change === 'identity') current.templates[0].exercises[0].exerciseId = randomUUID()
+        else current.templates[0].exercises[0].prescription = '3 × 5–7'
+      })
+      equal((await store.changeTemplateRepRange(plan)).status, 'STALE'); equal(bridge.replacements, 0)
+    }
+  })
+}
+
+test('failed persistence is FAILED not APPLIED, queue recovers, CAS race is STALE', async () => {
+  const { bridge, store, plan } = await commandFixture()
+  const replace = bridge.replaceAuthority.bind(bridge)
+  bridge.replaceAuthority = async () => { throw new Error('Synthetic disk failure') }
+  equal((await store.changeTemplateRepRange(plan)).status, 'FAILED'); equal(bridge.replacements, 0)
+  bridge.replaceAuthority = async (desired, revision) => {
+    bridge.mutateExternally((current) => { current.settings.calorieTarget++ })
+    return replace(desired, revision)
+  }
+  equal((await store.changeTemplateRepRange(plan)).status, 'STALE'); equal(bridge.replacements, 0)
+})
+
+test('React coordinator waits for durability and does not duplicate effect save; deferred UI updates preserve commit', async () => {
+  const { bridge, store, plan, data } = await commandFixture()
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  const replace = bridge.replaceAuthority.bind(bridge)
+  bridge.replaceAuthority = async (desired, revision) => { await gate; return replace(desired, revision) }
+  let published = data, finished = false
+  const coordinator = new DesktopDataCoordinator(data, store, (next) => { published = next }, () => {})
+  const pending = coordinator.changeTemplateRepRange(plan).then((result) => { finished = true; return result })
+  await Promise.resolve(); await Promise.resolve()
+  equal(finished, false); equal(published, data); equal(bridge.replacements, 0)
+  release()
+  equal((await pending).status, 'APPLIED')
+  await store.load(); equal(bridge.replacements, 1)
+  equal(published.templates[0].exercises[0].prescription, '3 × 10–15')
+  coordinator.update((current) => ({ ...current, settings: { ...current.settings, calorieTarget: current.settings.calorieTarget + 1 } }))
+  await store.load(); equal(bridge.replacements, 2)
+  equal(bridge.data!.templates[0].exercises[0].prescription, '3 × 10–15')
+})
+
+test('legacy capability blocks execution without persistence or React success', async () => {
+  const { data, plan } = await commandFixture()
+  const legacy = new LegacyMigrationSource(data)
+  const coordinator = new DesktopDataCoordinator(data, legacy, () => { throw new Error('Unexpected publication') }, () => {})
+  equal(coordinator.supportsConfirmedTrackingMutations, false)
+  equal((await coordinator.changeTemplateRepRange(plan)).status, 'BLOCKED'); equal(legacy.saves, 0)
+})
 
 test('authority bootstrap verifies backups and permanently stops writing Legacy Store', async () => {
   const legacy = new LegacyMigrationSource()
