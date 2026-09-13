@@ -23,6 +23,8 @@ export type {
 } from './domain/exercise/exerciseProgress.ts'
 export type { TrackingExerciseHistorySnapshot } from './ports/trackingExerciseHistorySnapshot.ts'
 export { reportSelection } from './application/report-selection/reportSelection.ts'
+export { trainingTimeSummary } from './application/training-time/trainingTimeSummary.ts'
+export type { TrainingTimeSummaryQuery, TrainingTimeSummaryResult } from './application/training-time/trainingTimeSummary.ts'
 export type { ReportSelectionQuery } from './application/report-selection/reportSelection.ts'
 export { REPORT_SELECTION_VERSION } from './domain/report/reportSelection.ts'
 export type { ReportSelectionResult, SelectedReportExercise, ReportSelectionReason, ReportSelectionPriority } from './domain/report/reportSelection.ts'
