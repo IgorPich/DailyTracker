@@ -23,6 +23,9 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { PageHeader } from '../components/PageHeader'
 import { DecimalInput } from '../components/DecimalInput'
 import { TemplateEditor } from '../components/TemplateEditor'
+import { ExerciseReplacementPicker } from '../components/ExercisePicker'
+import { newExerciseConfirmation } from '../utils/exerciseSearch'
+import { replaceSessionExercise } from '../utils/sessionExerciseReplacement'
 import { useApp } from '../context/AppContext'
 import { useToast } from '../context/ToastContext'
 import { confirmAction } from '../services/fileService'
@@ -69,6 +72,7 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null)
   const [addingCustom, setAddingCustom] = useState(false)
   const [customName, setCustomName] = useState('')
+  const [replacementId, setReplacementId] = useState<string>()
   const [customEquipmentSensitive, setCustomEquipmentSensitive] = useState(false)
   const [renamingExerciseId, setRenamingExerciseId] = useState<string | null>(null)
   const [exerciseNameDraft, setExerciseNameDraft] = useState('')
@@ -145,24 +149,14 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
     setExerciseMenu(null)
   }
 
-  const replaceActiveExercise = (exercise: WorkoutExercise) => {
-    const selectedExerciseId = window.prompt('Wpisz dokładny ID ćwiczenia z globalnej biblioteki:', canonicalExerciseId(exercise))?.trim()
-    if (!selectedExerciseId) return
-    const definition = data.exerciseLibrary.find((item) => item.id === selectedExerciseId)
-    if (!definition) {
-      window.alert('Nie znaleziono ćwiczenia o tym ID.')
-      return
-    }
+  const replaceActiveExercise = (exercise: WorkoutExercise) => { setReplacementId(exercise.id); setExerciseMenu(null) }
+  const selectActiveReplacement = (definition: ExerciseDefinition) => {
+    const exercise = exercises.find((item) => item.id === replacementId)
+    if (!exercise) return
     if (definition.id === canonicalExerciseId(exercise)) return
     if (exercise.sets.some(hasVisibleValue) && !window.confirm('Zamiana ćwiczenia wyczyści wpisane w nim serie. Kontynuować?')) return
-    setExercises((current) => current.map((item) => item.id === exercise.id ? {
-      ...item,
-      exerciseId: definition.id,
-      name: definition.name,
-      equipmentSensitive: definition.equipmentSensitive,
-      isCustom: true,
-      sets: item.sets.map(() => emptySet()),
-    } : item))
+    setExercises((current) => replaceSessionExercise(current, exercise.id, definition, emptySet))
+    setReplacementId(undefined)
     setExerciseMenu(null)
   }
 
@@ -205,6 +199,7 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
   const addCustomExercise = () => {
     const name = customName.trim()
     if (!name) return
+    if (!window.confirm(newExerciseConfirmation(data.exerciseLibrary, name))) return
     const id = `custom-${createId()}`
     const exerciseId = `exercise-${createId()}`
     if (exercises.some((exercise) => canonicalExerciseId(exercise) === exerciseId)) {
@@ -296,8 +291,8 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
                 <button type="button" className="icon-button exercise-more" onClick={() => setExerciseMenu((current) => current === exercise.id ? null : exercise.id)} aria-label={`Menu ćwiczenia ${exercise.name}`} aria-expanded={exerciseMenu === exercise.id}><MoreHorizontal size={19} /></button>
                 {exerciseMenu === exercise.id && <div className="exercise-menu">
                   <button type="button" onClick={() => beginExerciseRename(exercise)}><Edit3 size={15} /> Zmień nazwę w tym treningu</button>
-                  <button type="button" onClick={() => replaceActiveExercise(exercise)}><RefreshCw size={15} /> Zamień w tym treningu</button>
-                  {!exercise.isCustom && <button type="button" onClick={() => { setTemplateEditorTarget({ templateId: selected.id, exerciseId: exercise.id }); setExerciseMenu(null) }}><Save size={15} /> Edytuj szablon</button>}
+                  <button type="button" onClick={() => replaceActiveExercise(exercise)}><RefreshCw size={15} /> Tylko ten trening</button>
+                  {!exercise.isCustom && <button type="button" onClick={() => { setTemplateEditorTarget({ templateId: selected.id, exerciseId: exercise.id }); setExerciseMenu(null) }}><Save size={15} /> Zmień w szablonie na stałe</button>}
                   <button type="button" disabled={exerciseIndex === 0} onClick={() => reorderExercise(exercise.id, -1)}><ArrowUp size={15} /> Przenieś wyżej</button>
                   <button type="button" disabled={exerciseIndex === exercises.length - 1} onClick={() => reorderExercise(exercise.id, 1)}><ArrowDown size={15} /> Przenieś niżej</button>
                   <button type="button" onClick={() => toggleEquipmentSensitivity(exercise.id)}><MapPin size={15} /> Zależne od maszyny: {isEquipmentSensitive(exercise) ? 'tak' : 'nie'}</button>
@@ -334,13 +329,14 @@ export function Training({ openWorkoutId, onWorkoutOpened }: { openWorkoutId?: s
           </article>
         })}</div>
 
-        {addingCustom ? <div className="card custom-exercise-form"><label className="field"><span>Nazwa ćwiczenia</span><input autoFocus type="text" placeholder="Np. unoszenie ramion Y na wyciągu" value={customName} onChange={(event) => setCustomName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addCustomExercise() } }} /></label><label className="checkbox-field"><input type="checkbox" checked={customEquipmentSensitive} onChange={(event) => setCustomEquipmentSensitive(event.target.checked)} /><span>Wynik zależy od maszyny / siłowni</span></label><button type="button" className="button button--primary" onClick={addCustomExercise}>Dodaj</button><button type="button" className="icon-button" onClick={() => { setAddingCustom(false); setCustomEquipmentSensitive(false) }} aria-label="Anuluj"><X size={17} /></button></div> : <button type="button" className="add-exercise-button" onClick={() => setAddingCustom(true)}><Plus size={18} /> Dodaj własne ćwiczenie</button>}
+        {addingCustom ? <div className="card custom-exercise-form"><label className="field"><span>Nazwa ćwiczenia</span><input autoFocus type="text" placeholder="Np. unoszenie ramion Y na wyciągu" value={customName} onChange={(event) => setCustomName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault() } }} /></label><label className="checkbox-field"><input type="checkbox" checked={customEquipmentSensitive} onChange={(event) => setCustomEquipmentSensitive(event.target.checked)} /><span>Wynik zależy od maszyny / siłowni</span></label><button type="button" className="button button--primary" onClick={addCustomExercise}>Potwierdź utworzenie</button><button type="button" className="icon-button" onClick={() => { setAddingCustom(false); setCustomEquipmentSensitive(false) }} aria-label="Anuluj"><X size={17} /></button></div> : <button type="button" className="add-exercise-button" onClick={() => setAddingCustom(true)}><Plus size={18} /> Utwórz nowe ćwiczenie</button>}
 
         <section className="card workout-finish"><label className="field"><span>Notatka do treningu <em>opcjonalnie</em></span><textarea rows={3} placeholder="Energia, technika, ogólne samopoczucie…" value={note} onChange={(event) => setNote(event.target.value)} /></label><div><p>Serie bez ciężaru i powtórzeń zostaną pominięte.</p><button type="submit" className="button button--primary"><Check size={18} /> Zapisz trening</button></div></section>
       </form>
 
       <WorkoutHistory workouts={data.workouts} onOpen={setSelectedWorkoutId} />
       {historyExercise && <ExerciseHistoryModal reference={historyExercise} workouts={data.workouts} exerciseLibrary={data.exerciseLibrary} onClose={() => setHistoryExercise(null)} />}
+      {replacementId && <ExerciseReplacementPicker library={data.exerciseLibrary} title="Tylko ten trening" onSelect={selectActiveReplacement} onClose={() => setReplacementId(undefined)} />}
       {selectedWorkout && <WorkoutDetailsModal workout={selectedWorkout} templates={data.templates} exerciseLibrary={data.exerciseLibrary} gymLocations={savedGymLocations} onUpdate={updateWorkout} onDelete={deleteWorkout} onClose={() => setSelectedWorkoutId(null)} />}
       {templateEditorTarget && data.templates.find((template) => template.id === templateEditorTarget.templateId) && <TemplateEditor template={data.templates.find((template) => template.id === templateEditorTarget.templateId)!} exerciseLibrary={data.exerciseLibrary} initialExerciseId={templateEditorTarget.exerciseId} onSave={(template) => { updateTemplate(template); showToast('Szablon zapisany') }} onClose={() => setTemplateEditorTarget(null)} />}
     </div>
@@ -376,6 +372,8 @@ function WorkoutDetailsModal({ workout, templates, exerciseLibrary, gymLocations
   const { showToast } = useToast()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Workout>(() => cloneWorkout(workout))
+  const [replacementId, setReplacementId] = useState<string>()
+  const [newExerciseName, setNewExerciseName] = useState('')
 
   useEffect(() => {
     setDraft(cloneWorkout(workout))
@@ -405,17 +403,22 @@ function WorkoutDetailsModal({ workout, templates, exerciseLibrary, gymLocations
     exercises: current.exercises.map((exercise) => exercise.id === exerciseId ? { ...exercise, sets: exercise.sets.filter((set) => set.id !== setId) } : exercise),
   }))
 
-  const addDraftExercise = () => setDraft((current) => ({
+  const addDraftExercise = () => {
+    const name = newExerciseName.trim()
+    if (!name || !window.confirm(newExerciseConfirmation(exerciseLibrary, name))) return
+    setDraft((current) => ({
     ...current,
     exercises: [...current.exercises, {
       id: `custom-${createId()}`,
       exerciseId: `exercise-${createId()}`,
-      name: '',
+      name,
       prescription: 'Własne ćwiczenie',
       sets: [emptySet()],
       isCustom: true,
     }],
-  }))
+    }))
+    setNewExerciseName('')
+  }
 
   const removeDraftExercise = (exerciseId: string) => setDraft((current) => ({ ...current, exercises: current.exercises.filter((exercise) => exercise.id !== exerciseId) }))
 
@@ -424,19 +427,16 @@ function WorkoutDetailsModal({ workout, templates, exerciseLibrary, gymLocations
     return { ...current, exercises: moveExercise(current.exercises, index, index + direction) }
   })
 
-  const replaceDraftExercise = (exercise: WorkoutExercise) => {
-    const selectedExerciseId = window.prompt('Wpisz dokładny ID ćwiczenia z globalnej biblioteki:', canonicalExerciseId(exercise))?.trim()
-    if (!selectedExerciseId) return
-    const definition = exerciseLibrary.find((item) => item.id === selectedExerciseId)
-    if (!definition) {
-      window.alert('Nie znaleziono ćwiczenia o tym ID.')
-      return
-    }
+  const replaceDraftExercise = (exercise: WorkoutExercise) => setReplacementId(exercise.id)
+  const selectDraftReplacement = (definition: ExerciseDefinition) => {
+    const exercise = draft.exercises.find((item) => item.id === replacementId)
+    if (!exercise) return
     updateDraftExercise(exercise.id, {
       exerciseId: definition.id,
       name: definition.name,
       equipmentSensitive: definition.equipmentSensitive,
     })
+    setReplacementId(undefined)
   }
 
   const changeTemplate = (templateId: string) => {
@@ -498,7 +498,9 @@ function WorkoutDetailsModal({ workout, templates, exerciseLibrary, gymLocations
           <button type="button" className="add-set-button" onClick={() => addDraftSet(exercise.id)}><Plus size={14} /> Dodaj serię</button>
           <label className="field workout-edit-note"><span>Notatka do ćwiczenia</span><input type="text" value={exercise.note ?? ''} placeholder="Technika, odczucia, kolejny cel…" onChange={(event) => updateDraftExercise(exercise.id, { note: event.target.value })} /></label>
         </article>)}</div>
-        <button type="button" className="add-exercise-button" onClick={addDraftExercise}><Plus size={17} /> Dodaj ćwiczenie</button>
+        {replacementId && <ExerciseReplacementPicker library={exerciseLibrary} title="Tylko ten zapisany trening — wymaga zapisania zmian" onSelect={selectDraftReplacement} onClose={() => setReplacementId(undefined)} />}
+        <label className="field"><span>Nowe ćwiczenie</span><input value={newExerciseName} onChange={(event) => setNewExerciseName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault() }} /></label>
+        <button type="button" className="add-exercise-button" onClick={addDraftExercise}><Plus size={17} /> Utwórz nowe ćwiczenie</button>
         <label className="field workout-edit-workout-note"><span>Notatka do treningu</span><textarea rows={3} value={draft.note ?? ''} onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} /></label>
         <footer className="workout-detail-actions"><button type="button" className="button button--ghost" onClick={cancelEditing}><X size={16} /> Anuluj</button><button type="button" className="button button--primary" onClick={saveChanges}><Save size={16} /> Zapisz zmiany</button></footer>
       </> : <>

@@ -4,19 +4,16 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { useApp } from '../context/AppContext'
-import type { ExerciseDefinition, WorkoutSet } from '../types'
+import type { WorkoutSet } from '../types'
 import { progressExerciseExposureHistory, type ProgressExerciseExposure } from '../adapters/progressExerciseExposureHistory'
 import { daysAgoIso, formatLongDate, isoToday } from '../utils/date'
-import { canonicalExerciseId, normalizeExerciseName } from '../utils/exerciseIdentity'
+import { ExercisePicker } from '../components/ExercisePicker'
+import { exerciseSearchOptions } from '../utils/exerciseSearch'
 import { formatDecimal } from '../utils/numbers'
 import { formatGymName, formatSet } from '../utils/workoutProgress'
 
 type ProgressMetric = 'weight' | 'reps' | 'estimated'
 type ProgressRange = '30' | '90' | '180' | 'all'
-
-interface ProgressExercise extends ExerciseDefinition {
-  label: string
-}
 
 const ALL_GYMS = '__all__'
 const MISSING_GYM = '__missing__'
@@ -29,35 +26,9 @@ const SERIES_COLORS = ['#30d158', '#2997ff', '#b8bec3', '#6f767d', '#7c9cff']
 
 export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => void }) {
   const { data } = useApp()
-  const exercises = useMemo<ProgressExercise[]>(() => {
-    const references = [
-      ...data.templates.flatMap((template) => template.exercises),
-      ...[...data.workouts].sort((a, b) => b.date.localeCompare(a.date)).flatMap((workout) => workout.exercises),
-    ]
-    const referencedIds = new Set(references
-      .map(canonicalExerciseId)
-      .filter((id): id is string => Boolean(id)))
-    const byId = new Map<string, ExerciseDefinition>()
-    data.exerciseLibrary.filter((definition) => referencedIds.has(definition.id)).forEach((definition) => byId.set(definition.id, definition))
-    const sorted = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl') || a.id.localeCompare(b.id))
-    const nameCounts = sorted.reduce((counts, exercise) => {
-      const name = normalizeExerciseName(exercise.name)
-      counts.set(name, (counts.get(name) ?? 0) + 1)
-      return counts
-    }, new Map<string, number>())
-    const nameIndexes = new Map<string, number>()
-    return sorted.map((exercise) => {
-      const normalizedName = normalizeExerciseName(exercise.name)
-      const index = (nameIndexes.get(normalizedName) ?? 0) + 1
-      nameIndexes.set(normalizedName, index)
-      return {
-        ...exercise,
-        label: (nameCounts.get(normalizedName) ?? 0) > 1 ? `${exercise.name} · wariant ${index}` : exercise.name,
-      }
-    })
-  }, [data.exerciseLibrary, data.templates, data.workouts])
-
-  const [exerciseId, setExerciseId] = useState(() => exercises.find((exercise) => exercise.id === 'bench-press')?.id ?? exercises[0]?.id ?? '')
+  const options = useMemo(() => exerciseSearchOptions(data.exerciseLibrary, data.templates, data.workouts), [data.exerciseLibrary, data.templates, data.workouts])
+  const exercises = options.map((option) => option.definition)
+  const [exerciseId, setExerciseId] = useState(() => exercises[0]?.id ?? '')
   const [metric, setMetric] = useState<ProgressMetric>('weight')
   const [range, setRange] = useState<ProgressRange>('90')
   const [gymFilter, setGymFilter] = useState(ALL_GYMS)
@@ -128,7 +99,7 @@ export function Progress({ onOpenWorkout }: { onOpenWorkout: (id: string) => voi
     <PageHeader eyebrow="HISTORIA ĆWICZEŃ" title="Progres" description="Analizuj konkretne ćwiczenie w czasie, bez mieszania wyników z różnych maszyn." />
 
     <section className="card progress-controls">
-      <label className="field"><span>Ćwiczenie</span><select value={selectedExercise?.id ?? ''} onChange={(event) => setExerciseId(event.target.value)}>{exercises.map((exercise) => <option value={exercise.id} key={exercise.id}>{exercise.label}</option>)}</select></label>
+      <div className="field"><span>Ćwiczenie</span><ExercisePicker library={data.exerciseLibrary} options={options} value={selectedExercise?.id} onSelect={(definition) => setExerciseId(definition.id)} /></div>
       {selectedExercise?.equipmentSensitive && <label className="field"><span>Siłownia</span><select value={gymFilter} onChange={(event) => setGymFilter(event.target.value)}><option value={ALL_GYMS}>Wszystkie siłownie</option>{gymNames.map((gym) => <option value={gymToken(gym)} key={gym}>{gym}</option>)}{hasMissingGym && <option value={MISSING_GYM}>Nie podano</option>}</select></label>}
       <div className="progress-control-group"><span>Wyświetl</span><div className="segmented-control segmented-control--large"><button className={metric === 'weight' ? 'active' : ''} onClick={() => setMetric('weight')}>Ciężar</button><button className={metric === 'reps' ? 'active' : ''} onClick={() => setMetric('reps')}>Powtórzenia</button><button className={metric === 'estimated' ? 'active' : ''} onClick={() => setMetric('estimated')}>Szacowany wynik</button></div></div>
       <div className="progress-control-group"><span>Zakres czasu</span><div className="segmented-control segmented-control--large"><button className={range === '30' ? 'active' : ''} onClick={() => setRange('30')}>30 dni</button><button className={range === '90' ? 'active' : ''} onClick={() => setRange('90')}>90 dni</button><button className={range === '180' ? 'active' : ''} onClick={() => setRange('180')}>6 miesięcy</button><button className={range === 'all' ? 'active' : ''} onClick={() => setRange('all')}>Całość</button></div></div>

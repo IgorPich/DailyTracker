@@ -38,6 +38,9 @@ export interface WeightChartPoint {
   label: string
   weight?: number
   movingAverage?: number
+  windowFrom: string
+  windowTo: string
+  measurementCount: number
 }
 
 export const weightChartData = (entries: DailyEntry[], from?: string, to?: string): WeightChartPoint[] => {
@@ -53,6 +56,9 @@ export const weightChartData = (entries: DailyEntry[], from?: string, to?: strin
         label: entry.date.slice(5).replace('-', '.'),
         weight: entry.weight,
         movingAverage: average(windowEntries.map((item) => item.weight)),
+        windowFrom: start,
+        windowTo: entry.date,
+        measurementCount: windowEntries.filter((item) => Number.isFinite(item.weight)).length,
       }
     })
 }

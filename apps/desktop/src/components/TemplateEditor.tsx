@@ -7,6 +7,8 @@ import { canonicalExerciseId, exerciseDefinitionFor } from '../utils/exerciseIde
 import { createId } from '../utils/id'
 import { moveExercise } from '../utils/workoutData'
 import { prescriptionRepRange } from '../utils/workoutProgress'
+import { ExerciseReplacementPicker } from './ExercisePicker'
+import { newExerciseConfirmation } from '../utils/exerciseSearch'
 
 const rangeFor = (exercise: TemplateExercise) => prescriptionRepRange(exercise.prescription) ?? { min: 6, max: 10 }
 const prescriptionFor = (sets: number, min: number, max: number) => `${sets} × ${min}–${max}`
@@ -29,6 +31,7 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
   }))
   const [draftLibrary, setDraftLibrary] = useState<ExerciseDefinition[]>(() => structuredClone(exerciseLibrary))
   const [newName, setNewName] = useState('')
+  const [replacementId, setReplacementId] = useState<string>()
   const [newSets, setNewSets] = useState(3)
   const [newMin, setNewMin] = useState(8)
   const [newMax, setNewMax] = useState(12)
@@ -68,24 +71,22 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
     }))
   }
 
-  const replaceExercise = (exercise: TemplateExercise) => {
-    const selectedExerciseId = window.prompt('Wpisz dokładny ID ćwiczenia z globalnej biblioteki:', canonicalExerciseId(exercise))?.trim()
-    if (!selectedExerciseId) return
-    const definition = draftLibrary.find((item) => item.id === selectedExerciseId)
-    if (!definition) {
-      window.alert('Nie znaleziono ćwiczenia o tym ID. Nowe ćwiczenie dodaj w sekcji poniżej.')
-      return
-    }
+  const replaceExercise = (exercise: TemplateExercise) => setReplacementId(exercise.id)
+  const selectReplacement = (definition: ExerciseDefinition) => {
+    const exercise = draft.exercises.find((item) => item.id === replacementId)
+    if (!exercise) return
     if (definition.id === canonicalExerciseId(exercise)) return
     setDraft((current) => ({
       ...current,
       exercises: replaceTemplateExerciseDefinition(current.exercises, exercise.id, definition),
     }))
+    setReplacementId(undefined)
   }
 
   const addExercise = () => {
     const name = newName.trim()
     if (!name) return
+    if (!window.confirm(newExerciseConfirmation(draftLibrary, name))) return
     if (newMin > newMax) {
       window.alert('Dolny zakres powtórzeń nie może być większy od górnego.')
       return
@@ -147,6 +148,7 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
     <section className="modal card template-editor-modal" role="dialog" aria-modal="true" aria-label={`Edycja szablonu ${template.name}`} onMouseDown={(event) => event.stopPropagation()}>
       <header className="template-editor__header"><div><span className="section-kicker">TRWAŁA EDYCJA</span><h2>{draft.code} — {draft.name}</h2><p>Zmiany obejmą wyłącznie przyszłe treningi. Historia pozostanie bez zmian.</p></div><button className="icon-button" onClick={onClose} aria-label="Zamknij"><X size={20} /></button></header>
 
+      {replacementId && <ExerciseReplacementPicker library={exerciseLibrary} title="Zmień w szablonie na stałe" onSelect={selectReplacement} onClose={() => setReplacementId(undefined)} />}
       <div className="template-editor__list">{draft.exercises.map((exercise, index) => {
         const range = rangeFor(exercise)
         return <article className={`template-editor__exercise ${exercise.id === initialExerciseId ? 'template-editor__exercise--focus' : ''}`} key={exercise.id}>
@@ -160,7 +162,7 @@ export function TemplateEditor({ template, exerciseLibrary, initialExerciseId, o
         </article>
       })}</div>
 
-      <section className="template-editor__add"><div><span className="section-kicker">NOWE ĆWICZENIE</span><h3>Dodaj ćwiczenie do szablonu</h3></div><div className="template-editor__add-grid"><label className="field"><span>Nazwa</span><input type="text" placeholder="Np. wiosło jednorącz" value={newName} onChange={(event) => setNewName(event.target.value)} /></label><label className="field"><span>Serie</span><input type="number" min="1" max="20" value={newSets} onChange={(event) => setNewSets(Number(event.target.value))} /></label><label className="field"><span>Powt. od</span><input type="number" min="1" max="100" value={newMin} onChange={(event) => setNewMin(Number(event.target.value))} /></label><label className="field"><span>Powt. do</span><input type="number" min="1" max="100" value={newMax} onChange={(event) => setNewMax(Number(event.target.value))} /></label><label className="field"><span>Pozycja</span><input type="number" min="1" max={draft.exercises.length + 1} value={newPosition} onChange={(event) => setNewPosition(Number(event.target.value))} /></label></div><label className="checkbox-field"><input type="checkbox" checked={newSensitive} onChange={(event) => setNewSensitive(event.target.checked)} /><span>Wynik zależy od maszyny / siłowni</span></label><button type="button" className="button button--secondary" disabled={!newName.trim()} onClick={addExercise}><Plus size={16} /> Dodaj do {draft.name}</button></section>
+      <section className="template-editor__add"><div><span className="section-kicker">NOWE ĆWICZENIE</span><h3>Utwórz nowe ćwiczenie</h3></div><div className="template-editor__add-grid"><label className="field"><span>Nazwa</span><input type="text" placeholder="Np. wiosło jednorącz" value={newName} onChange={(event) => setNewName(event.target.value)} /></label><label className="field"><span>Serie</span><input type="number" min="1" max="20" value={newSets} onChange={(event) => setNewSets(Number(event.target.value))} /></label><label className="field"><span>Powt. od</span><input type="number" min="1" max="100" value={newMin} onChange={(event) => setNewMin(Number(event.target.value))} /></label><label className="field"><span>Powt. do</span><input type="number" min="1" max="100" value={newMax} onChange={(event) => setNewMax(Number(event.target.value))} /></label><label className="field"><span>Pozycja</span><input type="number" min="1" max={draft.exercises.length + 1} value={newPosition} onChange={(event) => setNewPosition(Number(event.target.value))} /></label></div><label className="checkbox-field"><input type="checkbox" checked={newSensitive} onChange={(event) => setNewSensitive(event.target.checked)} /><span>Wynik zależy od maszyny / siłowni</span></label><button type="button" className="button button--secondary" disabled={!newName.trim()} onClick={addExercise}><Plus size={16} /> Utwórz i dodaj do {draft.name}</button></section>
 
       <footer className="template-editor__footer"><button type="button" className="button button--ghost" onClick={onClose}><X size={16} /> Anuluj</button><button type="button" className="button button--primary" onClick={save}><Save size={16} /> Zapisz szablon</button></footer>
     </section>

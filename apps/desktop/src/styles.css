@@ -26,6 +26,13 @@
 
 * { box-sizing: border-box; }
 
+.exercise-picker { position: relative; display: grid; gap: 6px; min-width: 0; }
+.exercise-picker__results { max-height: 260px; overflow-y: auto; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; }
+.exercise-picker__results button { width: 100%; display: grid; gap: 4px; text-align: left; border: 0; background: transparent; padding: 10px; cursor: pointer; }
+.exercise-picker__results button:hover, .exercise-picker__results button.active { background: var(--accent-dark); }
+.exercise-picker__results small, .exercise-picker > small { color: var(--muted); }
+.exercise-replacement-picker { display: grid; gap: 10px; padding: 16px; margin-block: 12px; }
+
 .human-coach-form fieldset, .human-coach-item { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); min-width: 0; }
 .human-coach-form label, .human-coach-item label { display: grid; gap: 6px; }
 .human-coach-items { display: grid; gap: 16px; }
