@@ -4,12 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": { ".": "./src/index.ts", "./commands": "./src/commands/explicitCommand.ts" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json",
     "test": "npm run build && node --experimental-strip-types --test src/tests/*.test.ts"
   },
-  "dependencies": { "@greekgod/human-coach": "*" },
+  "dependencies": { "@greekgod/human-coach": "*", "@greekgod/core": "*" },
   "devDependencies": { "typescript": "^7.0.2" }
 }

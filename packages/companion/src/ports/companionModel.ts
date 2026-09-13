@@ -4,6 +4,6 @@ export interface TrainerExtractionRequest {
 }
 
 /** No persistence, commands or tools are provided to the model. Output is always untrusted. */
-export interface CompanionModel {
-  propose(request: TrainerExtractionRequest): Promise<unknown>
+export interface CompanionModel<Request = TrainerExtractionRequest> {
+  propose(request: Request): Promise<unknown>
 }
