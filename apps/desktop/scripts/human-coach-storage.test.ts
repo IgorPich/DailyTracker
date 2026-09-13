@@ -33,6 +33,57 @@ const fixture = (native: boolean) => {
 const note = () => ({ id: randomUUID(), text: '  Untouched trainer source\n', provenance: { sourceType: 'TRAINER_TEXT' as const, createdAt: '2026-01-01T12:00:00.000Z' } })
 
 for (const native of [true, false]) {
+  test(`${native ? 'Native' : 'Browser'} trainer ingestion and all draft links survive restart in unchanged v1 storage`, async () => {
+    const f = fixture(native)
+    const exerciseId = randomUUID()
+    const app = createHumanCoach(f.repository(), { readExerciseIds: () => [exerciseId] })
+    const source = note()
+    await app.ingestTrainerText({ id: source.id, text: source.text, createdAt: source.provenance.createdAt, sourceDescription: 'Original message' })
+    const base = { sourceNoteId: source.id, createdAt: source.provenance.createdAt }
+    const taskId = randomUUID(), targetId = randomUUID(), decisionId = randomUUID()
+    await app.createDraftFromNote({ ...base, id: taskId, kind: 'TASK', title: 'Task', exerciseIds: [exerciseId] })
+    await app.createDraftFromNote({ ...base, id: targetId, kind: 'TARGET', title: 'Target', specification: { type: 'REP_RANGE', scope: 'EXERCISE', exerciseId, min: 4, max: 8, unit: 'reps' } })
+    await app.createDraftFromNote({ ...base, id: decisionId, kind: 'DECISION', text: 'Decision', exerciseIds: [] })
+    const restarted = createHumanCoach(f.repository(), { readExerciseIds: () => [exerciseId] })
+    const loaded = await restarted.listContext()
+    assert.equal(loaded.version, 1)
+    assert.equal(loaded.items.length, 4)
+    for (const item of loaded.items.slice(1)) {
+      assert.equal(item.provenance.sourceNoteId, source.id)
+      assert.equal(item.provenance.sourceType, 'TRAINER_TEXT')
+      assert.equal(item.acceptance.state, 'DRAFT')
+    }
+    for (const id of [taskId, targetId, decisionId]) await restarted.discardCoachDraft({ id })
+    assert.equal((await f.repository().read()).items.length, 1)
+    assert.equal((await restarted.listCoachNotes())[0].text, source.text)
+    assert.deepEqual([...f.files.keys()], [humanCoachStorageName(true)])
+    await assert.rejects(f.repository().update((context) => ({ ...context, items: [] })), /immutable/)
+    const acceptedId = randomUUID()
+    await restarted.createDraftFromNote({ ...base, id: acceptedId, kind: 'TASK', title: 'Explicitly reviewed', exerciseIds: [exerciseId] })
+    await restarted.acceptCoachItem({ id: source.id, acceptedAt: base.createdAt })
+    assert.equal((await f.repository().read()).items.find((item) => item.id === acceptedId)?.acceptance.state, 'DRAFT')
+    await restarted.acceptCoachItem({ id: acceptedId, acceptedAt: base.createdAt })
+    const accepted = (await f.repository().read()).items.find((item) => item.id === acceptedId)!
+    assert.deepEqual(accepted.acceptance, { state: 'AUTHORITATIVE', acceptedAt: base.createdAt })
+    assert.equal(accepted.provenance.sourceNoteId, source.id)
+    assert.equal(accepted.provenance.sourceType, 'TRAINER_TEXT')
+    await assert.rejects(restarted.discardCoachDraft({ id: acceptedId }))
+  })
+}
+
+test('trainer Desktop wiring uses typed drafting and existing exact-selection picker, no parsing', () => {
+  const page = readFileSync(new URL('../src/pages/HumanCoach.tsx', import.meta.url), 'utf8')
+  assert.match(page, /service\.ingestTrainerText/)
+  assert.match(page, /service\.createDraftFromNote/)
+  assert.match(page, /<ExercisePicker library=\{data\.exerciseLibrary\} value=\{exerciseId\} onSelect=\{\(definition\) => setExerciseId\(definition\.id\)\}/)
+  assert.match(page, /Wklej wiadomość \/ zalecenia trenera/)
+  assert.match(page, /draftFrom\(item\.id, draftKind\)/)
+  assert.match(page, /href=\{`#coach-\$\{item\.provenance\.sourceNoteId\}`\}/)
+  assert.match(page, /service\.acceptCoachItem/)
+  assert.doesNotMatch(page, /exerciseLibrary\.find\([^\n]*name|createExercise|parseTrainer|extractTrainer/)
+})
+
+for (const native of [true, false]) {
   test(`${native ? 'Native' : 'Browser'} local context round-trip, isolated namespace and no initialization writes`, async () => {
     const f = fixture(native)
     const productionText = 'Production sentinel'
