@@ -1,4 +1,4 @@
-import { isTauri } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { LocalHumanCoachRepository, type HumanCoachLocalStorage } from './humanCoachRepository.ts'
 
 export const humanCoachStorageName = (development: boolean) => development
@@ -25,10 +25,8 @@ const environment: HumanCoachStorageEnvironment = {
     return readTextFile(name, { baseDir: BaseDirectory.AppData })
   },
   async saveContext(name, context) {
-    const { load } = await import('@tauri-apps/plugin-store')
-    const store = await load(name, { autoSave: false })
-    await store.set('context', context)
-    await store.save()
+    if (name !== humanCoachStorageName(true) && name !== humanCoachStorageName(false)) throw new Error('Unexpected HumanCoach file')
+    await invoke('human_coach_save', { development: name === humanCoachStorageName(true), context })
   },
   browserStorage: () => localStorage,
   browserLock: (name, operation) => {
@@ -52,8 +50,8 @@ export const createHumanCoachLocalStorage = (development: boolean, env = environ
       if (env.native) await env.saveContext(name, JSON.parse(text))
       else env.browserStorage().setItem(name, text)
     },
-    // Native v1 supports one writer window/process; the singleton repository serializes commands.
-    // Browser tabs additionally coordinate through Web Locks. Cross-process native locking is deferred.
+    // Windows process guard runs before Tauri; this singleton serializes that process's writes.
+    // Browser tabs additionally coordinate through Web Locks.
     exclusive: (operation) => env.native ? operation() : env.browserLock(name, operation),
   }
 }

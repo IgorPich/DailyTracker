@@ -105,3 +105,16 @@ test('Desktop HumanCoach is read-only toward Tracking and native permissions nam
     ])
   }
 })
+
+test('native HumanCoach saves only through the atomic command; guard precedes plugin initialization', () => {
+  const storage = readFileSync(new URL('../src/services/humanCoachStorage.ts', import.meta.url), 'utf8')
+  assert.match(storage, /invoke\('human_coach_save'/)
+  assert.doesNotMatch(storage, /plugin-store|store\.save/)
+  const native = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8')
+  assert.ok(native.indexOf('desktop_instance::acquire') < native.indexOf('tauri::Builder::default()'))
+  assert.match(native, /Ok\(None\) => return/)
+  const atomic = readFileSync(new URL('../src-tauri/src/human_coach_storage.rs', import.meta.url), 'utf8')
+  assert.match(atomic, /sync_all\(\)/)
+  assert.match(atomic, /temporary\.persist\(path\)/)
+  assert.doesNotMatch(atomic.split('#[cfg(test)]')[0], /File::create|fs::write|OpenOptions/)
+})

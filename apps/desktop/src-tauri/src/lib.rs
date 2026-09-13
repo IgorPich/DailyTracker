@@ -2,6 +2,7 @@ use tauri::{RunEvent, WindowEvent};
 
 #[cfg(windows)]
 mod desktop_instance;
+mod human_coach_storage;
 
 #[cfg(any(feature = "native-sqlite-shadow", feature = "native-sqlite-authority"))]
 mod native_storage_shadow {
@@ -332,6 +333,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init());
     #[cfg(any(feature = "native-sqlite-shadow", feature = "native-sqlite-authority"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
+        human_coach_storage::human_coach_save,
         native_storage_shadow::native_storage_probe,
         native_storage_shadow::native_shadow_replace,
         native_storage_shadow::native_shadow_load,
@@ -343,6 +345,8 @@ pub fn run() {
         native_storage_shadow::native_authority_replace,
         native_storage_shadow::native_authority_backup_before_import
     ]);
+    #[cfg(not(any(feature = "native-sqlite-shadow", feature = "native-sqlite-authority")))]
+    let builder = builder.invoke_handler(tauri::generate_handler![human_coach_storage::human_coach_save]);
     let app = builder
         .build(context)
         .expect("failed to initialize GreekGod");

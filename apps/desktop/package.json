@@ -12,6 +12,8 @@
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "npm run test:identity && npm run test:progress-analytics && npm run test:human-coach && npm run test:dev-storage && npm run test:storage && npm run test:windows-lifecycle",
     "test:human-coach": "node --experimental-strip-types --test scripts/human-coach-storage.test.ts",
+    "test:human-coach:native": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
+    "tauri:human-coach-smoke:build": "tauri build --debug --no-bundle --config src-tauri/tauri.human-coach-smoke.conf.json",
     "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
     "test:progress-analytics": "node --experimental-strip-types scripts/progress-exposure-history.test.ts && node --experimental-strip-types --test scripts/coach-report-progress.test.ts",
     "test:dev-storage": "node scripts/development-storage-config.test.mjs",

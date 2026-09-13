@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "human-coach-local-context",
-  "description": "Read only the separate HumanCoach files; saves use the existing Store plugin",
+  "description": "Read only the separate HumanCoach files; writes use the fixed-path native atomic-save command",
   "windows": ["main"],
   "permissions": [
     { "identifier": "fs:allow-exists", "allow": [
