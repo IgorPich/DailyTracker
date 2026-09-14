@@ -574,6 +574,39 @@ mod tests {
     }
 
     #[test]
+    fn journal_preflight_rebased_outbox_can_overwrite_newer_remote_fields() {
+        // Characterizes the native sync STOP boundary, NOT desired future behavior.
+        let (_source_directory, source) = store();
+        let (_client_directory, client) = store();
+        let initial = source.load_authoritative_snapshot().unwrap();
+        let mut desired = initial.data;
+        desired["dailyEntries"] = json!([{"id":"day", "date":"2026-01-15", "weight":80}]);
+        let saved = source.replace_authoritative_snapshot(&desired, "desktop:test", initial.revision).unwrap();
+        client.apply_remote_batch_and_advance_cursor("service-a", &source.changes_since(0, 100).unwrap(), saved.revision).unwrap();
+
+        let local = client.load_authoritative_snapshot().unwrap();
+        let mut edited = local.data;
+        edited["dailyEntries"][0]["weight"] = json!(79);
+        client.replace_authoritative_snapshot(&edited, "mobile:test", local.revision).unwrap();
+        desired["dailyEntries"][0]["weight"] = json!(81);
+        desired["dailyEntries"][0]["measurements"] = json!({"CHEST":100,"BICEPS":35});
+        let newer = source.replace_authoritative_snapshot(&desired, "desktop:test", saved.revision).unwrap();
+        let first = client.prepare_remote_outbox("service-a", 100).unwrap();
+        assert_eq!(first.len(), 1);
+        assert!(matches!(source.apply_remote_mutation(&first[0].request), Err(StorageError::Conflict { .. })));
+
+        // MobileSyncEngine::synchronize does pull then push_pending again on conflict.
+        client.apply_remote_batch_and_advance_cursor("service-a", &source.changes_since(saved.revision, 100).unwrap(), newer.revision).unwrap();
+        let retried = client.prepare_remote_outbox("service-a", 100).unwrap();
+        assert_eq!(retried[0].request.payload, first[0].request.payload);
+        assert_ne!(retried[0].request.base_revision, first[0].request.base_revision);
+        source.apply_remote_mutation(&retried[0].request).expect("current repository accepts rebased stale payload");
+        let after = source.load_authoritative_snapshot().unwrap();
+        assert_eq!(after.data["dailyEntries"][0]["weight"], json!(79));
+        assert!(after.data["dailyEntries"][0].get("measurements").is_none());
+    }
+
+    #[test]
     fn dynamic_program_round_trip_preserves_eight_templates_and_subsequent_order_and_deletion() {
         let (_source_directory, source) = store();
         let (_client_directory, client) = store();
