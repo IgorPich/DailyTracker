@@ -57,7 +57,7 @@ export interface TemplateExercise {
 
 export interface TrainingTemplate {
   id: string
-  code: 'A' | 'B' | 'C' | 'D'
+  code: string
   name: string
   exercises: TemplateExercise[]
 }

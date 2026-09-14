@@ -17,8 +17,11 @@ import { createInitialData } from '../utils/storage'
 import { updateTemplateAndLibrary } from '../utils/templateIdentity'
 import { DesktopDataCoordinator } from '../services/desktopDataCoordinator'
 import type { ConfirmedTrackingPersistence, TrackingMutationResult } from '../services/confirmedTrackingMutation'
+import type { ProgramPersistence, ProgramSaveResult } from '../services/programPersistence'
 
 interface AppContextValue {
+  programPersistence: ProgramPersistence
+  lastProgramSaveResult?: ProgramSaveResult
   trackingCommands: ConfirmedTrackingPersistence
   lastTrackingCommandResult?: TrackingMutationResult
   data: AppData
@@ -78,8 +81,9 @@ const attachWorkoutExerciseIdentities = (
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, publishData] = useState<AppData>(createInitialData)
   const [lastTrackingCommandResult, publishOutcome] = useState<TrackingMutationResult>()
+  const [lastProgramSaveResult, publishProgramOutcome] = useState<ProgramSaveResult>()
   const coordinator = useMemo(() => new DesktopDataCoordinator(data, appDataStore, publishData,
-    (error) => console.error('Nie udało się zapisać danych GreekGod.', error), publishOutcome), [])
+    (error) => console.error('Nie udało się zapisać danych GreekGod.', error), publishOutcome, publishProgramOutcome), [])
   const setData = coordinator.update
   const [hydrated, setHydrated] = useState(false)
   const [loadError, setLoadError] = useState(false)
@@ -124,6 +128,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(() => ({
     data,
     lastTrackingCommandResult,
+    lastProgramSaveResult,
+    programPersistence: {
+      get supportsProgramSave() { return coordinator.supportsProgramSave },
+      saveProgram: (plan) => coordinator.saveProgram(plan),
+    },
     trackingCommands: {
       get supportsConfirmedTrackingMutations() { return coordinator.supportsConfirmedTrackingMutations },
       changeTemplateRepRange: (plan) => coordinator.changeTemplateRepRange(plan),
@@ -184,7 +193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     replaceData: setData,
     clearData: () => setData(createInitialData()),
-  }), [data, lastTrackingCommandResult])
+  }), [data, lastTrackingCommandResult, lastProgramSaveResult])
 
   if (loadError) return <div className="app-boot" role="alert"><span>!</span><p>Nie udało się bezpiecznie wczytać danych. Plik nie został zmieniony.</p></div>
   if (!hydrated) return <div className="app-boot" role="status"><span>G</span><p>Wczytywanie GreekGod…</p></div>

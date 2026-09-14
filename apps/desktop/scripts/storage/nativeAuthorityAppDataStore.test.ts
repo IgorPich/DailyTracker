@@ -2,6 +2,7 @@ import { deepStrictEqual, equal, rejects } from 'node:assert/strict'
 import test from 'node:test'
 import type { AppData } from '@greekgod/core'
 import { prepareTemplateRepRange } from '@greekgod/core'
+import { openProgramDraft, duplicateProgramTemplate, programVersion } from '@greekgod/core'
 import { randomUUID } from 'node:crypto'
 import { FakeCompanionModel } from '@greekgod/companion'
 import { commandCandidates, createExplicitCommandSession, explicitUserCommandInput } from '@greekgod/companion/commands'
@@ -138,6 +139,91 @@ test('confirmed rep change persists exactly once with receipt; histories/IDs/oth
   deepStrictEqual(result.data.templates.slice(1), data.templates.slice(1))
   deepStrictEqual(result.data.templates[0].exercises.slice(1), data.templates[0].exercises.slice(1))
   equal(result.data.settings.calorieTarget, data.settings.calorieTarget + 1)
+})
+
+test('program save patches fresh authority, preserves newer journal/workout/settings and writes once', async () => {
+  const { data, bridge, store } = await commandFixture()
+  const plan = openProgramDraft(data.templates)
+  plan.templates[0].name = 'Arbitrary new program label'
+  while (plan.templates.length < 8) plan.templates.push(duplicateProgramTemplate(plan.templates[0], randomUUID))
+  bridge.mutateExternally((current) => {
+    current.dailyEntries[0].weight = 77.7
+    current.workouts.push({ ...clone(current.workouts[0]), id: randomUUID() })
+    current.settings.calorieTarget++
+  })
+  const fresh = clone(bridge.data!)
+  let published = data
+  const coordinator = new DesktopDataCoordinator(data, store, (next) => { published = next }, () => {})
+  const result = await coordinator.saveProgram(plan)
+  equal(result.status, 'APPLIED'); await store.load(); equal(bridge.replacements, 1)
+  equal(published.templates.length, 8)
+  deepStrictEqual({ ...published, templates: fresh.templates }, fresh)
+  deepStrictEqual(data.templates, openProgramDraft(data.templates).templates)
+})
+
+test('program stale validation sees queued edits; invalid/legacy plans never write', async () => {
+  const { data, bridge, store } = await commandFixture()
+  const plan = openProgramDraft(data.templates); plan.templates[0].name = 'Sandbox name'
+  const ordinary = clone(data); ordinary.templates.reverse()
+  const queued = store.save(ordinary)
+  const saved = store.saveProgram(plan)
+  await queued; equal((await saved).status, 'STALE_PROGRAM'); equal(bridge.replacements, 1)
+  const invalid = openProgramDraft(ordinary.templates); invalid.templates = []
+  equal((await store.saveProgram(invalid)).status, 'VALIDATION_FAILED'); equal(bridge.replacements, 1)
+  const legacy = new DesktopDataCoordinator(data, new LegacyMigrationSource(data), () => {}, () => {})
+  equal((await legacy.saveProgram(plan)).status, 'BLOCKED')
+})
+
+test('program waits for durable acknowledgement, rebase ordinary updates, no duplicate effect save', async () => {
+  const { data, bridge, store } = await commandFixture()
+  const plan = openProgramDraft(data.templates); plan.templates[0].name = 'Program change'
+  let release!: () => void, entered!: () => void
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  const writing = new Promise<void>((resolve) => { entered = resolve })
+  const replace = bridge.replaceAuthority.bind(bridge)
+  bridge.replaceAuthority = async (desired, revision) => { entered(); await gate; return replace(desired, revision) }
+  let published = data, done = false
+  const coordinator = new DesktopDataCoordinator(data, store, (next) => { published = next }, () => {})
+  const save = coordinator.saveProgram(plan).then((result) => { done = true; return result })
+  await writing; equal(done, false); equal(published, data)
+  coordinator.update((current) => ({ ...current, coachNotes: { ...current.coachNotes, synthetic: 'New ordinary note' } }))
+  release(); equal((await save).status, 'APPLIED'); await store.load()
+  equal(bridge.replacements, 2) // one program transaction and one deliberate ordinary edit
+  equal(published.templates[0].name, plan.templates[0].name)
+  equal(bridge.data!.coachNotes.synthetic, 'New ordinary note')
+})
+
+test('program disk failure, CAS conflict and lost acknowledgement are distinguished without replay', async () => {
+  for (const mode of ['disk', 'cas', 'lost'] as const) {
+    const { data, bridge, store } = await commandFixture()
+    const plan = openProgramDraft(data.templates); plan.templates[0].name = 'Program change'
+    const replace = bridge.replaceAuthority.bind(bridge)
+    bridge.replaceAuthority = async (desired, revision) => {
+      if (mode === 'disk') throw new Error('Synthetic disk failure')
+      if (mode === 'cas') bridge.mutateExternally((current) => { current.settings.calorieTarget++ })
+      const result = await replace(desired, revision)
+      if (mode === 'lost') throw new Error('Lost acknowledgement')
+      return result
+    }
+    const coordinator = new DesktopDataCoordinator(data, store, () => {}, () => {})
+    const result = await coordinator.saveProgram(plan)
+    equal(result.status, mode === 'disk' ? 'PERSISTENCE_FAILED' : mode === 'cas' ? 'STALE_PROGRAM' : 'INDETERMINATE')
+    equal(bridge.replacements, mode === 'lost' ? 1 : 0)
+    if (result.status === 'INDETERMINATE') equal(result.desiredProgramPresent, true)
+  }
+})
+
+test('unavailable program reconciliation blocks both save capabilities until authority is reread', async () => {
+  const { data, bridge, store } = await commandFixture()
+  const plan = openProgramDraft(data.templates); plan.templates.reverse()
+  const read = bridge.loadAuthority.bind(bridge)
+  bridge.replaceAuthority = async () => { bridge.loadAuthority = async () => { throw new Error('Offline') }; throw new Error('Unknown write') }
+  const coordinator = new DesktopDataCoordinator(data, store, () => {}, () => {})
+  equal((await coordinator.saveProgram(plan)).status, 'INDETERMINATE')
+  equal(coordinator.supportsProgramSave, false); equal(coordinator.supportsConfirmedTrackingMutations, false)
+  bridge.loadAuthority = read
+  await coordinator.poll(); equal(coordinator.supportsProgramSave, true)
+  equal(bridge.replacements, 0); equal(programVersion(bridge.data!.templates), plan.baseline)
 })
 
 for (const change of ['prescription', 'identity', 'deleted', 'queued'] as const) {

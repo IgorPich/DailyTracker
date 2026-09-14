@@ -1,5 +1,7 @@
 import type { AppData, AppDataStore } from '@greekgod/core'
 import { changeTemplateRepRange as applyRepRange, type TemplateRepRangePlan } from '@greekgod/core'
+import { applyProgram, programVersion, type ProgramPlan } from '@greekgod/core'
+import type { ProgramPersistence, ProgramSaveResult } from './programPersistence.ts'
 import type { ConfirmedTrackingPersistence, TrackingMutationResult } from './confirmedTrackingMutation.ts'
 import { normalizeData } from '../utils/storage'
 import { jsonBoundaryValue, semanticJsonDifference } from './nativeStorageBridge'
@@ -61,7 +63,7 @@ const requiredSnapshot = (response: NativeAuthorityResponse): { data: AppData; r
   return { data: parsedAppData(response.data), revision: response.revision }
 }
 
-export class DevelopmentAuthoritativeAppDataStore implements AppDataStore, ConfirmedTrackingPersistence {
+export class DevelopmentAuthoritativeAppDataStore implements AppDataStore, ConfirmedTrackingPersistence, ProgramPersistence {
   private revision: number | undefined
   private initialization: Promise<AppData> | undefined
   private saveQueue: Promise<void> = Promise.resolve()
@@ -80,6 +82,39 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore, Confi
   }
 
   get supportsConfirmedTrackingMutations() { return this.revision !== undefined && !this.legacyFallback }
+  get supportsProgramSave() { return this.supportsConfirmedTrackingMutations }
+
+  saveProgram(plan: ProgramPlan): Promise<ProgramSaveResult> {
+    const draft = structuredClone(plan)
+    return this.enqueue(async () => {
+      if (!this.supportsProgramSave) return { status: 'BLOCKED', message: 'Safe native authority required' }
+      let attempted = false
+      try {
+        const current = requiredSnapshot(await this.nativeBridge.loadAuthority())
+        this.revision = current.revision
+        if (programVersion(current.data.templates) !== draft.baseline) return { status: 'STALE_PROGRAM', message: 'Program changed; refresh and review the draft' }
+        let desired: AppData
+        try { desired = applyProgram(current.data, draft) }
+        catch { return { status: 'VALIDATION_FAILED', message: 'Invalid program or unresolved exercise reference' } }
+        if (programVersion(desired.templates) === draft.baseline) return { status: 'APPLIED', data: current.data, resultingRevision: current.revision }
+        let saved: { data: AppData; revision: number }
+        try {
+          attempted = true
+          saved = requiredSnapshot(await this.nativeBridge.replaceAuthority(desired, current.revision))
+        } catch (error) {
+          const latest = requiredSnapshot(await this.nativeBridge.loadAuthority())
+          this.revision = latest.revision
+          if (error && typeof error === 'object' && 'kind' in error && error.kind === 'revision-conflict') return { status: 'STALE_PROGRAM', message: 'Final CAS conflict; refresh/review before another save' }
+          return latest.revision === current.revision
+            ? { status: 'PERSISTENCE_FAILED', message: 'Program write failed without durable revision change' }
+            : { status: 'INDETERMINATE', message: 'Write acknowledgement uncertain; do not retry automatically' }
+        }
+        this.verifyExpected(desired, saved.data, 'program save')
+        this.revision = saved.revision
+        return { status: 'APPLIED', data: saved.data, resultingRevision: saved.revision }
+      } catch { return { status: attempted ? 'INDETERMINATE' : 'PERSISTENCE_FAILED', message: 'Authority unavailable; refresh before another save' } }
+    })
+  }
 
   changeTemplateRepRange(plan: TemplateRepRangePlan): Promise<TrackingMutationResult> {
     const confirmed = structuredClone(plan)
