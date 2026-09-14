@@ -18,9 +18,10 @@ const Progress = lazy(async () => ({ default: (await import('./pages/Progress'))
 const CoachReport = lazy(async () => ({ default: (await import('./pages/CoachReport')).CoachReport }))
 const HumanCoach = lazy(async () => ({ default: (await import('./pages/HumanCoach')).HumanCoach }))
 const ExplicitCommand = lazy(async () => ({ default: (await import('./pages/ExplicitCommand')).ExplicitCommand }))
+const CompanionMemory = lazy(async () => ({ default: (await import('./pages/CompanionMemory')).CompanionMemory }))
 const Settings = lazy(async () => ({ default: (await import('./pages/Settings')).Settings }))
 
-export type View = 'dashboard' | 'training' | 'progress' | 'journal' | 'report' | 'settings' | 'human-coach' | 'explicit-command'
+export type View = 'dashboard' | 'training' | 'progress' | 'journal' | 'report' | 'settings' | 'human-coach' | 'explicit-command' | 'companion-memory'
 
 const navItems = [
   { id: 'dashboard' as const, label: 'Panel', mobileLabel: 'Panel', icon: BarChart3 },
@@ -65,6 +66,7 @@ export default function App() {
           <FileText size={19} /> <span>Polecenie dla aplikacji</span>
         </button>
         </nav>
+        <button className={view === 'companion-memory' ? 'active' : ''} onClick={() => navigate('companion-memory')}><BookOpen size={19} /> <span>Pamięć Companion</span></button>
         <button className={`settings-link ${view === 'settings' ? 'active' : ''}`} onClick={() => navigate('settings')}>
           <SettingsIcon size={19} /> <span>Ustawienia</span>
         </button>
@@ -88,6 +90,7 @@ export default function App() {
             {view === 'report' && <CoachReport />}
             {view === 'human-coach' && <HumanCoach />}
             {view === 'explicit-command' && <ExplicitCommand />}
+            {view === 'companion-memory' && <CompanionMemory />}
             {view === 'settings' && <Settings />}
           </Suspense>
         </main>

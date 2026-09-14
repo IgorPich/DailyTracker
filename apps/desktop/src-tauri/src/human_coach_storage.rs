@@ -13,7 +13,7 @@ fn validate_envelope(bytes: &[u8]) -> io::Result<()> {
 
 // Same-directory rename; never truncate the authoritative file. Windows tempfile
 // persist uses MoveFileExW(REPLACE_EXISTING). Failure retains the original target.
-fn atomic_replace(path: &Path, bytes: &[u8], before_replace: impl FnOnce() -> io::Result<()>) -> io::Result<()> {
+pub(crate) fn atomic_replace(path: &Path, bytes: &[u8], before_replace: impl FnOnce() -> io::Result<()>) -> io::Result<()> {
     let parent = path.parent().ok_or_else(|| io::Error::other("Missing parent"))?;
     let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
     temporary.write_all(bytes)?;

@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "companion-memory-local",
+  "description": "Read isolated Companion memory; fixed-path native command performs atomic writes",
+  "windows": ["main"],
+  "permissions": [
+    { "identifier": "fs:allow-exists", "allow": [
+      { "path": "$APPDATA/greekgod-companion-memory.v1.json" },
+      { "path": "$APPDATA/greekgod-companion-memory.dev.v1.json" }
+    ] },
+    { "identifier": "fs:allow-read-text-file", "allow": [
+      { "path": "$APPDATA/greekgod-companion-memory.v1.json" },
+      { "path": "$APPDATA/greekgod-companion-memory.dev.v1.json" }
+    ] }
+  ]
+}
