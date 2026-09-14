@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts", "./commands": "./src/commands/explicitCommand.ts", "./readonly": "./src/readonly/runtime.ts", "./memory": "./src/memory/memory.ts" },
+  "exports": { ".": "./src/index.ts", "./commands": "./src/commands/explicitCommand.ts", "./readonly": "./src/readonly/runtime.ts", "./memory": "./src/memory/memory.ts", "./reactions": "./src/reactions/coordinator.ts" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json",
