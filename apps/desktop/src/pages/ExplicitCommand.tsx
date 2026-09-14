@@ -3,6 +3,7 @@ import { FakeCompanionModel } from '@greekgod/companion'
 import { commandCandidates, createExplicitCommandSession, explicitUserCommandInput, type ActionExecutionResult, type ActionPreparationResult, type CommandModelRequest } from '@greekgod/companion/commands'
 import { useApp } from '../context/AppContext'
 import { PageHeader } from '../components/PageHeader'
+import { observeCommandReaction } from '../services/companionReactions'
 
 export function ExplicitCommand() {
   const { data, trackingCommands, lastTrackingCommandResult } = useApp()
@@ -41,7 +42,11 @@ export function ExplicitCommand() {
   const apply = async () => {
     if (busyRef.current || result?.status !== 'PREVIEWED') return
     busyRef.current = true; setBusy(true)
-    try { setExecution(await session.execute(session.confirm(result))) }
+    try {
+      const executed = await session.execute(session.confirm(result))
+      setExecution(executed)
+      observeCommandReaction(executed.status)
+    }
     catch { setExecution({ status: 'FAILED', message: 'Potwierdzenie wygasło; przygotuj nowy podgląd' }) }
     finally { setResult(undefined); busyRef.current = false; setBusy(false) }
   }
