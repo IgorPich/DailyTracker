@@ -474,7 +474,7 @@ fn remote_operation_id(service_id: &str, change: &SyncEntityRecord) -> String {
 mod tests {
     use super::*;
     use crate::{SyncEntityType, DATABASE_FILENAME};
-    use serde_json::json;
+    use serde_json::{json, Value};
     use tempfile::tempdir;
 
     fn store() -> (tempfile::TempDir, NativeAppDataStore) {
@@ -571,6 +571,29 @@ mod tests {
         assert!(store
             .update_sync_remote_host("service-a", "http://192.168.1.13:39173")
             .is_err());
+    }
+
+    #[test]
+    fn dynamic_program_round_trip_preserves_eight_templates_and_subsequent_order_and_deletion() {
+        let (_source_directory, source) = store();
+        let (_client_directory, client) = store();
+        let initial = source.load_authoritative_snapshot().expect("source");
+        let mut desired = initial.data;
+        desired["templates"] = Value::Array((0..8).map(|index| json!({
+            "id": Uuid::new_v4().to_string(), "code": format!("Custom {index}"),
+            "name": format!("User template {index}"), "exercises": []
+        })).collect());
+        let saved = source.replace_authoritative_snapshot(&desired, "desktop:test", initial.revision).expect("save program");
+        let changes = source.changes_since(0, 100).expect("changes");
+        client.apply_remote_batch_and_advance_cursor("service-a", &changes, saved.revision).expect("phone pull");
+        assert_eq!(client.load_authoritative_snapshot().expect("phone snapshot").data, desired);
+        let templates = desired["templates"].as_array_mut().unwrap();
+        templates.reverse();
+        templates.remove(3);
+        let updated = source.replace_authoritative_snapshot(&desired, "desktop:test", saved.revision).expect("edit program");
+        let changes = source.changes_since(saved.revision, 100).expect("delta");
+        client.apply_remote_batch_and_advance_cursor("service-a", &changes, updated.revision).expect("phone delta");
+        assert_eq!(client.load_authoritative_snapshot().expect("phone reordered snapshot").data, desired);
     }
 
     #[test]

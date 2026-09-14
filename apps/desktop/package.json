@@ -12,7 +12,7 @@
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "npm run test:identity && npm run test:progress-analytics && npm run test:picker-ux && npm run test:weight-window && npm run test:training-time && npm run test:human-coach && npm run test:companion-memory && npm run test:companion-reactions && npm run test:dev-storage && npm run test:storage && npm run test:windows-lifecycle",
     "test:training-time": "node scripts/training-time-summary.test.mjs",
-    "test:picker-ux": "node scripts/exercise-picker-ux.test.mjs",
+    "test:picker-ux": "node scripts/exercise-picker-ux.test.mjs && node scripts/program-builder.test.mjs",
     "test:weight-window": "node scripts/weight-window.test.mjs",
     "test:human-coach": "node --experimental-strip-types --test scripts/human-coach-storage.test.ts scripts/coach-proposal-review.test.ts",
     "test:companion-memory": "node --experimental-strip-types --test scripts/companion-memory-storage.test.ts",

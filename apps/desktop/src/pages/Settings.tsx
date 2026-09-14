@@ -18,26 +18,24 @@ import {
 } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { DecimalInput } from '../components/DecimalInput'
-import { TemplateEditor } from '../components/TemplateEditor'
 import { useApp } from '../context/AppContext'
 import { useToast } from '../context/ToastContext'
 import { confirmAction, isDesktopApp, pickJsonText } from '../services/fileService'
 import { appDataStore } from '../services/appDataStore'
-import type { Phase, TrainingTemplate } from '../types'
+import type { Phase } from '../types'
 import { phaseLabel } from '../utils/labels'
 import { exportCsv, exportJson, normalizeData } from '../utils/storage'
 
 const phases: Phase[] = ['Maintenance', 'Lean Gain', 'Mini Cut', 'Redukcja']
 
-export function Settings() {
-  const { data, updateSettings, updateTemplate, addGymLocation, renameGymLocation, deleteGymLocation, replaceData, clearData } = useApp()
+export function Settings({ onEditProgram }: { onEditProgram: () => void }) {
+  const { data, updateSettings, addGymLocation, renameGymLocation, deleteGymLocation, replaceData, clearData } = useApp()
   const { showToast } = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null)
   const [newGymName, setNewGymName] = useState('')
   const [editingGym, setEditingGym] = useState<string | null>(null)
   const [gymNameDraft, setGymNameDraft] = useState('')
-  const [editingTemplate, setEditingTemplate] = useState<TrainingTemplate | null>(null)
   const gymLocations = data.settings.gymLocations ?? []
 
   const hasGymName = (name: string, except?: string) => gymLocations.some((item) => (
@@ -174,7 +172,8 @@ export function Settings() {
 
         <section className="card settings-section template-settings">
           <div className="settings-section__heading"><span className="settings-icon"><Dumbbell size={19} /></span><div><h2>Szablony treningowe</h2><p>Trwałe zmiany będą używane w przyszłych treningach. Zapisana historia nie zostanie zmieniona.</p></div></div>
-          <div className="template-settings__list">{data.templates.map((template) => <div className="template-settings__row" key={template.id}><span className="template-code">{template.code}</span><div><strong>{template.name}</strong><small>{template.exercises.length} ćwiczeń</small></div><button type="button" className="button button--secondary button--small" onClick={() => setEditingTemplate(template)}><Edit3 size={15} /> Edytuj szablon</button></div>)}</div>
+          <button type="button" className="button button--secondary" onClick={onEditProgram}><Edit3 size={15} /> Edytuj program</button>
+          <div className="template-settings__list">{data.templates.map((template) => <div className="template-settings__row" key={template.id}><span className="template-code">{template.code}</span><div><strong>{template.name}</strong><small>{template.exercises.length} ćwiczeń</small></div></div>)}</div>
         </section>
 
         <section className="card settings-section">
@@ -204,7 +203,6 @@ export function Settings() {
           <button className="button button--danger" onClick={resetAll}><Trash2 size={16} /> Wyczyść dane</button>
         </section>
       </div>
-      {editingTemplate && <TemplateEditor template={editingTemplate} exerciseLibrary={data.exerciseLibrary} onSave={(template) => { updateTemplate(template); showToast('Szablon zapisany') }} onClose={() => setEditingTemplate(null)} />}
     </div>
   )
 }

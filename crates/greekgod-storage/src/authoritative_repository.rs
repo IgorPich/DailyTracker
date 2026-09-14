@@ -580,6 +580,41 @@ mod tests {
     }
 
     #[test]
+    fn dynamic_program_is_one_change_set_and_preserves_history_on_reorder_and_delete() {
+        let (_directory, store, revision) = bootstrapped_store();
+        let original = fixture();
+        let mut desired = original.clone();
+        desired["templates"] = Value::Array((0..8).map(|index| json!({
+            "id": Uuid::new_v4().to_string(), "code": format!("Custom {index}"),
+            "name": format!("User program {index}"), "exercises": []
+        })).collect());
+        let saved = store.replace_authoritative_snapshot(&desired, "desktop-builder-test", revision).expect("save eight templates");
+        assert_eq!(saved.applied_operations, 9); // Eight inserts + removal of the fixture's old template.
+        assert_eq!(saved.revision - revision, 9);
+        assert_eq!(store.load_authoritative_snapshot().expect("materialized + authority").data, desired);
+        store.with_connection(|connection| {
+            let groups: i64 = connection.query_row(
+                "SELECT COUNT(DISTINCT change_set_id) FROM sync_outbox WHERE result_revision > ?1",
+                [revision], |row| row.get(0),
+            )?;
+            assert_eq!(groups, 1, "one coherent transaction/change-set, not eight UI saves");
+            let other: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM sync_outbox WHERE result_revision > ?1 AND entity_type != 'training_template'",
+                [revision], |row| row.get(0),
+            )?;
+            assert_eq!(other, 0, "no unrelated sync mutations");
+            Ok(())
+        }).expect("outbox inspection");
+        let templates = desired["templates"].as_array_mut().expect("array");
+        templates.reverse();
+        templates.remove(2);
+        store.replace_authoritative_snapshot(&desired, "desktop-builder-test", saved.revision).expect("reorder and delete");
+        let loaded = store.load_authoritative_snapshot().expect("reload");
+        assert_eq!(loaded.data, desired);
+        assert_eq!(loaded.data["workouts"], original["workouts"]);
+    }
+
+    #[test]
     fn snapshot_reconciliation_preserves_domain_identity_order_and_optional_values() {
         let (_directory, store, revision) = bootstrapped_store();
         let gym_before = gym_id(&store, "Klub Północ");
