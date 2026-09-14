@@ -3,6 +3,8 @@ import test from 'node:test'
 import type { AppData } from '@greekgod/core'
 import { prepareTemplateRepRange } from '@greekgod/core'
 import { randomUUID } from 'node:crypto'
+import { FakeCompanionModel } from '@greekgod/companion'
+import { commandCandidates, createExplicitCommandSession, explicitUserCommandInput } from '@greekgod/companion/commands'
 import { DesktopDataCoordinator } from '../../src/services/desktopDataCoordinator.ts'
 import {
   DevelopmentAuthoritativeAppDataStore,
@@ -85,7 +87,7 @@ class FakeAuthorityBridge implements NativeAuthorityBridge {
   }
 
   async replaceAuthority(data: AppData, expectedRevision: number) {
-    if (expectedRevision !== this.revision) throw new Error('revision-conflict')
+    if (expectedRevision !== this.revision) throw Object.assign(new Error('revision-conflict'), { kind: 'revision-conflict' })
     this.replacements += 1
     this.revision += 1
     this.data = clone(data)
@@ -173,12 +175,14 @@ test('React coordinator waits for durability and does not duplicate effect save;
   const { bridge, store, plan, data } = await commandFixture()
   let release!: () => void
   const gate = new Promise<void>((resolve) => { release = resolve })
+  let entered!: () => void
+  const writing = new Promise<void>((resolve) => { entered = resolve })
   const replace = bridge.replaceAuthority.bind(bridge)
-  bridge.replaceAuthority = async (desired, revision) => { await gate; return replace(desired, revision) }
+  bridge.replaceAuthority = async (desired, revision) => { entered(); await gate; return replace(desired, revision) }
   let published = data, finished = false
   const coordinator = new DesktopDataCoordinator(data, store, (next) => { published = next }, () => {})
   const pending = coordinator.changeTemplateRepRange(plan).then((result) => { finished = true; return result })
-  await Promise.resolve(); await Promise.resolve()
+  await writing
   equal(finished, false); equal(published, data); equal(bridge.replacements, 0)
   release()
   equal((await pending).status, 'APPLIED')
@@ -195,6 +199,72 @@ test('legacy capability blocks execution without persistence or React success', 
   const coordinator = new DesktopDataCoordinator(data, legacy, () => { throw new Error('Unexpected publication') }, () => {})
   equal(coordinator.supportsConfirmedTrackingMutations, false)
   equal((await coordinator.changeTemplateRepRange(plan)).status, 'BLOCKED'); equal(legacy.saves, 0)
+})
+
+test('lost acknowledgement reconciles saved state without false APPLIED or automatic replay', async () => {
+  const { bridge, store, plan, data } = await commandFixture()
+  const replace = bridge.replaceAuthority.bind(bridge)
+  bridge.replaceAuthority = async (desired, revision) => { await replace(desired, revision); throw new Error('Lost acknowledgement') }
+  const coordinator = new DesktopDataCoordinator(data, store, () => {}, () => {})
+  const result = await coordinator.changeTemplateRepRange(plan)
+  equal(result.status, 'INDETERMINATE')
+  if (result.status === 'INDETERMINATE') deepStrictEqual(result.reconciliation, { desiredStatePresent: true, observedPrescription: plan.afterPrescription })
+  equal(bridge.replacements, 1)
+  equal(bridge.data!.templates[0].exercises[0].prescription, plan.afterPrescription)
+})
+
+test('explicit envelope through fake, bound confirmation, coordinator and authority writes exactly once', async () => {
+  const { bridge, store, data, plan } = await commandFixture()
+  const coordinator = new DesktopDataCoordinator(data, store, () => {}, () => {})
+  const session = createExplicitCommandSession(coordinator)
+  const target = commandCandidates(data).find((item) => item.templateExerciseId === plan.templateExerciseId)!
+  const preview = await session.prepare(explicitUserCommandInput('Synthetic explicit request'), data,
+    new FakeCompanionModel({ action: plan.action, candidateRefs: [target.reference], minReps: plan.minReps, maxReps: plan.maxReps }))
+  equal(bridge.replacements, 0); equal(preview.status, 'PREVIEWED')
+  if (preview.status !== 'PREVIEWED') return
+  const confirmed = session.confirm(preview)
+  equal((await session.execute(confirmed)).status, 'APPLIED')
+  equal((await session.execute(confirmed)).status, 'FAILED')
+  equal(bridge.replacements, 1)
+})
+
+test('ordinary React edit during a command is deferred and rebased onto committed state', async () => {
+  const { bridge, store, plan, data } = await commandFixture()
+  let release!: () => void, entered!: () => void
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  const writing = new Promise<void>((resolve) => { entered = resolve })
+  const replace = bridge.replaceAuthority.bind(bridge)
+  bridge.replaceAuthority = async (desired, revision) => { entered(); await gate; return replace(desired, revision) }
+  const coordinator = new DesktopDataCoordinator(data, store, () => {}, () => {})
+  const pending = coordinator.changeTemplateRepRange(plan)
+  await writing
+  coordinator.update((current) => ({ ...current, settings: { ...current.settings, calorieTarget: current.settings.calorieTarget + 1 } }))
+  equal(bridge.replacements, 0)
+  release(); equal((await pending).status, 'APPLIED'); await store.load()
+  equal(bridge.replacements, 2) // one confirmed change + one deliberate ordinary edit, no effect duplicate
+  equal(bridge.data!.templates[0].exercises[0].prescription, plan.afterPrescription)
+  equal(bridge.data!.settings.calorieTarget, data.settings.calorieTarget + 1)
+})
+
+test('unavailable reconciliation holds ordinary edits and blocks further commands until refresh', async () => {
+  const { bridge, store, plan, data } = await commandFixture()
+  const read = bridge.loadAuthority.bind(bridge)
+  bridge.replaceAuthority = async () => {
+    bridge.loadAuthority = async () => { throw new Error('Offline read') }
+    throw new Error('Unacknowledged failure')
+  }
+  const outcomes: unknown[] = []
+  const coordinator = new DesktopDataCoordinator(data, store, () => {}, () => {}, (result) => outcomes.push(result))
+  equal((await coordinator.changeTemplateRepRange(plan)).status, 'INDETERMINATE')
+  equal(coordinator.supportsConfirmedTrackingMutations, false)
+  coordinator.update((current) => ({ ...current, settings: { ...current.settings, calorieTarget: current.settings.calorieTarget + 1 } }))
+  equal(bridge.replacements, 0)
+  bridge.loadAuthority = read
+  bridge.replaceAuthority = FakeAuthorityBridge.prototype.replaceAuthority.bind(bridge)
+  await coordinator.poll(); await store.load()
+  equal(bridge.replacements, 1); equal(coordinator.supportsConfirmedTrackingMutations, true)
+  deepStrictEqual((outcomes.at(-1) as { reconciliation: unknown }).reconciliation,
+    { desiredStatePresent: false, observedPrescription: plan.beforePrescription })
 })
 
 test('authority bootstrap verifies backups and permanently stops writing Legacy Store', async () => {

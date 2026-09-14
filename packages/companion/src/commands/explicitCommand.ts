@@ -37,6 +37,11 @@ const validate = (raw: unknown, candidates: readonly CommandCandidate[]): ModelA
   if (value.action !== 'CHANGE_TEMPLATE_REP_RANGE' || !Number.isSafeInteger(value.minReps) || !Number.isSafeInteger(value.maxReps)
     || value.minReps < 1 || value.maxReps < value.minReps) throw new Error('Unsupported action or invalid rep range')
   if (!Array.isArray(value.candidateRefs) || !value.candidateRefs.length || value.candidateRefs.length > candidates.length
+    || Object.getPrototypeOf(value.candidateRefs) !== Array.prototype
+    || Reflect.ownKeys(value.candidateRefs).length !== value.candidateRefs.length + 1
+    || Reflect.ownKeys(value.candidateRefs).some((key) => key !== 'length' && (typeof key !== 'string'
+      || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.candidateRefs.length
+      || !('value' in Object.getOwnPropertyDescriptor(value.candidateRefs, key)!)))
     || new Set(value.candidateRefs).size !== value.candidateRefs.length
     || value.candidateRefs.some((ref) => typeof ref !== 'string' || !candidates.some((item) => item.reference === ref))) throw new Error('Invalid candidate allowlist reference')
   return structuredClone(value)
@@ -46,7 +51,9 @@ export interface ActionReceipt {
   action: 'CHANGE_TEMPLATE_REP_RANGE'; templateId: string; templateExerciseId: string; exerciseId: string
   beforePrescription: string; afterPrescription: string; appliedAt: string; resultingRevision: number
 }
-export type ActionExecutionResult = { status: 'APPLIED'; receipt: ActionReceipt } | { status: 'FAILED' | 'STALE' | 'BLOCKED'; message: string }
+export type ActionExecutionResult = { status: 'APPLIED'; receipt: ActionReceipt }
+  | { status: 'FAILED' | 'STALE' | 'BLOCKED'; message: string }
+  | { status: 'INDETERMINATE'; message: string; reconciliation?: { desiredStatePresent: boolean; observedPrescription?: string } }
 export interface TrackingCommandGateway {
   readonly supportsConfirmedTrackingMutations: boolean
   changeTemplateRepRange(plan: TemplateRepRangePlan): Promise<ActionExecutionResult>
@@ -114,7 +121,7 @@ export const createExplicitCommandSession = (gateway: TrackingCommandGateway) =>
       const action = preview.plan; cancel() // consume before awaiting; never automatically retry
       if (!gateway.supportsConfirmedTrackingMutations) return { status: 'BLOCKED', message: 'Safe Desktop persistence required' }
       try { return await ActionDefinitionRegistry.CHANGE_TEMPLATE_REP_RANGE.execute(action, gateway) }
-      catch { return { status: 'FAILED', message: 'Confirmed persistence failed; refresh before retrying' } }
+      catch { return { status: 'INDETERMINATE', message: 'Gateway outcome unavailable; refresh before retrying' } }
     },
   }
 }

@@ -68,3 +68,16 @@ test('Desktop review is explicit, source-bound and uses existing picker, not raw
   assert.doesNotMatch(reject, /service\.|repository|invoke|fetch/)
   assert.doesNotMatch(page, /useEffect\([^\n]*requestProposals/)
 })
+
+test('explicit command UI is isolated, never executes from Enter or parsing; command publication has no effect save', () => {
+  const page = readFileSync(new URL('../src/pages/ExplicitCommand.tsx', import.meta.url), 'utf8')
+  const trainer = readFileSync(new URL('../src/pages/HumanCoach.tsx', import.meta.url), 'utf8')
+  const context = readFileSync(new URL('../src/context/AppContext.tsx', import.meta.url), 'utf8')
+  assert.match(page, /onSubmit=\{\(event\) => event.preventDefault\(\)\}/)
+  assert.match(page, /if \(event.key === 'Enter'\) event.preventDefault\(\)/)
+  assert.match(page, /session.execute\(session.confirm\(result\)\)/)
+  assert.match(page, /supportsConfirmedTrackingMutations/)
+  assert.doesNotMatch(page.slice(page.indexOf('const prepare ='), page.indexOf('const apply =')), /session.execute|changeTemplateRepRange\(/)
+  assert.doesNotMatch(trainer, /trackingCommands|ActionDefinitionRegistry|ExplicitCommand|\/commands/)
+  assert.doesNotMatch(context, /appDataStore.save\(data\)/)
+})

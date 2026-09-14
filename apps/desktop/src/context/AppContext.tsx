@@ -16,10 +16,11 @@ import { registerExerciseDefinition, renameExerciseDefinition } from '../utils/e
 import { createInitialData } from '../utils/storage'
 import { updateTemplateAndLibrary } from '../utils/templateIdentity'
 import { DesktopDataCoordinator } from '../services/desktopDataCoordinator'
-import type { ConfirmedTrackingPersistence } from '../services/confirmedTrackingMutation'
+import type { ConfirmedTrackingPersistence, TrackingMutationResult } from '../services/confirmedTrackingMutation'
 
 interface AppContextValue {
   trackingCommands: ConfirmedTrackingPersistence
+  lastTrackingCommandResult?: TrackingMutationResult
   data: AppData
   upsertDailyEntry: (entry: DailyEntry) => void
   deleteDailyEntry: (id: string) => void
@@ -76,8 +77,9 @@ const attachWorkoutExerciseIdentities = (
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, publishData] = useState<AppData>(createInitialData)
+  const [lastTrackingCommandResult, publishOutcome] = useState<TrackingMutationResult>()
   const coordinator = useMemo(() => new DesktopDataCoordinator(data, appDataStore, publishData,
-    (error) => console.error('Nie udało się zapisać danych GreekGod.', error)), [])
+    (error) => console.error('Nie udało się zapisać danych GreekGod.', error), publishOutcome), [])
   const setData = coordinator.update
   const [hydrated, setHydrated] = useState(false)
   const [loadError, setLoadError] = useState(false)
@@ -121,6 +123,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppContextValue>(() => ({
     data,
+    lastTrackingCommandResult,
     trackingCommands: {
       get supportsConfirmedTrackingMutations() { return coordinator.supportsConfirmedTrackingMutations },
       changeTemplateRepRange: (plan) => coordinator.changeTemplateRepRange(plan),
@@ -181,7 +184,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     replaceData: setData,
     clearData: () => setData(createInitialData()),
-  }), [data])
+  }), [data, lastTrackingCommandResult])
 
   if (loadError) return <div className="app-boot" role="alert"><span>!</span><p>Nie udało się bezpiecznie wczytać danych. Plik nie został zmieniony.</p></div>
   if (!hydrated) return <div className="app-boot" role="status"><span>G</span><p>Wczytywanie GreekGod…</p></div>

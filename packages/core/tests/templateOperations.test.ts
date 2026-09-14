@@ -1,7 +1,8 @@
-import { deepStrictEqual, notStrictEqual, strictEqual } from 'node:assert/strict'
+import { deepStrictEqual, notStrictEqual, strictEqual, throws } from 'node:assert/strict'
 import test from 'node:test'
 import { insertTemplateExercise, moveItem, removeTemplateExercise, replaceTemplateExerciseDefinition, replaceTrainingTemplate } from '../src/templateOperations.ts'
-import type { ExerciseDefinition, TemplateExercise, TrainingTemplate } from '../src/types.ts'
+import type { AppData, ExerciseDefinition, TemplateExercise, TrainingTemplate } from '../src/types.ts'
+import { changeTemplateRepRange, prepareTemplateRepRange } from '../src/changeTemplateRepRange.ts'
 
 const exercise = (id: string): TemplateExercise => ({
   id,
@@ -17,6 +18,25 @@ const template = (id: string, name = id): TrainingTemplate => ({
   code: 'A',
   name,
   exercises: [exercise(`${id}-exercise-a`), exercise(`${id}-exercise-b`)],
+})
+
+test('rep-range operation changes only prescription and rejects complex, stale and no-op plans', () => {
+  const templates = [template('synthetic-template')]
+  const row = templates[0].exercises[0]
+  const data = { templates, workouts: [], exerciseLibrary: [{ id: row.exerciseId!, name: row.name, equipmentSensitive: false }] } as unknown as AppData
+  const target = { templateId: templates[0].id, templateExerciseId: row.id, exerciseId: row.exerciseId! }
+  const plan = prepareTemplateRepRange(data, target, 10, 15)
+  const changed = changeTemplateRepRange(data, plan)
+  deepStrictEqual(changed.templates[0].exercises[0], { ...row, prescription: '3 × 10–15' })
+  strictEqual(changed.workouts, data.workouts)
+  strictEqual(changed.templates[0].exercises[1], data.templates[0].exercises[1])
+  strictEqual(row.prescription, '3 × 8–12')
+  throws(() => changeTemplateRepRange(changed, plan))
+  throws(() => prepareTemplateRepRange(data, target, 8, 12))
+  for (const prescription of ['1 × 4–6 + 2 × 6–8', 'Dowolny opis', '3 × 8–12 / strona']) {
+    const complex = { ...data, templates: [{ ...templates[0], exercises: [{ ...row, prescription }] }] }
+    throws(() => prepareTemplateRepRange(complex, target, 10, 15))
+  }
 })
 
 test('moves an item by shallow-copying the list and preserving item references', () => {

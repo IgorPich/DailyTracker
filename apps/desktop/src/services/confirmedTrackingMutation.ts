@@ -13,6 +13,7 @@ export interface AppliedActionReceipt {
 export type TrackingMutationResult =
   | { status: 'APPLIED'; data: AppData; receipt: AppliedActionReceipt }
   | { status: 'STALE' | 'FAILED' | 'BLOCKED'; message: string }
+  | { status: 'INDETERMINATE'; message: string; reconciliation?: { desiredStatePresent: boolean; observedPrescription?: string } }
 
 export interface ConfirmedTrackingPersistence {
   readonly supportsConfirmedTrackingMutations: boolean

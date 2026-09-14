@@ -85,6 +85,7 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore, Confi
     const confirmed = structuredClone(plan)
     return this.enqueue(async () => {
       if (!this.supportsConfirmedTrackingMutations) return { status: 'BLOCKED', message: 'Safe authoritative storage is required' }
+      let writeAttempted = false
       try {
         const current = requiredSnapshot(await this.nativeBridge.loadAuthority())
         this.revision = current.revision
@@ -93,14 +94,18 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore, Confi
         catch { return { status: 'STALE', message: 'Target changed or is no longer valid; create a new preview' } }
         let saved: { data: AppData; revision: number }
         try {
+          writeAttempted = true
           saved = requiredSnapshot(await this.nativeBridge.replaceAuthority(desired, current.revision))
-        } catch {
+        } catch (error) {
           // CAS can lose a race to Sync Service even inside the Desktop queue.
           const latest = requiredSnapshot(await this.nativeBridge.loadAuthority())
           this.revision = latest.revision
-          return latest.revision !== current.revision
+          const conflict = !!error && typeof error === 'object' && 'kind' in error && error.kind === 'revision-conflict'
+          return conflict
             ? { status: 'STALE', message: 'Authority changed during execution; refresh and preview again' }
-            : { status: 'FAILED', message: 'Persistence did not acknowledge the confirmed write' }
+            : latest.revision === current.revision
+              ? { status: 'FAILED', message: 'Persistence failed without changing authoritative revision' }
+              : { status: 'INDETERMINATE', message: 'Write acknowledgement lost and authority changed. Inspect refreshed state; do not replay this confirmation' }
         }
         this.verifyExpected(desired, saved.data, 'confirmed template rep range')
         this.revision = saved.revision
@@ -109,7 +114,7 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore, Confi
           exerciseId: confirmed.exerciseId, beforePrescription: confirmed.beforePrescription,
           afterPrescription: confirmed.afterPrescription, appliedAt: new Date().toISOString(), resultingRevision: saved.revision,
         } }
-      } catch { return { status: 'FAILED', message: 'Unable to verify authoritative persistence; refresh before retrying' } }
+      } catch { return { status: writeAttempted ? 'INDETERMINATE' : 'FAILED', message: 'Unable to verify authoritative persistence; refresh before retrying' } }
     })
   }
 

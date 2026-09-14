@@ -17,9 +17,10 @@ const Training = lazy(async () => ({ default: (await import('./pages/Training'))
 const Progress = lazy(async () => ({ default: (await import('./pages/Progress')).Progress }))
 const CoachReport = lazy(async () => ({ default: (await import('./pages/CoachReport')).CoachReport }))
 const HumanCoach = lazy(async () => ({ default: (await import('./pages/HumanCoach')).HumanCoach }))
+const ExplicitCommand = lazy(async () => ({ default: (await import('./pages/ExplicitCommand')).ExplicitCommand }))
 const Settings = lazy(async () => ({ default: (await import('./pages/Settings')).Settings }))
 
-export type View = 'dashboard' | 'training' | 'progress' | 'journal' | 'report' | 'settings' | 'human-coach'
+export type View = 'dashboard' | 'training' | 'progress' | 'journal' | 'report' | 'settings' | 'human-coach' | 'explicit-command'
 
 const navItems = [
   { id: 'dashboard' as const, label: 'Panel', mobileLabel: 'Panel', icon: BarChart3 },
@@ -60,6 +61,9 @@ export default function App() {
         <button className={view === 'human-coach' ? 'active' : ''} onClick={() => navigate('human-coach')}>
           <BookOpen size={19} /> <span>Kontekst trenera</span>
         </button>
+        <button className={view === 'explicit-command' ? 'active' : ''} onClick={() => navigate('explicit-command')}>
+          <FileText size={19} /> <span>Polecenie dla aplikacji</span>
+        </button>
         </nav>
         <button className={`settings-link ${view === 'settings' ? 'active' : ''}`} onClick={() => navigate('settings')}>
           <SettingsIcon size={19} /> <span>Ustawienia</span>
@@ -83,6 +87,7 @@ export default function App() {
             {view === 'journal' && <Journal />}
             {view === 'report' && <CoachReport />}
             {view === 'human-coach' && <HumanCoach />}
+            {view === 'explicit-command' && <ExplicitCommand />}
             {view === 'settings' && <Settings />}
           </Suspense>
         </main>

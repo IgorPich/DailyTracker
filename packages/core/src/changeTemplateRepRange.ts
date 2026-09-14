@@ -30,6 +30,7 @@ export const prepareTemplateRepRange = (
   // Complex/multiple ranges are deliberately unsupported: never flatten their semantics.
   const match = /^(\s*(?:\d+\s*[×x]\s*)?)(\d+)\s*[–-]\s*(\d+)(\s*)$/.exec(prescription)
   if (!match || Number(match[2]) < 1 || Number(match[3]) < Number(match[2])) throw new Error('Unsupported prescription: a single simple rep range is required')
+  if (Number(match[2]) === minReps && Number(match[3]) === maxReps) throw new Error('Rep range is already unchanged')
   return { action: 'CHANGE_TEMPLATE_REP_RANGE', templateId: target.templateId, templateExerciseId: target.templateExerciseId,
     exerciseId: target.exerciseId, expectedTemplateState: templateStateVersion(templates[0]),
     beforePrescription: prescription, afterPrescription: `${match[1]}${minReps}–${maxReps}${match[4]}`, minReps, maxReps }
