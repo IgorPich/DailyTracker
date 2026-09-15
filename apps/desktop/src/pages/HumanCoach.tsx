@@ -114,7 +114,7 @@ export function HumanCoach() {
         allowedExerciseIds: exerciseSearchOptions(library.current).map((option) => option.definition.id),
       }, trainerProposalModel)
       setProposals((items) => [...items, ...next])
-      setProposalMessage(next.length ? 'Propozycje demonstracyjne — nic nie zostało zapisane.' : 'Brak propozycji.')
+      setProposalMessage(next.length ? 'Lokalne propozycje — nic nie zostało zapisane.' : 'Brak pewnych propozycji.')
     } catch (error) { setError(error instanceof Error ? error.message : 'Nie udało się pobrać propozycji') }
     finally { busyRef.current = false; setBusy(false) }
   }
@@ -150,7 +150,7 @@ export function HumanCoach() {
     <form id="coach-draft-form" onSubmit={submit} className="human-coach-form">
       <fieldset disabled={busy || !context}>
         <legend>{kind === 'NOTE' ? 'Zapisz niezmienną notatkę źródłową' : 'Nowy szkic — wymaga osobnego zatwierdzenia'}</legend>
-        {reviewing && <p>Przegląd propozycji fake: popraw pola, a następnie jawnie przyjmij jako DRAFT. To nie jest zatwierdzenie ustalenia.</p>}
+        {reviewing && <p>Przegląd propozycji lokalnej: popraw pola, a następnie jawnie przyjmij jako DRAFT. To nie jest zatwierdzenie ustalenia.</p>}
         <label>Rodzaj<select value={kind} onChange={(event) => setKind(event.target.value as HumanCoachItem['kind'])}>{Object.entries(kindLabels).filter(([value]) => !reviewing || value !== 'NOTE').map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         {(kind === 'TASK' || kind === 'TARGET') && <label>Tytuł<input required value={title} onChange={(event) => setTitle(event.target.value)} /></label>}
         {kind !== 'TARGET' && <label>{kind === 'NOTE' ? 'Wklej wiadomość / zalecenia trenera' : kind === 'TASK' ? 'Opis (opcjonalnie)' : 'Treść decyzji — wpisz ręcznie'}<textarea required={kind !== 'TASK'} rows={4} value={text} onChange={(event) => setText(event.target.value)} /></label>}
@@ -172,8 +172,8 @@ export function HumanCoach() {
         {reviewing && <button type="button" className="button button--ghost" onClick={() => rejectProposal(reviewing)}>Odrzuć propozycję bez zapisu</button>}
       </fieldset>
     </form>
-    <section aria-label="Nietrwałe propozycje fake">
-      <p>Fake model — demonstracja przeglądu, bez analizy tekstu. Propozycje znikają po opuszczeniu ekranu; nie są zapisanymi szkicami.</p>
+    <section aria-label="Nietrwałe propozycje lokalne">
+      <p>Model lokalny przygotowuje tylko nietrwałe propozycje. Znikają po opuszczeniu ekranu i wymagają ręcznego przeglądu oraz przyjęcia.</p>
       {proposalMessage && <p role="status">{proposalMessage}</p>}
       {proposals.map((proposal, index) => {
         const fields = proposal.fields
@@ -204,7 +204,7 @@ export function HumanCoach() {
         <small>ID: {item.id} · Utworzono: {item.createdAt} · {item.provenance.sourceType === 'MANUAL' ? 'Wpis ręczny' : 'Tekst trenera'}{item.provenance.sourceReference && ` · Źródło: ${item.provenance.sourceReference}`}</small>
         {item.provenance.sourceNoteId && <a href={`#coach-${item.provenance.sourceNoteId}`}>Notatka źródłowa: {item.provenance.sourceNoteId}</a>}
         {item.kind === 'NOTE' && <div>{(['TASK', 'TARGET', 'DECISION'] as const).map((draftKind) => <button key={draftKind} type="button" className="button button--ghost" disabled={busy} onClick={() => draftFrom(item.id, draftKind)}>Utwórz szkic: {kindLabels[draftKind]}</button>)}</div>}
-        {item.kind === 'NOTE' && item.provenance.sourceType === 'TRAINER_TEXT' && <button type="button" className="button button--ghost" disabled={busy} onClick={() => void requestProposals(item.id)}>Zaproponuj szkice (fake — demonstracja)</button>}
+        {item.kind === 'NOTE' && item.provenance.sourceType === 'TRAINER_TEXT' && <button type="button" className="button button--ghost" disabled={busy} onClick={() => void requestProposals(item.id)}>Zaproponuj szkice lokalnie</button>}
         {item.kind !== 'NOTE' && item.acceptance.state === 'DRAFT' && <button className="button button--ghost" disabled={busy} onClick={() => { if (window.confirm('Odrzucić szkic? Notatka źródłowa pozostanie zachowana.')) void run(() => service.discardCoachDraft({ id: item.id })) }}>Odrzuć szkic</button>}
         {item.acceptance.state === 'AUTHORITATIVE' && <small>Zatwierdzono: {item.acceptance.acceptedAt}</small>}
         {item.acceptance.state === 'DRAFT' && <button className="button button--secondary" disabled={busy} onClick={() => void run(() => service.acceptCoachItem({ id: item.id, acceptedAt: new Date().toISOString() }))}>Zatwierdź jako ustalenie trenera</button>}

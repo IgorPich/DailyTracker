@@ -1,6 +1,4 @@
-import { FakeCompanionModel } from '@greekgod/companion'
+import { localCompanionModel } from './localCompanionModel'
 
-// Deliberately unrelated to note contents. Demonstrates review mechanics, not extraction intelligence.
-export const trainerProposalModel = new FakeCompanionModel([
-  { kind: 'TASK', title: 'Demonstracyjny szkic — uzupełnij ręcznie', exerciseIds: [] },
-])
+// Optional real provider. Failure stays inside the proposal/review flow and never affects Tracking.
+export const trainerProposalModel = localCompanionModel

@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   AlertTriangle,
   Check,
@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Trash2,
   Upload,
+  Cpu,
   X,
 } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
@@ -25,6 +26,7 @@ import { appDataStore } from '../services/appDataStore'
 import type { Phase } from '../types'
 import { phaseLabel } from '../utils/labels'
 import { exportCsv, exportJson, normalizeData } from '../utils/storage'
+import { LOCAL_MODEL, localCompanionModel, localCompanionRuntime, type LocalModelStatus } from '../services/localCompanionModel'
 
 const phases: Phase[] = ['Maintenance', 'Lean Gain', 'Mini Cut', 'Redukcja']
 
@@ -36,7 +38,21 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
   const [newGymName, setNewGymName] = useState('')
   const [editingGym, setEditingGym] = useState<string | null>(null)
   const [gymNameDraft, setGymNameDraft] = useState('')
+  const [aiStatus, setAiStatus] = useState<LocalModelStatus>()
+  const [aiBusy, setAiBusy] = useState(false)
   const gymLocations = data.settings.gymLocations ?? []
+  const refreshAiStatus = async () => setAiStatus(await localCompanionRuntime.status())
+  useEffect(() => { if (isDesktopApp()) void refreshAiStatus() }, [])
+  const testAi = async () => {
+    setAiBusy(true)
+    try {
+      const result = await localCompanionModel.propose({ kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: 'Odpowiedz słowem: gotowe.' }, evidence: [] })
+      const value = result as { message?: unknown; evidenceIds?: unknown }
+      if (typeof value.message !== 'string' || !Array.isArray(value.evidenceIds) || value.evidenceIds.length) throw new Error('Nieprawidłowy wynik testu')
+      setAiStatus({ state: 'READY', detail: `Test lokalny zakończony: ${value.message}` })
+    } catch (error) { setAiStatus({ state: 'INFERENCE_FAILED', detail: error instanceof Error ? error.message : 'Test lokalny nie powiódł się.' }) }
+    finally { setAiBusy(false) }
+  }
 
   const hasGymName = (name: string, except?: string) => gymLocations.some((item) => (
     item !== except && item.localeCompare(name.trim(), 'pl', { sensitivity: 'accent' }) === 0
@@ -175,6 +191,16 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
           <button type="button" className="button button--secondary" onClick={onEditProgram}><Edit3 size={15} /> Edytuj program</button>
           <button type="button" className="button button--secondary" onClick={onEditJournal}><Edit3 size={15} /> Dostosuj dziennik</button>
           <div className="template-settings__list">{data.templates.map((template) => <div className="template-settings__row" key={template.id}><span className="template-code">{template.code}</span><div><strong>{template.name}</strong><small>{template.exercises.length} ćwiczeń</small></div></div>)}</div>
+        </section>
+
+        <section className="card settings-section companion-ai-settings">
+          <div className="settings-section__heading"><span className="settings-icon"><Cpu size={19} /></span><div><h2>Companion AI</h2><p>Opcjonalne wnioskowanie lokalne. Brak modelu nie blokuje dziennika ani treningów.</p></div></div>
+          <p><strong>{LOCAL_MODEL.version}</strong> · {LOCAL_MODEL.license} · suma pliku {LOCAL_MODEL.modelFileSha256.slice(0, 12)}…</p>
+          <p role="status">{!isDesktopApp() ? 'Status dostępny tylko w aplikacji Desktop.' : aiStatus ? `${aiStatus.state}: ${aiStatus.detail}` : 'Sprawdzanie lokalnego runtime…'}</p>
+          {aiStatus?.runtimeVersion && <small>Runtime: {aiStatus.runtimeVersion}</small>}
+          <div><button type="button" className="button button--secondary" disabled={!isDesktopApp() || aiBusy} onClick={() => void refreshAiStatus()}>Odśwież status</button>
+          <button type="button" className="button button--ghost" disabled={!isDesktopApp() || aiBusy || aiStatus?.state !== 'READY'} onClick={() => void testAi()}>{aiBusy ? 'Testowanie…' : 'Testuj lokalnie'}</button></div>
+          <small>GreekGod nie pobiera ani nie zastępuje modelu. Ten adapter deweloperski łączy się wyłącznie z 127.0.0.1.</small>
         </section>
 
         <section className="card settings-section">
