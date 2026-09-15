@@ -13,6 +13,9 @@ mod remote_sync_repository;
 mod security_repository;
 mod service_identity_repository;
 mod sync_repository;
+mod daily_conflict_repository;
+#[cfg(test)]
+mod daily_conflict_migration_tests;
 
 pub use authoritative_repository::*;
 pub use legacy_bootstrap::*;
@@ -20,6 +23,7 @@ pub use remote_sync_repository::*;
 pub use security_repository::*;
 pub use service_identity_repository::*;
 pub use sync_repository::*;
+pub use daily_conflict_repository::*;
 
 pub const DATABASE_FILENAME: &str = "greekgod-v3.sqlite";
 pub const MINIMUM_SAFE_WAL_SQLITE_VERSION: &str = "3.51.3";
@@ -354,6 +358,32 @@ pub struct NativeAppDataStore {
     database_path: PathBuf,
 }
 
+const MIGRATION_8_SQL: &str = r#"
+    CREATE TABLE daily_delivery (
+      service_id TEXT NOT NULL REFERENCES sync_remotes(service_id),
+      operation_id TEXT NOT NULL REFERENCES sync_outbox(operation_id),
+      original_remote_base INTEGER CHECK(original_remote_base >= 0),
+      status TEXT NOT NULL CHECK(status IN ('pending','needs_review','legacy_needs_review')),
+      authority_revision INTEGER CHECK(authority_revision >= 0),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(service_id, operation_id)
+    ) STRICT;
+    INSERT INTO daily_delivery(service_id, operation_id, status)
+      SELECT r.service_id, o.operation_id, 'legacy_needs_review'
+      FROM sync_remotes r CROSS JOIN sync_outbox o
+      WHERE o.entity_type = 'daily_entry' AND o.acknowledged_at IS NULL;
+    CREATE TABLE daily_conflict_rejections (
+      operation_id TEXT PRIMARY KEY,
+      device_id TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      original_base INTEGER NOT NULL,
+      authority_revision INTEGER NOT NULL,
+      request_json TEXT NOT NULL CHECK(json_valid(request_json)),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) STRICT;
+    PRAGMA user_version = 8;
+"#;
+
 struct Migration {
     version: i64,
     name: &'static str,
@@ -396,6 +426,7 @@ const MIGRATIONS: &[Migration] = &[
         name: "remote-sync-cursor-and-entity-revisions",
         sql: MIGRATION_7_SQL,
     },
+    Migration { version: 8, name: "durable-daily-entry-conflicts", sql: MIGRATION_8_SQL },
 ];
 
 impl NativeAppDataStore {
@@ -864,7 +895,7 @@ mod tests {
         assert!(sqlite_version_is_safe_for_multiple_writers(
             &probe.sqlite_version
         ));
-        assert_eq!(probe.schema_version, 7);
+        assert_eq!(probe.schema_version, 8);
         assert_eq!(probe.journal_mode.to_ascii_lowercase(), "wal");
     }
 
@@ -911,7 +942,7 @@ mod tests {
 
         let migrated = NativeAppDataStore::new(database_path).expect("migrate schema five DB");
         let status = migrated.authoritative_status().expect("authority status");
-        assert_eq!(migrated.probe().expect("probe").schema_version, 7);
+        assert_eq!(migrated.probe().expect("probe").schema_version, 8);
         assert_eq!(status.data_version, Some(4));
         assert_eq!(status.global_revision, 0);
         assert_eq!(status.materialized_revision, 0);

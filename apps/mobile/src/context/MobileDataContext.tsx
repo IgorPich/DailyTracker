@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { AppData } from '@greekgod/core'
+import type { AppData, DailyEntryEdit } from '@greekgod/core'
+import { persistDailyEntryEdit, type DailyEditResult } from '../services/dailyEntryPersistence'
 import { INITIAL_MOBILE_DATA } from '../data/initialData'
 import { NativeMobileStore, type MobileSnapshot, type MobileStore } from '../services/mobileStore'
 
@@ -11,7 +12,8 @@ interface MobileDataValue {
   error?: string
   isNative: boolean
   mutate(updater: (data: AppData) => AppData): Promise<MobileSnapshot>
-  reload(): Promise<void>
+  editDailyEntry(plan: DailyEntryEdit): Promise<DailyEditResult>
+  reload(): Promise<MobileSnapshot | undefined>
 }
 
 const MobileDataContext = createContext<MobileDataValue | undefined>(undefined)
@@ -26,7 +28,7 @@ class PreviewMobileStore implements MobileStore {
     probe: {
       databasePath: 'browser-preview-only',
       sqliteVersion: 'preview',
-      schemaVersion: 7,
+      schemaVersion: 8,
       journalMode: 'memory',
     },
   }
@@ -71,13 +73,13 @@ export const MobileDataProvider = ({ children }: { children: ReactNode }) => {
   const reload = async () => {
     const operation = queueRef.current.then(async () => {
       try {
-        install(await store.load())
+          return install(await store.load())
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause))
       }
     })
     queueRef.current = operation.catch(() => undefined)
-    await operation
+    return operation
   }
 
   useEffect(() => {
@@ -126,6 +128,21 @@ export const MobileDataProvider = ({ children }: { children: ReactNode }) => {
     return operation
   }
 
+  const editDailyEntry = (plan: DailyEntryEdit) => {
+    const request = structuredClone(plan)
+    const operation = queueRef.current.then(async () => {
+      setSaving(true)
+      try {
+        const result = await persistDailyEntryEdit(store, request)
+        if (result.status === 'APPLIED') install(result.snapshot)
+        else { try { install(await store.load()) } catch { /* Draft stays blocked until explicit refresh. */ } }
+        return result
+      } finally { setSaving(false) }
+    })
+    queueRef.current = operation.catch(() => undefined)
+    return operation
+  }
+
   return (
     <MobileDataContext.Provider value={{
       snapshot,
@@ -135,6 +152,7 @@ export const MobileDataProvider = ({ children }: { children: ReactNode }) => {
       error,
       isNative,
       mutate,
+      editDailyEntry,
       reload,
     }}>
       {children}

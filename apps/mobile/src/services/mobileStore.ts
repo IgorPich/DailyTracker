@@ -39,6 +39,7 @@ export interface SyncRemote {
 export interface SyncOverview {
   remotes: SyncRemote[]
   pendingChanges: number
+  dailyConflicts: Array<{ serviceId: string; operationId: string; date: string; status: string; originalRemoteBase: number | null; authorityRevision: number | null; payload: unknown }>
 }
 
 export interface SyncNowResponse {

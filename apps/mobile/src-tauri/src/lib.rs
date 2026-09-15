@@ -88,6 +88,7 @@ struct MobileStorageStatusResponse {
 struct MobileSyncOverviewResponse {
     remotes: Vec<SyncRemoteState>,
     pending_changes: usize,
+    daily_conflicts: Vec<greekgod_storage::DailyConflict>,
 }
 
 #[derive(Debug, Serialize)]
@@ -308,7 +309,7 @@ async fn mobile_storage_status(app: AppHandle) -> CommandResult<MobileStorageSta
         let store = NativeAppDataStore::new(database_path)?;
         Ok(MobileStorageStatusResponse {
             authority: store.authoritative_status()?,
-            pending_changes: store.pending_outbox(1_000)?.len(),
+          pending_changes: store.pending_outbox(1_000)?.len(),
             device_id,
             probe: store.probe()?,
         })
@@ -328,6 +329,7 @@ async fn mobile_sync_overview(app: AppHandle) -> CommandResult<MobileSyncOvervie
         Ok(MobileSyncOverviewResponse {
             remotes: store.list_sync_remotes()?,
             pending_changes: store.pending_outbox(1_000)?.len(),
+            daily_conflicts: store.daily_conflicts()?,
         })
     })
     .await

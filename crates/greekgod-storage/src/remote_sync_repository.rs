@@ -106,7 +106,21 @@ impl NativeAppDataStore {
         service_id: &str,
         limit: usize,
     ) -> StorageResult<Vec<PreparedRemoteOperation>> {
-        let operations = self.pending_outbox(limit)?;
+        if self.load_sync_remote(service_id)?.is_none() {
+            return Err(StorageError::InvalidMutation(format!("unknown sync remote {service_id}")));
+        }
+        // Legacy/unverifiable client rows are held before selection, so they cannot
+        // starve unrelated operations even with a one-item push batch.
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT OR IGNORE INTO daily_delivery(service_id,operation_id,status)
+                 SELECT ?1,operation_id,'legacy_needs_review' FROM sync_outbox
+                 WHERE entity_type='daily_entry' AND acknowledged_at IS NULL",
+                [service_id],
+            )?;
+            Ok(())
+        })?;
+        let operations = self.pending_outbox_for_remote(limit, Some(service_id))?;
         self.with_connection(|connection| {
             if load_remote_with_connection(connection, service_id)?.is_none() {
                 return Err(StorageError::InvalidMutation(format!(
@@ -368,7 +382,12 @@ fn prepare_operation(
     service_id: &str,
     operation: OutboxOperation,
 ) -> StorageResult<PreparedRemoteOperation> {
-    let remote_base_revision = connection
+    let remote_base_revision = if operation.entity_type == crate::SyncEntityType::DailyEntry {
+        connection.query_row(
+            "SELECT original_remote_base FROM daily_delivery WHERE service_id=?1 AND operation_id=?2 AND status='pending'",
+            params![service_id, operation.operation_id], |row| row.get::<_,i64>(0),
+        )?
+    } else { connection
         .query_row(
             r#"
             SELECT remote_revision FROM sync_remote_entities
@@ -382,7 +401,7 @@ fn prepare_operation(
             |row| row.get::<_, i64>(0),
         )
         .optional()?
-        .unwrap_or(0);
+        .unwrap_or(0) };
     Ok(PreparedRemoteOperation {
         request: SyncMutationRequest {
             operation_id: operation.operation_id,
@@ -574,8 +593,7 @@ mod tests {
     }
 
     #[test]
-    fn journal_preflight_rebased_outbox_can_overwrite_newer_remote_fields() {
-        // Characterizes the native sync STOP boundary, NOT desired future behavior.
+    fn journal_conflict_freezes_original_base_and_survives_restart_without_replay() {
         let (_source_directory, source) = store();
         let (_client_directory, client) = store();
         let initial = source.load_authoritative_snapshot().unwrap();
@@ -599,11 +617,21 @@ mod tests {
         client.apply_remote_batch_and_advance_cursor("service-a", &source.changes_since(saved.revision, 100).unwrap(), newer.revision).unwrap();
         let retried = client.prepare_remote_outbox("service-a", 100).unwrap();
         assert_eq!(retried[0].request.payload, first[0].request.payload);
-        assert_ne!(retried[0].request.base_revision, first[0].request.base_revision);
-        source.apply_remote_mutation(&retried[0].request).expect("current repository accepts rebased stale payload");
+        assert_eq!(retried[0].request.base_revision, first[0].request.base_revision);
+        let mut buggy = retried[0].request.clone();
+        buggy.base_revision = newer.revision;
+        buggy.payload.as_mut().unwrap()["weight"] = json!(12);
+        assert!(matches!(source.apply_remote_mutation(&buggy), Err(StorageError::Conflict { .. })));
+        client.mark_daily_conflict("service-a", &first[0].request.operation_id, newer.revision).unwrap();
+        assert!(client.prepare_remote_outbox("service-a", 1).unwrap().is_empty());
+        let reopened = NativeAppDataStore::new(client.database_path.clone()).unwrap();
+        let reopened_source = NativeAppDataStore::new(source.database_path.clone()).unwrap();
+        assert!(reopened.prepare_remote_outbox("service-a", 1).unwrap().is_empty());
+        assert_eq!(reopened.daily_conflicts().unwrap().len(), 1);
+        assert!(reopened_source.apply_remote_mutation(&buggy).is_err());
         let after = source.load_authoritative_snapshot().unwrap();
-        assert_eq!(after.data["dailyEntries"][0]["weight"], json!(79));
-        assert!(after.data["dailyEntries"][0].get("measurements").is_none());
+        assert_eq!(after.data, desired);
+        assert_eq!(after.revision, newer.revision);
     }
 
     #[test]

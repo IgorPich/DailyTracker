@@ -78,6 +78,10 @@ export const SettingsPage = ({ openHistory }: { openHistory: () => void }) => {
       <section className="surface settings-section"><div className="settings-icon"><Database /></div><div><strong>Mobilne SQLite</strong><p>{isNative ? `Schema ${snapshot.probe.schemaVersion} · ${snapshot.probe.journalMode}` : 'Podgląd przeglądarkowy — Android użyje SQLite'}</p></div></section>
       <section className="surface settings-section"><div className="settings-icon"><ShieldCheck /></div><div><strong>Oczekujące zmiany</strong><p>{snapshot.pendingChanges} operacji czeka bezpiecznie w outboxie.</p></div></section>
       <section className="surface sync-card">
+        {!!overview?.dailyConflicts?.length && <div role="alert"><strong>Zmiany dziennika wymagają przeglądu</strong>
+          <p>Nie zastosowano ich automatycznie. Po synchronizacji obowiązuje świeży stan PC. Aby ponowić zmianę, odśwież dane, otwórz wskazany dzień w Dzienniku i wpisz ją ręcznie — powstanie nowa operacja. Stara pozostaje zablokowana.</p>
+          {overview.dailyConflicts.map((item) => <details key={`${item.serviceId}:${item.operationId}`}><summary>{item.date} — {item.status === 'legacy_needs_review' ? 'starsza zmiana bez potwierdzonego baseline' : 'konflikt'}</summary><pre>{JSON.stringify(item.payload, null, 2)}</pre></details>)}
+        </div>}
         <div className="sync-heading"><div className="settings-icon"><Link2 /></div><div><strong>Synchronizacja z PC</strong><p className={`sync-state ${syncLabel === 'Synced' ? 'ok' : ''}`}>{syncLabel}</p></div></div>
         {remote ? <><p className="paired-host">Połączono z <strong>{remote.lastKnownHost}</strong></p><button className="primary-button" type="button" disabled={busy} onClick={() => void syncNow()}>{busy ? 'Synchronizuję…' : 'Synchronizuj teraz'}</button></> : <div className="pairing-form">
           <label className="mobile-field full"><span>Kod parowania z PC</span><textarea rows={5} value={pairingCode} onChange={(event) => setPairingCode(event.target.value)} placeholder='Wklej kod JSON wygenerowany na komputerze' /></label>

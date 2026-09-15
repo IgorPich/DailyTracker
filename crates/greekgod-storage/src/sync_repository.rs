@@ -287,7 +287,26 @@ impl NativeAppDataStore {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             require_authoritative_bootstrap(&transaction)?;
-            let result = apply_mutation_in_transaction(&transaction, request, origin)?;
+            if matches!(origin, MutationOrigin::Remote) {
+                let rejected: Option<(String, i64, i64)> = transaction.query_row(
+                    "SELECT entity_id, original_base, authority_revision FROM daily_conflict_rejections WHERE operation_id = ?1",
+                    [&request.operation_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                ).optional()?;
+                if let Some((entity_id, base_revision, current_revision)) = rejected {
+                    return Err(StorageError::Conflict { entity_type: "daily_entry".into(), entity_id, base_revision, current_revision });
+                }
+            }
+            let result = match apply_mutation_in_transaction(&transaction, request, origin) {
+                Err(error @ StorageError::Conflict { .. }) if matches!(origin, MutationOrigin::Remote) && request.entity_type == SyncEntityType::DailyEntry => {
+                    if let StorageError::Conflict { current_revision, .. } = &error {
+                        transaction.execute("INSERT INTO daily_conflict_rejections(operation_id,device_id,entity_id,original_base,authority_revision,request_json) VALUES (?1,?2,?3,?4,?5,?6)",
+                            params![request.operation_id, request.device_id, request.entity_id, request.base_revision, current_revision, serde_json::to_string(request)?])?;
+                    }
+                    transaction.commit()?;
+                    return Err(error);
+                }
+                result => result?,
+            };
             if !result.idempotent_replay {
                 let reconstructed = reconstruct_with_connection(&transaction)?;
                 write_materialized_snapshot(&transaction, &reconstructed)?;
@@ -388,6 +407,10 @@ impl NativeAppDataStore {
     }
 
     pub fn pending_outbox(&self, limit: usize) -> StorageResult<Vec<OutboxOperation>> {
+        self.pending_outbox_for_remote(limit, None)
+    }
+
+    pub(crate) fn pending_outbox_for_remote(&self, limit: usize, service: Option<&str>) -> StorageResult<Vec<OutboxOperation>> {
         if limit == 0 || limit > 1_000 {
             return Err(StorageError::InvalidMutation(
                 "pending_outbox limit must be 1..=1000".into(),
@@ -414,12 +437,15 @@ impl NativeAppDataStore {
                   acknowledged_at
                 FROM sync_outbox
                 WHERE acknowledged_at IS NULL
+                  AND (?2 IS NULL OR NOT EXISTS (
+                    SELECT 1 FROM daily_delivery d WHERE d.operation_id=sync_outbox.operation_id
+                    AND d.service_id=?2 AND d.status!='pending'))
                 ORDER BY result_revision ASC
                 LIMIT ?1
                 "#,
             )?;
             let rows = statement
-                .query_map([limit as i64], RawOutboxRow::from_row)?
+                .query_map(params![limit as i64, service], RawOutboxRow::from_row)?
                 .collect::<Result<Vec<_>, _>>()?;
             rows.into_iter().map(RawOutboxRow::into_operation).collect()
         })
@@ -683,6 +709,14 @@ pub(crate) fn apply_mutation_in_transaction(
                 &request_hash,
             ],
         )?;
+        if request.entity_type == SyncEntityType::DailyEntry {
+            transaction.execute(
+                "INSERT INTO daily_delivery(service_id,operation_id,original_remote_base,status)
+                 SELECT r.service_id, ?1, COALESCE(e.remote_revision,0), 'pending' FROM sync_remotes r
+                 LEFT JOIN sync_remote_entities e ON e.service_id=r.service_id AND e.entity_type='daily_entry' AND e.entity_id=?2",
+                params![request.operation_id, request.entity_id],
+            )?;
+        }
     }
     Ok(result)
 }

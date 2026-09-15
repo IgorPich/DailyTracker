@@ -70,3 +70,4 @@ export { prepareTemplateRepRange, changeTemplateRepRange, templateStateVersion }
 export type { TemplateRepRangePlan } from './changeTemplateRepRange.ts'
 export { programVersion, openProgramDraft, validateProgram, applyProgram, duplicateProgramTemplate, reorderProgramItems } from './program.ts'
 export type { ProgramPlan } from './program.ts'
+export * from './dailyEntryEdit.ts'

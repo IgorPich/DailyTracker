@@ -15,7 +15,7 @@ use std::time::Duration;
 use std::{future::Future, pin::Pin};
 use thiserror::Error;
 
-pub const SUPPORTED_SCHEMA_VERSION: i64 = 7;
+pub const SUPPORTED_SCHEMA_VERSION: i64 = 8;
 const PULL_PAGE_SIZE: usize = 500;
 
 #[derive(Debug, Error)]
@@ -439,11 +439,15 @@ impl<T: SyncTransport> MobileSyncEngine<T> {
                     )?;
                     *pushed += 1;
                 }
-                OperationOutcome::Conflict { operation_id, .. } => {
+                OperationOutcome::Conflict { operation_id, current_revision, .. } => {
                     if operation_id != expected_operation_id {
                         return Err(MobileSyncError::Transport(
                             "conflict response operationId does not match the request".into(),
                         ));
+                    }
+                    if operation.request.entity_type == greekgod_storage::SyncEntityType::DailyEntry {
+                        self.store.mark_daily_conflict(&self.service_id, &operation_id, current_revision)?;
+                        continue;
                     }
                     conflicts += 1;
                     break;
@@ -579,6 +583,56 @@ mod tests {
         Mutex,
     };
     use tempfile::tempdir;
+
+    struct NativeTestTransport(greekgod_sync::SyncEngine);
+    impl SyncTransport for NativeTestTransport {
+        fn handshake(&self, request: CompatibilityRequest) -> TransportFuture<'_, HandshakeResponse> {
+            Box::pin(async move { self.0.handshake(&request).map_err(|error| MobileSyncError::Transport(error.to_string())) })
+        }
+        fn push(&self, request: PushRequest) -> TransportFuture<'_, PushResponse> {
+            Box::pin(async move { self.0.push(&request).map_err(|error| MobileSyncError::Transport(error.to_string())) })
+        }
+        fn pull(&self, request: PullRequest) -> TransportFuture<'_, PullResponse> {
+            Box::pin(async move { self.0.pull(&request).map_err(|error| MobileSyncError::Transport(error.to_string())) })
+        }
+    }
+
+    #[tokio::test]
+    async fn daily_conflict_is_not_resolved_or_replayed_and_does_not_block_other_entities() {
+        let pc_dir = tempdir().unwrap(); let mobile_dir = tempdir().unwrap();
+        let pc_path = pc_dir.path().join(DATABASE_FILENAME); let mobile_path = mobile_dir.path().join(DATABASE_FILENAME);
+        let pc = NativeAppDataStore::new(&pc_path).unwrap(); let mobile = NativeAppDataStore::new(&mobile_path).unwrap();
+        let initial = json!({"version":4,"dailyEntries":[],"workouts":[],"templates":[],"exerciseLibrary":[],"settings":{"gymLocations":[]},"coachNotes":{}});
+        pc.bootstrap_from_legacy_snapshot(&initial,"pc").unwrap();
+        mobile.bootstrap_from_legacy_snapshot(&initial,"mobile:test").unwrap();
+        let mut baseline = initial.clone(); baseline["dailyEntries"] = json!([{"id":"day","date":"2026-01-15","weight":80}]);
+        pc.replace_authoritative_snapshot(&baseline,"pc",pc.current_sync_revision().unwrap()).unwrap();
+        mobile.register_sync_remote("service-a",&"ab".repeat(32),"https://fixture").unwrap();
+        let transport = NativeTestTransport(greekgod_sync::SyncEngine::new(pc.clone(),"service-a").unwrap());
+        let engine = MobileSyncEngine::new(mobile.clone(),transport,"service-a","mobile:test","fixture").unwrap();
+        engine.sync_once().await.unwrap();
+        let loaded = mobile.load_authoritative_snapshot().unwrap();
+        let mut edit = loaded.data; edit["dailyEntries"][0]["weight"] = json!(79);
+        edit["workouts"] = json!([{"id":"unrelated","date":"2026-01-15","exercises":[]}]);
+        mobile.replace_authoritative_snapshot(&edit,"mobile:test",loaded.revision).unwrap();
+        baseline["dailyEntries"][0]["weight"] = json!(81);
+        baseline["dailyEntries"][0]["measurements"] = json!({"CHEST":100,"BICEPS":35});
+        pc.replace_authoritative_snapshot(&baseline,"pc",pc.current_sync_revision().unwrap()).unwrap();
+        let result = engine.sync_once().await.unwrap();
+        assert_eq!(result.conflicts_resolved,0);
+        assert_eq!(result.pushed_operations,1,"unrelated workout still syncs");
+        assert_eq!(mobile.daily_conflicts().unwrap().len(),1);
+        assert_eq!(pc.load_authoritative_snapshot().unwrap().data["dailyEntries"],baseline["dailyEntries"]);
+        let pc_revision = pc.current_sync_revision().unwrap();
+        for _ in 0..2 {
+            let pc = NativeAppDataStore::new(&pc_path).unwrap(); let mobile = NativeAppDataStore::new(&mobile_path).unwrap();
+            let engine = MobileSyncEngine::new(mobile.clone(),NativeTestTransport(greekgod_sync::SyncEngine::new(pc.clone(),"service-a").unwrap()),"service-a","mobile:test","fixture").unwrap();
+            assert_eq!(engine.sync_once().await.unwrap().pushed_operations,0);
+            assert_eq!(pc.current_sync_revision().unwrap(),pc_revision);
+            assert_eq!(mobile.daily_conflicts().unwrap().len(),1);
+            assert_eq!(pc.load_authoritative_snapshot().unwrap().data["dailyEntries"],baseline["dailyEntries"]);
+        }
+    }
 
     struct ScriptedTransport {
         entity: SyncEntityRecord,
