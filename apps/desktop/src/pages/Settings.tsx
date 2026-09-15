@@ -28,7 +28,7 @@ import { exportCsv, exportJson, normalizeData } from '../utils/storage'
 
 const phases: Phase[] = ['Maintenance', 'Lean Gain', 'Mini Cut', 'Redukcja']
 
-export function Settings({ onEditProgram }: { onEditProgram: () => void }) {
+export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () => void; onEditJournal:()=>void }) {
   const { data, updateSettings, addGymLocation, renameGymLocation, deleteGymLocation, replaceData, clearData } = useApp()
   const { showToast } = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -173,6 +173,7 @@ export function Settings({ onEditProgram }: { onEditProgram: () => void }) {
         <section className="card settings-section template-settings">
           <div className="settings-section__heading"><span className="settings-icon"><Dumbbell size={19} /></span><div><h2>Szablony treningowe</h2><p>Trwałe zmiany będą używane w przyszłych treningach. Zapisana historia nie zostanie zmieniona.</p></div></div>
           <button type="button" className="button button--secondary" onClick={onEditProgram}><Edit3 size={15} /> Edytuj program</button>
+          <button type="button" className="button button--secondary" onClick={onEditJournal}><Edit3 size={15} /> Dostosuj dziennik</button>
           <div className="template-settings__list">{data.templates.map((template) => <div className="template-settings__row" key={template.id}><span className="template-code">{template.code}</span><div><strong>{template.name}</strong><small>{template.exercises.length} ćwiczeń</small></div></div>)}</div>
         </section>
 

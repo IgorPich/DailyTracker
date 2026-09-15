@@ -2,6 +2,7 @@ import type { AppData, AppDataStore, TemplateRepRangePlan } from '@greekgod/core
 import type { ConfirmedTrackingPersistence, TrackingMutationResult } from './confirmedTrackingMutation.ts'
 import { programVersion, type ProgramPlan } from '@greekgod/core'
 import type { ProgramPersistence, ProgramSaveResult } from './programPersistence.ts'
+import type { JournalMutation, JournalPersistence, JournalSaveResult } from './journalPersistence.ts'
 
 type Update = AppData | ((current: AppData) => AppData)
 
@@ -14,7 +15,7 @@ export class DesktopDataCoordinator {
   private uncertainProgram?: ProgramPlan
   private deferred: Update[] = []
   private generation = 0
-  constructor(initial: AppData, private readonly store: AppDataStore & Partial<ConfirmedTrackingPersistence & ProgramPersistence>,
+  constructor(initial: AppData, private readonly store: AppDataStore & Partial<ConfirmedTrackingPersistence & ProgramPersistence & JournalPersistence>,
     private readonly publish: (data: AppData) => void, private readonly onError: (error: unknown) => void,
     private readonly publishOutcome: (result: TrackingMutationResult) => void = () => {},
     private readonly publishProgramOutcome: (result: ProgramSaveResult) => void = () => {}) { this.current = initial }
@@ -36,6 +37,23 @@ export class DesktopDataCoordinator {
   }
   get supportsConfirmedTrackingMutations() { return !this.refreshRequired && this.store.supportsConfirmedTrackingMutations === true }
   get supportsProgramSave() { return !this.refreshRequired && this.store.supportsProgramSave === true }
+  get supportsJournalSave() { return !this.refreshRequired && this.store.supportsJournalSave === true }
+  async saveJournal(request: JournalMutation): Promise<JournalSaveResult> {
+    if (this.busy || !this.supportsJournalSave || !this.store.saveJournal) return {status:'BLOCKED',message:'Safe persistence unavailable or busy'}
+    const intent = structuredClone(request)
+    this.busy = true; this.generation++
+    try {
+      const result = await this.store.saveJournal(intent)
+      this.initialize(result.status === 'APPLIED' ? result.data : await this.store.load())
+      return result
+    } catch {
+      this.refreshRequired = true
+      return {status:'INDETERMINATE',message:'Reconciliation unavailable; edits held until fresh authority returns'}
+    } finally {
+      this.busy = false
+      if (!this.refreshRequired) { const deferred = this.deferred; this.deferred = []; deferred.forEach(this.update) }
+    }
+  }
   private observedProgram(data: AppData, plan: ProgramPlan): ProgramSaveResult {
     return { status: 'INDETERMINATE', message: 'Fresh authority verified without replay', desiredProgramPresent: programVersion(data.templates) === programVersion(plan.templates) }
   }

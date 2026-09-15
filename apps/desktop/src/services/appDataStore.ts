@@ -1,6 +1,7 @@
 import type { AppDataStore } from '@greekgod/core'
 import type { ConfirmedTrackingPersistence } from './confirmedTrackingMutation'
 import type { ProgramPersistence } from './programPersistence'
+import type { JournalPersistence } from './journalPersistence'
 import { DevelopmentShadowAppDataStore } from './nativeStorageBridge'
 import {
   DevelopmentAuthoritativeAppDataStore,
@@ -13,7 +14,7 @@ const nativeShadowRequested = import.meta.env.VITE_NATIVE_SQLITE_SHADOW === '1'
 const nativeAuthorityRequested = import.meta.env.VITE_NATIVE_SQLITE_AUTHORITY === '1'
 const productionAuthorityRequested = import.meta.env.VITE_NATIVE_SQLITE_PRODUCTION_AUTHORITY === '1'
 
-export const appDataStore: AppDataStore & Partial<ConfirmedTrackingPersistence & ProgramPersistence> = productionAuthorityRequested
+export const appDataStore: AppDataStore & Partial<ConfirmedTrackingPersistence & ProgramPersistence & JournalPersistence> = productionAuthorityRequested
   ? new ProductionSafeAuthoritativeAppDataStore(legacyAppDataStore, tauriNativeStorageBridge)
   : nativeAuthorityRequested
     ? new DevelopmentAuthoritativeAppDataStore(legacyAppDataStore, tauriNativeStorageBridge)

@@ -18,8 +18,10 @@ import { updateTemplateAndLibrary } from '../utils/templateIdentity'
 import { DesktopDataCoordinator } from '../services/desktopDataCoordinator'
 import type { ConfirmedTrackingPersistence, TrackingMutationResult } from '../services/confirmedTrackingMutation'
 import type { ProgramPersistence, ProgramSaveResult } from '../services/programPersistence'
+import type { JournalPersistence } from '../services/journalPersistence'
 
 interface AppContextValue {
+  journalPersistence:JournalPersistence
   programPersistence: ProgramPersistence
   lastProgramSaveResult?: ProgramSaveResult
   trackingCommands: ConfirmedTrackingPersistence
@@ -132,6 +134,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     programPersistence: {
       get supportsProgramSave() { return coordinator.supportsProgramSave },
       saveProgram: (plan) => coordinator.saveProgram(plan),
+    },
+    journalPersistence: {
+      get supportsJournalSave() { return coordinator.supportsJournalSave },
+      saveJournal: (request) => coordinator.saveJournal(request),
     },
     trackingCommands: {
       get supportsConfirmedTrackingMutations() { return coordinator.supportsConfirmedTrackingMutations },

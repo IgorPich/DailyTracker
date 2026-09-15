@@ -1,68 +1,29 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { findDailyEntryByDate, type DailyEntry, type DailyEditField, type DailyFieldChange } from '@greekgod/core'
+import { useEffect,useState,type FormEvent } from 'react'
+import { activeJournalMetrics,findDailyEntryByDate,journalConfiguration,journalMeasurementChanges,journalMeasurementDraft,validJournalDate,type DailyEntry } from '@greekgod/core'
 import { useMobileData } from '../context/MobileDataContext'
-import { applyJournalNumericDraft, isoToday, journalDraft, journalNumericDraft, type JournalNumericKey } from '../domain/mobileModel'
-
-const fields: Array<{ key: JournalNumericKey; label: string; unit: string; integer?: boolean }> = [
-  { key: 'weight', label: 'Waga', unit: 'kg' }, { key: 'waist', label: 'Talia', unit: 'cm' },
-  { key: 'calories', label: 'Kalorie', unit: 'kcal', integer: true }, { key: 'protein', label: 'Białko', unit: 'g', integer: true },
-  { key: 'carbs', label: 'Węglowodany', unit: 'g', integer: true }, { key: 'fat', label: 'Tłuszcze', unit: 'g', integer: true },
-  { key: 'steps', label: 'Kroki', unit: '', integer: true },
-]
-
-export const JournalPage = () => {
-  const { data, editDailyEntry, reload, saving } = useMobileData()
-  const [date, setDate] = useState(isoToday())
-  const existing = data ? findDailyEntryByDate(data.dailyEntries, date) : undefined
-  const [draft, setDraft] = useState<DailyEntry>(() => journalDraft(existing, date))
-  const [baseline, setBaseline] = useState(() => existing && structuredClone(existing))
-  const [touched, setTouched] = useState<Set<DailyEditField>>(() => new Set())
-  const [blocked, setBlocked] = useState(false)
-  const [numbers, setNumbers] = useState(() => journalNumericDraft(existing))
-  const [validationError, setValidationError] = useState<string>()
-  useEffect(() => {
-    setDraft(journalDraft(existing, date))
-    setBaseline(existing && structuredClone(existing)); setTouched(new Set()); setBlocked(false)
-    setNumbers(journalNumericDraft(existing))
-    setValidationError(undefined)
-  }, [date])
-  if (!data) return null
-  const updateNumber = (key: JournalNumericKey, raw: string) => {
-    setTouched((current) => new Set([...current, key]))
-    setNumbers((current) => ({ ...current, [key]: raw }))
-    setValidationError(undefined)
+import { isoToday } from '../domain/mobileModel'
+export const JournalPage=()=>{
+  const {data,editDailyEntry,reload,saving}=useMobileData()
+  const [date,setDate]=useState(isoToday()),[baseline,setBaseline]=useState<DailyEntry>()
+  const [numbers,setNumbers]=useState(()=>journalMeasurementDraft()),[touched,setTouched]=useState<Set<string>>(()=>new Set())
+  const [note,setNote]=useState(''),[noteTouched,setNoteTouched]=useState(false),[blocked,setBlocked]=useState(false),[message,setMessage]=useState('')
+  const load=(entry?:DailyEntry)=>{setBaseline(structuredClone(entry));setNumbers(journalMeasurementDraft(entry));setTouched(new Set());setNote(entry?.note??'');setNoteTouched(false);setBlocked(false);setMessage('')}
+  useEffect(()=>{load(data&&findDailyEntryByDate(data.dailyEntries,date))},[date,!!data])
+  if(!data)return null
+  const fields=validJournalDate(date)?activeJournalMetrics(journalConfiguration(data),date):[]
+  const submit=async(event:FormEvent)=>{
+    event.preventDefault();if(saving||blocked)return
+    try{const result=await editDailyEntry({date,newId:crypto.randomUUID(),baseline,metricChanges:journalMeasurementChanges(numbers,touched),changes:noteTouched?[note?{field:'note',action:'SET',value:note}:{field:'note',action:'CLEAR'}]:[]})
+      if(result.status==='APPLIED'){load(findDailyEntryByDate(result.snapshot.data.dailyEntries,date));setMessage('Wpis zapisany.')}
+      else{setBlocked(true);setMessage(result.message)}
+    }catch(error){setMessage(String(error))}
   }
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    try {
-      const entry = applyJournalNumericDraft({ ...draft, date }, numbers)
-      const changes: DailyFieldChange[] = [...touched].map((field) => entry[field] === undefined
-        ? { field, action: 'CLEAR' } : { field, action: 'SET', value: entry[field]! })
-      const result = await editDailyEntry({ date, newId: draft.id, baseline, changes })
-      if (result.status !== 'APPLIED') { setValidationError(result.message); setBlocked(true); return }
-      const saved = findDailyEntryByDate(result.snapshot.data.dailyEntries, date)
-      setBaseline(saved && structuredClone(saved)); setDraft(journalDraft(saved, date)); setTouched(new Set())
-      setNumbers(journalNumericDraft(saved))
-      setValidationError(undefined)
-    } catch (cause) {
-      setValidationError(cause instanceof Error ? cause.message : 'Nieprawidłowa wartość liczbowa.')
-    }
-  }
-  return (
-    <main className="mobile-page"><p className="eyebrow">Codzienny check-in</p><h1>Dziennik</h1>
-      <form className="mobile-form" onSubmit={submit}>
-        <label className="mobile-field full"><span>Data</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
-        <div className="form-grid">{fields.map(({ key, label, unit, integer }) => <label className="mobile-field" key={key}><span>{label}</span><div><input type="text" inputMode={integer ? 'numeric' : 'decimal'} value={numbers[key]} onChange={(event) => updateNumber(key, event.target.value)} placeholder="—" /><small>{unit}</small></div></label>)}</div>
-        <label className="mobile-field full"><span>Notatki</span><textarea rows={4} value={draft.note ?? ''} onChange={(event) => { setTouched((current) => new Set([...current, 'note'])); setDraft((current) => ({ ...current, note: event.target.value || undefined })) }} placeholder="Jak minął dzień?" /></label>
-        {validationError && <p className="pairing-error" role="alert">{validationError}</p>}
-        <button className="primary-button" type="submit" disabled={saving || blocked || !touched.size}>{saving ? 'Zapisuję lokalnie…' : 'Zapisz Dziennik'}</button>
-        <button type="button" className="secondary-button" disabled={saving} onClick={async () => {
-          const fresh = await reload()
-          if (!fresh) { setValidationError('Nie udało się odświeżyć wpisu.'); return }
-          const entry = findDailyEntryByDate(fresh.data.dailyEntries,date)
-          setDraft(journalDraft(entry,date)); setBaseline(entry && structuredClone(entry)); setNumbers(journalNumericDraft(entry)); setTouched(new Set()); setBlocked(false); setValidationError(undefined)
-        }}>Odrzuć draft / wczytaj zapisany wpis</button><p className="safe-copy">Zapis trafia najpierw do lokalnego SQLite. Internet nie jest potrzebny.</p>
-      </form>
-    </main>
-  )
+  return <main className="mobile-page"><p className="eyebrow">Codzienny check-in</p><h1>Dziennik</h1><form className="mobile-form" onSubmit={(event)=>void submit(event)}>
+    <fieldset disabled={saving||blocked}><label className="mobile-field full"><span>Data</span><input type="date" required value={date} onChange={(event)=>setDate(event.target.value)}/></label>
+    <div className="form-grid">{fields.map((metric)=><label className="mobile-field" key={metric.id}><span>{metric.label}</span><div><input type="text" inputMode={metric.integer?'numeric':'decimal'} value={numbers[metric.id]??''} onChange={(event)=>{setNumbers({...numbers,[metric.id]:event.target.value});setTouched(new Set([...touched,metric.id]))}} placeholder="—"/><small>{metric.unit==='count'?'':metric.unit}</small></div></label>)}</div>
+    <label className="mobile-field full"><span>Notatki</span><textarea rows={4} value={note} onChange={(event)=>{setNote(event.target.value);setNoteTouched(true)}}/></label></fieldset>
+    <p role="status">{message}</p><button className="primary-button" disabled={saving||blocked||!validJournalDate(date)||(!touched.size&&!noteTouched)}>Zapisz Dziennik</button>
+    <button type="button" className="secondary-button" disabled={saving} onClick={async()=>{const fresh=await reload();if(fresh)load(findDailyEntryByDate(fresh.data.dailyEntries,date));else setMessage('Nie udało się odświeżyć danych.')}}>Odrzuć draft / wczytaj zapisany wpis</button>
+    <p className="safe-copy">Konfiguracja i historia śledzenia pochodzą z PC. Wyłączenie metryki nie usuwa wcześniejszych pomiarów.</p>
+  </form></main>
 }

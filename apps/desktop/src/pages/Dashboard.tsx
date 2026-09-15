@@ -47,10 +47,12 @@ type Range = '30' | '90' | 'all'
 const phases: Phase[] = ['Maintenance', 'Lean Gain', 'Mini Cut', 'Redukcja']
 
 export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
-  const { data, updateSettings } = useApp()
+  const { data:persistedData, updateSettings } = useApp()
   const [range, setRange] = useState<Range>('30')
   const [phaseOpen, setPhaseOpen] = useState(false)
   const today = isoToday()
+  const data = useMemo(()=>journalReportingSnapshot(persistedData,today),[persistedData,today])
+  const tracked = (id:string)=>metricIsTracked(journalConfiguration(persistedData),id,today)
   const currentWindow = windowFor(today, 7)
   const previousWindow = windowFor(today, 7, 7)
   const currentEntries = entriesBetween(data.dailyEntries, currentWindow.from, currentWindow.to)
@@ -124,7 +126,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
         <article className="primary-metric">
           <div><span>Talia</span><Ruler size={18} /></div>
           <strong>{formatNumber(latestWaist?.waist)} <small>cm</small></strong>
-          <p>{latestWaist ? `pomiar ${formatLongDate(latestWaist.date)}` : 'jeszcze bez pomiaru'}</p>
+          <p>{latestWaist ? `pomiar ${formatLongDate(latestWaist.date)}` : tracked('WAIST') ? 'jeszcze bez pomiaru' : 'nieśledzona'}</p>
         </article>
         <article className="primary-metric">
           <div><span>Kalorie</span><Utensils size={18} /></div>
@@ -166,7 +168,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
                 </LineChart>
               </ResponsiveContainer>
             </div>
-          ) : <EmptyState icon={Scale} title="Jeszcze brak danych" description="Dodaj pierwszy pomiar, aby zobaczyć trend masy." action={<button className="button button--ghost button--small" onClick={() => onNavigate('journal')}>Dodaj wpis</button>} />}
+          ) : <EmptyState icon={Scale} title={tracked('WEIGHT') ? 'Jeszcze brak danych' : 'Masa nie jest śledzona'} description={tracked('WEIGHT') ? 'Dodaj pierwszy pomiar, aby zobaczyć trend masy.' : 'Historyczne pomiary pozostają w dzienniku.'} action={<button className="button button--ghost button--small" onClick={() => onNavigate('journal')}>Dodaj wpis</button>} />}
           {chartData.length > 0 && <div className="chart-legend"><span><i className="legend-weight" /> Masa dzienna</span><span><i className="legend-average" /> Średnia 7 dni</span></div>}
         </article>
 
@@ -199,8 +201,10 @@ export function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) 
           <YAxis domain={['dataMin - 1', 'dataMax + 1']} stroke="#6f767d" tickLine={false} axisLine={false} width={45} />
           <Tooltip formatter={(value) => [`${formatNumber(Number(value ?? 0))} cm`, 'Talia']} labelFormatter={(_, payload) => payload?.[0]?.payload?.date ? formatLongDate(payload[0].payload.date) : ''} contentStyle={{ background: '#171a1e', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12 }} />
           <Area type="monotone" dataKey="waist" stroke="#2997ff" strokeWidth={2.2} fill="url(#waistAreaV2)" dot={{ r: 2.7, fill: '#2997ff', strokeWidth: 0 }} />
-        </AreaChart></ResponsiveContainer></div> : <EmptyState icon={Ruler} title="Jeszcze brak danych" description="Dodaj pierwszy pomiar talii w dzienniku." />}
+        </AreaChart></ResponsiveContainer></div> : <EmptyState icon={Ruler} title={tracked('WAIST') ? 'Jeszcze brak danych' : 'Talia nie jest śledzona'} description={tracked('WAIST') ? 'Dodaj pierwszy pomiar talii w dzienniku.' : 'Historyczne pomiary pozostają w dzienniku.'} />}
       </article>
     </div>
   )
 }
+import { journalConfiguration, metricIsTracked } from '@greekgod/core'
+import { journalReportingSnapshot } from '../adapters/journalReporting'

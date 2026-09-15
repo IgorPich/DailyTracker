@@ -1,120 +1,39 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { ArrowDown, ArrowUp, Edit3, NotebookPen, Plus, Save, Trash2, X } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
+import { Edit3, Trash2 } from 'lucide-react'
+import { activeJournalMetrics, findDailyEntryByDate, journalConfiguration, journalMeasurementChanges, journalMeasurementDraft, journalMetric, measurementValue, metricIsTracked, validJournalDate, type DailyEntry } from '@greekgod/core'
 import { PageHeader } from '../components/PageHeader'
-import { DecimalInput } from '../components/DecimalInput'
 import { useApp } from '../context/AppContext'
-import { useToast } from '../context/ToastContext'
-import type { DailyEntry } from '../types'
-import { formatInteger } from '../utils/calculations'
 import { formatLongDate, isoToday } from '../utils/date'
-import { createId } from '../utils/id'
 import { formatDecimal } from '../utils/numbers'
-
-type NumericKey = 'weight' | 'calories' | 'protein' | 'fat' | 'carbs' | 'steps' | 'waist'
-type FieldDefinition = { key: NumericKey; label: string; unit?: string; step?: string; min?: number; max?: number; priority?: boolean }
-
-const emptyEntry = (): DailyEntry => ({ id: createId(), date: isoToday() })
-
-const quickFields: FieldDefinition[] = [
-  { key: 'weight', label: 'Masa', unit: 'kg', step: '0.1', priority: true },
-  { key: 'waist', label: 'Talia', unit: 'cm', step: '0.1' },
-  { key: 'calories', label: 'Kalorie', unit: 'kcal', step: '1', priority: true },
-  { key: 'protein', label: 'Białko', unit: 'g', step: '1', priority: true },
-  { key: 'carbs', label: 'Węglowodany', unit: 'g', step: '1', priority: true },
-  { key: 'fat', label: 'Tłuszcz', unit: 'g', step: '1', priority: true },
-  { key: 'steps', label: 'Kroki', step: '1', priority: true },
-]
-
 export function Journal() {
-  const { data, upsertDailyEntry, deleteDailyEntry } = useApp()
-  const { showToast } = useToast()
-  const [draft, setDraft] = useState<DailyEntry>(emptyEntry)
-  const [editing, setEditing] = useState(false)
-  const [sortNewest, setSortNewest] = useState(true)
-
-  const sortedEntries = useMemo(() => [...data.dailyEntries].sort((a, b) => sortNewest ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)), [data.dailyEntries, sortNewest])
-
-  const setNumber = (key: NumericKey, value: number | undefined) => setDraft((current) => ({ ...current, [key]: value }))
-
-  const reset = () => {
-    setDraft(emptyEntry())
-    setEditing(false)
+  const {data,journalPersistence,deleteDailyEntry}=useApp()
+  const [date,setDate]=useState(isoToday())
+  const [baseline,setBaseline]=useState<DailyEntry|undefined>(()=>structuredClone(findDailyEntryByDate(data.dailyEntries,date)))
+  const [numbers,setNumbers]=useState(()=>journalMeasurementDraft(baseline)),[touched,setTouched]=useState<Set<string>>(()=>new Set())
+  const [note,setNote]=useState(baseline?.note ?? ''),[noteTouched,setNoteTouched]=useState(false)
+  const [busy,setBusy]=useState(false),[blocked,setBlocked]=useState(false),[message,setMessage]=useState(''),[sortNewest,setSortNewest]=useState(true)
+  const config=journalConfiguration(data), fields=validJournalDate(date)?activeJournalMetrics(config,date):[]
+  const columns=config.metrics.map((item)=>journalMetric(item.metricId)).filter((metric)=>metricIsTracked(config,metric.id,isoToday())||data.dailyEntries.some((entry)=>measurementValue(entry,metric.id)!==undefined))
+  const load=(entry:DailyEntry|undefined,day:string)=>{setDate(day);setBaseline(structuredClone(entry));setNumbers(journalMeasurementDraft(entry));setTouched(new Set());setNote(entry?.note??'');setNoteTouched(false);setBlocked(false);setMessage('')}
+  const submit=async(event:FormEvent)=>{
+    event.preventDefault();if(busy||blocked)return;setBusy(true)
+    try {
+      const result=await journalPersistence.saveJournal({kind:'ENTRY',plan:{date,newId:crypto.randomUUID(),baseline,
+        changes:noteTouched?[note.trim()?{field:'note',action:'SET',value:note.trim()}:{field:'note',action:'CLEAR'}]:[],metricChanges:journalMeasurementChanges(numbers,touched)}})
+      if(result.status==='APPLIED'){load(findDailyEntryByDate(result.data.dailyEntries,date),date);setMessage('Wpis zapisany.')}
+      else{setMessage(`${result.status}: ${result.message}`);setBlocked(true)}
+    }catch(error){setMessage(String(error))}finally{setBusy(false)}
   }
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    upsertDailyEntry({ ...draft, note: draft.note?.trim() || undefined })
-    reset()
-    showToast(editing ? 'Zmiany zapisane' : 'Wpis zapisany')
-  }
-
-  const editEntry = (entry: DailyEntry) => {
-    setDraft({ ...entry })
-    setEditing(true)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  const removeEntry = (entry: DailyEntry) => {
-    if (window.confirm(`Usunąć wpis z ${formatLongDate(entry.date)}?`)) {
-      deleteDailyEntry(entry.id)
-      showToast('Wpis usunięty', 'info')
-    }
-  }
-
-  return (
-    <div className="page journal-page journal-v2">
-      <PageHeader eyebrow="SZYBKI WPIS" title="Dziennik" description="Najważniejsze dane dnia w mniej niż 20 sekund. Wpisz tylko to, co zmierzyłeś." />
-
-      <form className="card daily-form daily-form-v2" onSubmit={submit}>
-        <div className="form-heading">
-          <div><span className="section-kicker">{editing ? 'EDYCJA WPISU' : 'DZISIAJ'}</span><h2>{editing ? formatLongDate(draft.date) : 'Szybki wpis'}</h2></div>
-          {editing && <button type="button" className="button button--ghost button--small" onClick={reset}><X size={15} /> Anuluj</button>}
-        </div>
-
-        <div className="quick-entry-grid">
-          <label className="field field--date"><span>Data</span><input type="date" required value={draft.date} onChange={(event) => setDraft((current) => ({ ...current, date: event.target.value }))} /></label>
-          {quickFields.map((field) => (
-            <label className={`field ${field.priority ? 'field--priority' : ''}`} key={field.key}>
-              <span>{field.label}</span>
-              <div className="input-with-unit">
-                <DecimalInput
-                  min={field.min ?? 0}
-                  max={field.max}
-                  placeholder="—"
-                  value={draft[field.key]}
-                  onValueChange={(value) => setNumber(field.key, value)}
-                />
-                {field.unit && <span>{field.unit}</span>}
-              </div>
-            </label>
-          ))}
-        </div>
-
-        <label className="field journal-note"><span>Notatka <em>opcjonalnie</em></span><textarea rows={2} placeholder="Sen, samopoczucie, późny posiłek…" value={draft.note ?? ''} onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} /></label>
-        <div className="form-footer"><p>Brakujące pola nie są liczone jako zero.</p><button className="button button--primary" type="submit">{editing ? <Save size={17} /> : <Plus size={17} />} {editing ? 'Zapisz zmiany' : 'Zapisz wpis'}</button></div>
-      </form>
-
-      <section className="card history-card">
-        <div className="card-heading">
-          <div><span className="section-kicker">HISTORIA</span><h2>Ostatnie wpisy <small>{data.dailyEntries.length}</small></h2></div>
-          <button className="button button--ghost button--small" onClick={() => setSortNewest((current) => !current)}>Data {sortNewest ? <ArrowDown size={15} /> : <ArrowUp size={15} />}</button>
-        </div>
-        {sortedEntries.length ? <div className="table-scroll"><table className="data-table journal-table">
-          <thead><tr><th>Data</th><th>Masa</th><th>Talia</th><th>Kcal</th><th>Białko</th><th>Węglowodany</th><th>Kroki</th><th>Tłuszcz</th><th>Notatka</th><th aria-label="Akcje" /></tr></thead>
-          <tbody>{sortedEntries.map((entry) => <tr key={entry.id}>
-            <td><strong>{formatLongDate(entry.date)}</strong></td>
-            <td>{entry.weight !== undefined ? `${formatDecimal(entry.weight)} kg` : '—'}</td>
-            <td>{entry.waist !== undefined ? `${formatDecimal(entry.waist)} cm` : '—'}</td>
-            <td>{formatInteger(entry.calories)}</td>
-            <td>{entry.protein !== undefined ? `${formatDecimal(entry.protein)} g` : '—'}</td>
-            <td>{entry.carbs !== undefined ? `${formatDecimal(entry.carbs)} g` : '—'}</td>
-            <td>{formatInteger(entry.steps)}</td>
-            <td>{entry.fat !== undefined ? `${formatDecimal(entry.fat)} g` : '—'}</td>
-            <td className="note-cell" title={entry.note}>{entry.note || '—'}</td>
-            <td><div className="table-actions"><button className="icon-button" onClick={() => editEntry(entry)} aria-label="Edytuj"><Edit3 size={16} /></button><button className="icon-button icon-button--danger" onClick={() => removeEntry(entry)} aria-label="Usuń"><Trash2 size={16} /></button></div></td>
-          </tr>)}</tbody>
-        </table></div> : <div className="history-empty"><NotebookPen size={20} /><p>Jeszcze brak danych</p><span>Twój pierwszy zapis pojawi się tutaj.</span></div>}
-      </section>
-    </div>
-  )
+  return <div className="page journal-page journal-v2"><PageHeader eyebrow="DZIENNIK" title="Dziennik" description="Metryki zgodne z konfiguracją i datą wpisu. Brak wartości nie oznacza zera. Historia wyłączonych metryk pozostaje zachowana."/>
+    {!journalPersistence.supportsJournalSave && <p role="status">Zapis dziennika wymaga dostępnej natywnej bazy Desktop. Podgląd nie zapisuje zmian.</p>}
+    <form className="card daily-form daily-form-v2" onSubmit={(event)=>void submit(event)}><fieldset disabled={busy||blocked}>
+      <div className="quick-entry-grid"><label className="field field--date"><span>Data</span><input type="date" required value={date} onChange={(event)=>load(findDailyEntryByDate(data.dailyEntries,event.target.value),event.target.value)}/></label>
+        {fields.map((metric)=><label className="field" key={metric.id}><span>{metric.label}</span><div className="input-with-unit"><input type="text" inputMode={metric.integer?'numeric':'decimal'} value={numbers[metric.id]??''} onChange={(event)=>{setNumbers({...numbers,[metric.id]:event.target.value});setTouched(new Set([...touched,metric.id]))}} placeholder="—"/><span>{metric.unit==='count'?'':metric.unit}</span></div></label>)}
+      </div><label className="field journal-note"><span>Notatka</span><textarea value={note} onChange={(event)=>{setNote(event.target.value);setNoteTouched(true)}}/></label>
+    </fieldset><div className="form-footer"><button className="button button--primary" disabled={busy||blocked||!validJournalDate(date)||(!touched.size&&!noteTouched)||!journalPersistence.supportsJournalSave}>Zapisz wpis</button>
+      <button type="button" className="button button--ghost" disabled={busy||!journalPersistence.supportsJournalSave} onClick={()=>load(findDailyEntryByDate(data.dailyEntries,date),date)}>Odrzuć draft / wczytaj zapisane</button></div><p role="status">{message}</p></form>
+    <section className="card history-card"><div className="card-heading"><h2>Historia wpisów</h2><button className="button button--ghost" onClick={()=>setSortNewest(!sortNewest)}>Zmień kolejność dat</button></div>
+      <div className="table-scroll"><table className="data-table journal-table"><thead><tr><th>Data</th>{columns.map((metric)=><th key={metric.id}>{metric.label}</th>)}<th>Notatka</th><th>Akcje</th></tr></thead>
+      <tbody>{[...data.dailyEntries].sort((a,b)=>sortNewest?b.date.localeCompare(a.date):a.date.localeCompare(b.date)).map((entry)=><tr key={entry.id}><td>{formatLongDate(entry.date)}</td>{columns.map((metric)=><td key={metric.id}>{measurementValue(entry,metric.id)===undefined?'—':`${formatDecimal(measurementValue(entry,metric.id))} ${metric.unit==='count'?'':metric.unit}`}</td>)}<td>{entry.note||'—'}</td><td><button className="icon-button" disabled={busy} onClick={()=>load(entry,entry.date)} aria-label="Edytuj"><Edit3 size={16}/></button><button className="icon-button" onClick={()=>{if(window.confirm(`Usunąć wpis z ${entry.date}?`))deleteDailyEntry(entry.id)}} aria-label="Usuń"><Trash2 size={16}/></button></td></tr>)}</tbody></table></div>
+    </section></div>
 }

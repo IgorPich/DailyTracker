@@ -2,6 +2,8 @@ import type { AppData, AppDataStore } from '@greekgod/core'
 import { changeTemplateRepRange as applyRepRange, type TemplateRepRangePlan } from '@greekgod/core'
 import { applyProgram, programVersion, type ProgramPlan } from '@greekgod/core'
 import type { ProgramPersistence, ProgramSaveResult } from './programPersistence.ts'
+import { applyDailyEntryEdit, applyJournalConfiguration } from '@greekgod/core'
+import type { JournalMutation, JournalSaveResult } from './journalPersistence.ts'
 import type { ConfirmedTrackingPersistence, TrackingMutationResult } from './confirmedTrackingMutation.ts'
 import { normalizeData } from '../utils/storage'
 import { jsonBoundaryValue, semanticJsonDifference } from './nativeStorageBridge'
@@ -83,6 +85,33 @@ export class DevelopmentAuthoritativeAppDataStore implements AppDataStore, Confi
 
   get supportsConfirmedTrackingMutations() { return this.revision !== undefined && !this.legacyFallback }
   get supportsProgramSave() { return this.supportsConfirmedTrackingMutations }
+  get supportsJournalSave() { return this.supportsConfirmedTrackingMutations }
+
+  saveJournal(request: JournalMutation): Promise<JournalSaveResult> {
+    const intent = structuredClone(request)
+    return this.enqueue(async () => {
+      if (!this.supportsJournalSave) return {status:'BLOCKED',message:'Safe native authority required'}
+      let attempted = false
+      try {
+        const current = requiredSnapshot(await this.nativeBridge.loadAuthority())
+        this.revision = current.revision
+        let desired: AppData
+        try { desired = intent.kind === 'ENTRY' ? applyDailyEntryEdit(current.data,intent.plan) : applyJournalConfiguration(current.data,intent.plan) }
+        catch (error) { return {status:String(error).includes('STALE')?'STALE':'VALIDATION_FAILED',message:String(error)} }
+        if (desired === current.data || !semanticJsonDifference(jsonBoundaryValue(desired),jsonBoundaryValue(current.data))) return {status:'APPLIED',data:current.data}
+        attempted = true
+        let saved
+        try { saved = requiredSnapshot(await this.nativeBridge.replaceAuthority(desired,current.revision)) }
+        catch (error) {
+          const latest = requiredSnapshot(await this.nativeBridge.loadAuthority()); this.revision = latest.revision
+          if (error && typeof error === 'object' && 'kind' in error && error.kind === 'revision-conflict') return {status:'STALE',message:'Authority changed; refresh/review'}
+          return {status:latest.revision === current.revision?'PERSISTENCE_FAILED':'INDETERMINATE',message:'Write not confirmed; refresh/review, no automatic retry'}
+        }
+        this.verifyExpected(desired,saved.data,'journal save'); this.revision = saved.revision
+        return {status:'APPLIED',data:saved.data}
+      } catch { return {status:attempted?'INDETERMINATE':'PERSISTENCE_FAILED',message:'Authority unavailable; refresh before saving again'} }
+    })
+  }
 
   saveProgram(plan: ProgramPlan): Promise<ProgramSaveResult> {
     const draft = structuredClone(plan)

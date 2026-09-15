@@ -2,6 +2,7 @@ import { DEFAULT_TEMPLATES } from '../data/templates'
 import { saveTextExport } from '../services/fileService'
 import type { AppData, DailyEntry, ExerciseDefinition, Settings, Workout } from '../types'
 import { migrateLegacyExerciseIdentity } from './dataMigration'
+import { validateJournalConfiguration } from '@greekgod/core'
 
 export const STORAGE_KEY = 'formlog.data.v1'
 export const CURRENT_DATA_VERSION = 4
@@ -56,6 +57,7 @@ export const normalizeData = (value: unknown): AppData => {
     throw new Error('Plik nie zawiera zapisanych szablonów treningowych.')
   }
   const templates = candidate.templates
+  if (candidate.settings?.journalConfiguration !== undefined) validateJournalConfiguration(candidate.settings.journalConfiguration)
   const workouts = candidate.workouts as Workout[]
   const exerciseLibrary = Array.isArray(candidate.exerciseLibrary) ? candidate.exerciseLibrary : []
   const identity = sourceVersion < CURRENT_DATA_VERSION

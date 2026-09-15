@@ -22,8 +22,9 @@ const CompanionMemory = lazy(async () => ({ default: (await import('./pages/Comp
 const CompanionReactions = lazy(async () => ({ default: (await import('./pages/CompanionReactions')).CompanionReactions }))
 const Settings = lazy(async () => ({ default: (await import('./pages/Settings')).Settings }))
 const ProgramBuilder = lazy(async () => ({ default: (await import('./pages/ProgramBuilder')).ProgramBuilder }))
+const JournalSettings = lazy(async () => ({ default: (await import('./pages/JournalSettings')).JournalSettings }))
 
-export type View = 'dashboard' | 'training' | 'progress' | 'journal' | 'report' | 'settings' | 'human-coach' | 'explicit-command' | 'companion-memory' | 'companion-reactions' | 'program-builder'
+export type View = 'dashboard' | 'training' | 'progress' | 'journal' | 'report' | 'settings' | 'human-coach' | 'explicit-command' | 'companion-memory' | 'companion-reactions' | 'program-builder' | 'journal-settings'
 
 const navItems = [
   { id: 'dashboard' as const, label: 'Panel', mobileLabel: 'Panel', icon: BarChart3 },
@@ -95,7 +96,8 @@ export default function App() {
             {view === 'explicit-command' && <ExplicitCommand />}
             {view === 'companion-memory' && <CompanionMemory />}
             {view === 'companion-reactions' && <CompanionReactions />}
-            {view === 'settings' && <Settings onEditProgram={() => navigate('program-builder')} />}
+            {view === 'settings' && <Settings onEditProgram={() => navigate('program-builder')} onEditJournal={()=>navigate('journal-settings')} />}
+            {view === 'journal-settings' && <JournalSettings onClose={()=>navigate('settings')} />}
             {view === 'program-builder' && <ProgramBuilder onClose={() => navigate('settings')} />}
           </Suspense>
         </main>

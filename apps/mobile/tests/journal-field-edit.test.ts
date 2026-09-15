@@ -58,6 +58,19 @@ test('CAS retry reloads and overlays explicit fields, never the stale whole entr
   }
 })
 
+test('generic metric edit round-trips through local persistence without erasing inactive/unknown keys', async () => {
+  let current=snapshot()
+  current.data.dailyEntries[0].measurements={CHEST:100,BICEPS:35,UNKNOWN:7}
+  const baseline=structuredClone(current.data.dailyEntries[0])
+  const store:MobileStore={initialize:async()=>current,load:async()=>structuredClone(current),save:async(data,revision)=>{
+    assert.equal(revision,current.revision);current={...current,data,revision:revision+1};return current
+  }}
+  const result=await persistDailyEntryEdit(store,{date:baseline.date,newId:'unused',baseline,changes:[],metricChanges:[{metricId:'CHEST',action:'SET',value:101.5}]})
+  assert.equal(result.status,'APPLIED')
+  assert.deepEqual(current.data.dailyEntries[0].measurements,{CHEST:101.5,BICEPS:35,UNKNOWN:7})
+  assert.equal(current.data.dailyEntries[0].weight,80)
+})
+
 test('unconfirmed write never publishes APPLIED or automatically retries', async () => {
   let writes=0
   const current = snapshot()

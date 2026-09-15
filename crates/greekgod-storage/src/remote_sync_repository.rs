@@ -632,6 +632,47 @@ mod tests {
         let after = source.load_authoritative_snapshot().unwrap();
         assert_eq!(after.data, desired);
         assert_eq!(after.revision, newer.revision);
+        // Manual review is NEW intent against the refreshed authority, never a repaired X.
+        let mut reviewed = buggy.clone();
+        reviewed.operation_id = Uuid::new_v4().to_string();
+        reviewed.payload = Some(desired["dailyEntries"][0].clone());
+        reviewed.payload.as_mut().unwrap()["weight"] = json!(79);
+        let accepted = reopened_source.apply_remote_mutation(&reviewed).unwrap();
+        assert!(!accepted.idempotent_replay);
+        assert!(reopened_source.apply_remote_mutation(&reviewed).unwrap().idempotent_replay);
+        assert!(reopened_source.apply_remote_mutation(&buggy).is_err());
+        let final_data = reopened_source.load_authoritative_snapshot().unwrap().data;
+        assert_eq!(final_data["dailyEntries"][0]["weight"], json!(79));
+        assert_eq!(final_data["dailyEntries"][0]["measurements"], json!({"CHEST":100,"BICEPS":35}));
+    }
+
+    #[test]
+    fn journal_generic_measurements_and_configuration_round_trip_without_payload_loss() {
+        let (_source_directory, source) = store();
+        let (_client_directory, client) = store();
+        let initial = source.load_authoritative_snapshot().unwrap();
+        let mut desired = initial.data;
+        desired["dailyEntries"] = json!([{"id":"synthetic-journal", "date":"2026-01-01", "weight":80.25,
+            "measurements":{"CHEST":101.5,"BICEPS":35.5,"FUTURE":9},"note":"Preserved"}]);
+        desired["settings"]["journalConfiguration"] = json!({"version":1,"metrics":[
+            {"metricId":"CHEST","initiallyTracked":false,"transitions":[{"from":"2026-01-01","tracked":true}]},
+            {"metricId":"WEIGHT","initiallyTracked":true,"transitions":[{"from":"2026-01-02","tracked":false}]}
+        ]}); // Native storage preserves opaque domain JSON; Core separately validates registry completeness.
+        let saved = source.replace_authoritative_snapshot(&desired,"desktop:test",initial.revision).unwrap();
+        client.apply_remote_batch_and_advance_cursor("service-a",&source.changes_since(0,100).unwrap(),saved.revision).unwrap();
+        assert_eq!(client.load_authoritative_snapshot().unwrap().data,desired);
+        let mobile = client.load_authoritative_snapshot().unwrap();
+        let mut edited = mobile.data;
+        edited["dailyEntries"][0]["measurements"]["BICEPS"] = json!(36.25);
+        client.replace_authoritative_snapshot(&edited,"mobile:test",mobile.revision).unwrap();
+        let outgoing=client.prepare_remote_outbox("service-a",100).unwrap();
+        assert_eq!(outgoing.len(),1);
+        source.apply_remote_mutation(&outgoing[0].request).unwrap();
+        let final_state=source.load_authoritative_snapshot().unwrap();
+        assert_eq!(final_state.data,edited);
+        let reopened=NativeAppDataStore::new(client.database_path.clone()).unwrap();
+        reopened.apply_remote_batch_and_advance_cursor("service-a",&source.changes_since(saved.revision,100).unwrap(),final_state.revision).unwrap();
+        assert_eq!(reopened.load_authoritative_snapshot().unwrap().data,edited);
     }
 
     #[test]

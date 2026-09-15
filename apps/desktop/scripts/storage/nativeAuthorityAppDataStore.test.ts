@@ -3,6 +3,7 @@ import test from 'node:test'
 import type { AppData } from '@greekgod/core'
 import { prepareTemplateRepRange } from '@greekgod/core'
 import { openProgramDraft, duplicateProgramTemplate, programVersion } from '@greekgod/core'
+import { journalConfiguration, journalConfigurationBaseline, changeMetricTracking } from '@greekgod/core'
 import { randomUUID } from 'node:crypto'
 import { FakeCompanionModel } from '@greekgod/companion'
 import { commandCandidates, createExplicitCommandSession, explicitUserCommandInput } from '@greekgod/companion/commands'
@@ -125,6 +126,50 @@ const commandFixture = async () => {
   const plan = prepareTemplateRepRange(data, { templateId: template.id, templateExerciseId: row.id, exerciseId: row.exerciseId }, 10, 15)
   return { data, bridge, store, plan }
 }
+
+test('journal configuration persists fresh authority once without changing histories or unrelated settings', async () => {
+  const {data,bridge,store}=await commandFixture()
+  const plan={baseline:journalConfigurationBaseline(data),configuration:changeMetricTracking(journalConfiguration(data),'CHEST','2026-09-01',true)}
+  bridge.mutateExternally(current=>{current.settings.calorieTarget++;current.dailyEntries[0].weight=79})
+  const before=clone(bridge.data!)
+  const result=await store.saveJournal({kind:'CONFIGURATION',plan})
+  equal(result.status,'APPLIED');equal(bridge.replacements,1)
+  deepStrictEqual(bridge.data!.dailyEntries,before.dailyEntries)
+  deepStrictEqual(bridge.data!.workouts,before.workouts)
+  equal(bridge.data!.settings.calorieTarget,before.settings.calorieTarget)
+  equal((await store.saveJournal({kind:'CONFIGURATION',plan})).status,'STALE')
+  equal(bridge.replacements,1)
+})
+
+test('journal field save preserves unknown and inactive values and rejects touched-field conflict', async () => {
+  const {data,bridge,store}=await commandFixture(), baseline=clone(data.dailyEntries[0])
+  const plan={date:baseline.date,newId:randomUUID(),baseline,changes:[],metricChanges:[{metricId:'CHEST',action:'SET' as const,value:101.5}]}
+  bridge.mutateExternally(current=>{current.dailyEntries[0].weight=79;current.dailyEntries[0].measurements={BICEPS:37,FUTURE:10}})
+  const result=await store.saveJournal({kind:'ENTRY',plan})
+  equal(result.status,'APPLIED');equal(bridge.replacements,1)
+  const saved=bridge.data!.dailyEntries.find(entry=>entry.id===baseline.id)!
+  equal(saved.weight,79);deepStrictEqual(saved.measurements,{BICEPS:37,FUTURE:10,CHEST:101.5})
+  equal(bridge.data!.dailyEntries.filter(entry=>entry.date===baseline.date).length,1)
+  equal((await store.saveJournal({kind:'ENTRY',plan})).status,'STALE');equal(bridge.replacements,1)
+})
+
+test('journal disk/CAS/lost acknowledgement never blindly retry; UI sees durable data only', async () => {
+  for(const mode of ['disk','cas','lost'] as const){
+    const {data,bridge,store}=await commandFixture(), baseline=clone(data.dailyEntries[0])
+    const replace=bridge.replaceAuthority.bind(bridge)
+    bridge.replaceAuthority=async(desired,revision)=>{
+      if(mode==='disk')throw new Error('Synthetic disk failure')
+      if(mode==='cas')bridge.mutateExternally(current=>{current.settings.calorieTarget++})
+      const result=await replace(desired,revision)
+      if(mode==='lost')throw new Error('Lost acknowledgement')
+      return result
+    }
+    const coordinator=new DesktopDataCoordinator(data,store,()=>{},()=>{})
+    const result=await coordinator.saveJournal({kind:'ENTRY',plan:{date:baseline.date,newId:randomUUID(),baseline,changes:[{field:'weight',action:'SET',value:79}]}})
+    equal(result.status,mode==='disk'?'PERSISTENCE_FAILED':mode==='cas'?'STALE':'INDETERMINATE')
+    equal(bridge.replacements,mode==='lost'?1:0)
+  }
+})
 
 test('confirmed rep change persists exactly once with receipt; histories/IDs/other rows preserved', async () => {
   const { data, bridge, store, plan } = await commandFixture()
