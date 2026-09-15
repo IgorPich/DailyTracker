@@ -72,6 +72,9 @@ const promptFor = (raw: unknown): LocalInferenceRequest => {
   throw new Error('Unsupported local model request')
 }
 
+/** Exposed for synthetic parity harnesses; callers still receive no persistence or action capability. */
+export const buildLocalInferenceRequest = promptFor
+
 const strictJson = (text: string): unknown => {
   if (!text || text.length > 32_768 || text.trim() !== text) throw new Error('Malformed local model output')
   const parsed: unknown = JSON.parse(text)
