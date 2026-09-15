@@ -1,6 +1,7 @@
 export type Phase = 'Maintenance' | 'Lean Gain' | 'Mini Cut' | 'Redukcja'
 
 export interface DailyEntry {
+  measurements?: Record<string, number>
   id: string
   date: string
   weight?: number
@@ -70,6 +71,7 @@ export interface ExerciseDefinition {
 }
 
 export interface Settings {
+  journalConfiguration?: import('./journalMetrics.ts').JournalConfiguration
   phase: Phase
   calorieTarget: number
   proteinTarget: number

@@ -11,7 +11,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
     "test": "npm run build && npm run test:daily-entry && npm run test:workout && npm run test:gym && npm run test:template && npm run test:selectors",
-    "test:daily-entry": "node --experimental-strip-types --test tests/dailyEntryOperations.test.ts",
+    "test:daily-entry": "node --experimental-strip-types --test tests/dailyEntryOperations.test.ts tests/journal.test.ts",
     "test:workout": "node --experimental-strip-types --test tests/workoutOperations.test.ts",
     "test:gym": "node --experimental-strip-types --test tests/gymOperations.test.ts",
     "test:template": "node --experimental-strip-types --test tests/templateOperations.test.ts tests/program.test.ts",

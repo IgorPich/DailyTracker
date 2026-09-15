@@ -28,3 +28,5 @@ export type { TrainingTimeSummaryQuery, TrainingTimeSummaryResult } from './appl
 export type { ReportSelectionQuery } from './application/report-selection/reportSelection.ts'
 export { REPORT_SELECTION_VERSION } from './domain/report/reportSelection.ts'
 export type { ReportSelectionResult, SelectedReportExercise, ReportSelectionReason, ReportSelectionPriority } from './domain/report/reportSelection.ts'
+export { journalMetricSummary } from './application/journalMetricSummary.ts'
+export type { JournalMetricQuery } from './application/journalMetricSummary.ts'
