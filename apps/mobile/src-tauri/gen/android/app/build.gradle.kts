@@ -26,6 +26,7 @@ android {
     }
     buildTypes {
         getByName("debug") {
+            versionNameSuffix = "-schema8-test"
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             isDebuggable = true
             isJniDebuggable = true
@@ -69,3 +70,4 @@ dependencies {
 }
 
 apply(from = "tauri.build.gradle.kts")
+apply(from = "schema8-smoke.gradle")

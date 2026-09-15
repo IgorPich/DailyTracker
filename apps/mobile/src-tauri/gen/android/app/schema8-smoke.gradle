@@ -1,0 +1,9 @@
+// Kept outside the Tauri-managed android block so regeneration cannot remove it.
+// Every debug APK is intentionally a side-by-side physical-test application.
+android {
+    buildTypes {
+        debug {
+            applicationIdSuffix ".schema8test"
+        }
+    }
+}

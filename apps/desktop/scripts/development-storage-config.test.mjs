@@ -29,6 +29,11 @@ const [authorityLiveSmokeConfig, authorityLiveSmokeEnvironment] = await Promise.
   readJson('src-tauri/tauri.native-authority-live-smoke.conf.json'),
   readFile(join(repositoryRoot, '.env.authority-live-smoke'), 'utf8'),
 ])
+const nativeDesktopSource = await readFile(join(repositoryRoot, 'src-tauri/src/lib.rs'), 'utf8')
+const [schema8PhysicalSmokeConfig, schema8PhysicalSmokeEnvironment] = await Promise.all([
+  readJson('src-tauri/tauri.schema8-physical-smoke.conf.json'),
+  readFile(join(repositoryRoot, '.env.schema8-physical-smoke'), 'utf8'),
+])
 const [productionAuthorityConfig, productionAuthorityEnvironment] = await Promise.all([
   readJson('src-tauri/tauri.production-authority.conf.json'),
   readFile(join(repositoryRoot, '.env.production-authority'), 'utf8'),
@@ -39,6 +44,7 @@ assert.equal(developmentConfig.identifier, 'com.igorpich.formlog.dev')
 assert.equal(smokeConfig.identifier, 'com.igorpich.formlog.sqlitesmoke')
 assert.equal(authoritySmokeConfig.identifier, 'com.igorpich.formlog.authoritysmoke')
 assert.equal(authorityLiveSmokeConfig.identifier, 'com.igorpich.formlog.authoritylivesmoke')
+assert.equal(schema8PhysicalSmokeConfig.identifier, 'com.igorpich.formlog.schema8smoke')
 assert.equal(rehearsalConfig.identifier, 'com.igorpich.formlog.rehearsal')
 assert.equal(productionAuthorityConfig.identifier, 'com.igorpich.formlog')
 assert.equal(productionConfig.version, '3.0.2')
@@ -53,11 +59,14 @@ assert.notEqual(smokeConfig.identifier, productionConfig.identifier)
 assert.notEqual(rehearsalConfig.identifier, productionConfig.identifier)
 assert.notEqual(authoritySmokeConfig.identifier, productionConfig.identifier)
 assert.notEqual(authorityLiveSmokeConfig.identifier, productionConfig.identifier)
+assert.notEqual(schema8PhysicalSmokeConfig.identifier, productionConfig.identifier)
 assert.match(packageJson.scripts['tauri:dev'], /--config src-tauri\/tauri\.dev\.conf\.json(?:\s|$)/)
 assert.match(packageJson.scripts['tauri:dev'], /--features native-sqlite-authority/)
 assert.match(packageJson.scripts['tauri:sqlite-smoke:build'], /--features native-sqlite-shadow/)
 assert.match(packageJson.scripts['tauri:authority-smoke:build'], /--features native-sqlite-authority/)
 assert.match(packageJson.scripts['tauri:authority-live-smoke:build'], /--features native-sqlite-authority/)
+assert.match(packageJson.scripts['tauri:schema8-physical-smoke:build'], /--features native-sqlite-authority/)
+assert.match(packageJson.scripts['tauri:schema8-physical-smoke:build'], /tauri\.schema8-physical-smoke\.conf\.json/)
 assert.match(packageJson.scripts['tauri:rehearsal:build'], /--features native-sqlite-production-authority/)
 assert.equal(packageJson.scripts['tauri:production-authority:build'], 'npm run tauri:build')
 assert.doesNotMatch(packageJson.scripts['tauri:build'], /tauri\.dev\.conf\.json/)
@@ -67,6 +76,9 @@ assert.equal(developmentEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')
 assert.equal(smokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_SHADOW=1')
 assert.equal(authoritySmokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')
 assert.equal(authorityLiveSmokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')
+assert.equal(schema8PhysicalSmokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')
+assert.match(nativeDesktopSource, /SCHEMA8_PHYSICAL_SMOKE_IDENTIFIER:\s*&str\s*=\s*"com\.igorpich\.formlog\.schema8smoke"/)
+assert.match(nativeDesktopSource, /identifier\s*==\s*SCHEMA8_PHYSICAL_SMOKE_IDENTIFIER/)
 assert.equal(productionAuthorityEnvironment.trim(), 'VITE_NATIVE_SQLITE_PRODUCTION_AUTHORITY=1')
 assert.equal(rehearsalEnvironment.trim(), 'VITE_NATIVE_SQLITE_PRODUCTION_AUTHORITY=1')
 

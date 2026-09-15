@@ -22,6 +22,7 @@
     "tauri:sqlite-smoke:build": "npm run tauri:sqlite-smoke:build --workspace @greekgod/desktop --",
     "tauri:authority-smoke:build": "npm run tauri:authority-smoke:build --workspace @greekgod/desktop --",
     "tauri:authority-live-smoke:build": "npm run tauri:authority-live-smoke:build --workspace @greekgod/desktop --",
+    "tauri:schema8-physical-smoke:build": "npm run tauri:schema8-physical-smoke:build --workspace @greekgod/desktop --",
     "tauri:rehearsal:build": "npm run tauri:rehearsal:build --workspace @greekgod/desktop --",
     "tauri:production-authority:build": "npm run tauri:production-authority:build --workspace @greekgod/desktop --",
     "tauri:build": "npm run tauri:build --workspace @greekgod/desktop --",
@@ -29,7 +30,8 @@
     "mobile:build": "npm run build --workspace @greekgod/mobile",
     "mobile:android:init": "npm run tauri:android:init --workspace @greekgod/mobile",
     "mobile:android:dev": "npm run tauri:android:dev --workspace @greekgod/mobile",
-    "mobile:android:build": "npm run tauri:android:build --workspace @greekgod/mobile"
+    "mobile:android:build": "npm run tauri:android:build --workspace @greekgod/mobile",
+    "mobile:android:schema8-smoke:build": "npm run tauri:android:schema8-smoke:build --workspace @greekgod/mobile"
   },
   "devDependencies": {
     "@types/node": "^22.0.0"

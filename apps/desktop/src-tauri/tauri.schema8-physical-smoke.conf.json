@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "GreekGod Schema 8 Smoke",
+  "identifier": "com.igorpich.formlog.schema8smoke",
+  "build": {
+    "beforeBuildCommand": "npm run build -- --mode schema8-physical-smoke"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "GreekGod Schema 8 Smoke — TEST DATA ONLY"
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

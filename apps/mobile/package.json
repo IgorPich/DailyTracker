@@ -13,7 +13,8 @@
     "tauri": "tauri",
     "tauri:android:init": "tauri android init",
     "tauri:android:dev": "tauri android dev",
-    "tauri:android:build": "tauri android build --apk"
+    "tauri:android:build": "tauri android build --apk",
+    "tauri:android:schema8-smoke:build": "node scripts/build-schema8-smoke.mjs"
   },
   "dependencies": {
     "@greekgod/core": "*",
