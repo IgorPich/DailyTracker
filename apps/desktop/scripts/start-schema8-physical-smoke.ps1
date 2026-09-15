@@ -49,7 +49,7 @@ while (-not (Test-Path -LiteralPath $databasePath -PathType Leaf)) {
 $deadline = [DateTime]::UtcNow.AddSeconds(45)
 $auditOutput = $null
 do {
-  $auditOutput = & node --experimental-sqlite (Join-Path $PSScriptRoot 'audit-schema8-physical-state.mjs') $databasePath $smokeRoot $productionRoot 2>&1
+  $auditOutput = & node --no-warnings --experimental-sqlite (Join-Path $PSScriptRoot 'audit-schema8-physical-state.mjs') $databasePath $smokeRoot $productionRoot 2>&1
   if ($LASTEXITCODE -eq 0) { break }
   if ($desktop.HasExited) { throw "Desktop exited before bootstrapping isolated database (code $($desktop.ExitCode))." }
   if ([DateTime]::UtcNow -ge $deadline) { throw "Isolated schema-8 database audit failed: $auditOutput" }
@@ -59,11 +59,26 @@ Write-Output $auditOutput
 
 $serviceStdout = Join-Path $smokeRoot 'sync-service.stdout.log'
 $serviceStderr = Join-Path $smokeRoot 'sync-service.stderr.log'
+$routeProbe = [Net.Sockets.UdpClient]::new([Net.Sockets.AddressFamily]::InterNetwork)
+try {
+  $routeProbe.Connect('192.0.2.1', 9)
+  $lanAddress = ([Net.IPEndPoint]$routeProbe.Client.LocalEndPoint).Address
+} finally {
+  $routeProbe.Dispose()
+}
+$portProbe = [Net.Sockets.TcpListener]::new($lanAddress, 0)
+$portProbe.Start()
+try {
+  $smokePort = ([Net.IPEndPoint]$portProbe.LocalEndpoint).Port
+} finally {
+  $portProbe.Stop()
+}
+$bind = "${lanAddress}:$smokePort"
 $service = Start-Process -FilePath $serviceExecutable -ArgumentList @(
   '--database', $databasePath,
-  '--bind-private-lan',
+  '--bind', $bind,
   '--service-id', 'greekgod-schema8-physical-smoke',
-  '--pairing-window-seconds', '3600',
+  '--pairing-window-seconds', '900',
   '--pairing-nonce-output', $pairingPath
 ) -RedirectStandardOutput $serviceStdout -RedirectStandardError $serviceStderr -PassThru -WindowStyle Hidden
 $deadline = [DateTime]::UtcNow.AddSeconds(45)
@@ -74,6 +89,15 @@ while (-not (Test-Path -LiteralPath $pairingPath -PathType Leaf)) {
 }
 
 $pairing = Get-Content -LiteralPath $pairingPath -Raw | ConvertFrom-Json
+$expectedBaseUrl = "https://$bind"
+if ($pairing.baseUrl -ne $expectedBaseUrl -or
+  $pairing.serviceId -ne 'greekgod-schema8-physical-smoke' -or
+  $pairing.certificateFingerprintSha256 -notmatch '^[a-fA-F0-9]{64}$' -or
+  [string]::IsNullOrWhiteSpace($pairing.nonce) -or
+  $pairing.expiresAtEpoch -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
+  Stop-Process -Id $service.Id -Force -ErrorAction SilentlyContinue
+  throw 'Sync Service produced invalid or mismatched pairing data.'
+}
 [ordered]@{
   desktopPid = $desktop.Id
   servicePid = $service.Id

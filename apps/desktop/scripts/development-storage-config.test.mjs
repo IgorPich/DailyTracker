@@ -30,6 +30,7 @@ const [authorityLiveSmokeConfig, authorityLiveSmokeEnvironment] = await Promise.
   readFile(join(repositoryRoot, '.env.authority-live-smoke'), 'utf8'),
 ])
 const nativeDesktopSource = await readFile(join(repositoryRoot, 'src-tauri/src/lib.rs'), 'utf8')
+const schema8PhysicalSmokeLauncher = await readFile(join(repositoryRoot, 'scripts/start-schema8-physical-smoke.ps1'), 'utf8')
 const [schema8PhysicalSmokeConfig, schema8PhysicalSmokeEnvironment] = await Promise.all([
   readJson('src-tauri/tauri.schema8-physical-smoke.conf.json'),
   readFile(join(repositoryRoot, '.env.schema8-physical-smoke'), 'utf8'),
@@ -79,6 +80,11 @@ assert.equal(authorityLiveSmokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY
 assert.equal(schema8PhysicalSmokeEnvironment.trim(), 'VITE_NATIVE_SQLITE_AUTHORITY=1')
 assert.match(nativeDesktopSource, /SCHEMA8_PHYSICAL_SMOKE_IDENTIFIER:\s*&str\s*=\s*"com\.igorpich\.formlog\.schema8smoke"/)
 assert.match(nativeDesktopSource, /identifier\s*==\s*SCHEMA8_PHYSICAL_SMOKE_IDENTIFIER/)
+assert.match(schema8PhysicalSmokeLauncher, /node --no-warnings --experimental-sqlite/)
+assert.doesNotMatch(schema8PhysicalSmokeLauncher, /NODE_NO_WARNINGS/)
+assert.match(schema8PhysicalSmokeLauncher, /'--pairing-window-seconds', '900'/)
+assert.match(schema8PhysicalSmokeLauncher, /'--bind', \$bind/)
+assert.match(schema8PhysicalSmokeLauncher, /\$pairing\.baseUrl -ne \$expectedBaseUrl/)
 assert.equal(productionAuthorityEnvironment.trim(), 'VITE_NATIVE_SQLITE_PRODUCTION_AUTHORITY=1')
 assert.equal(rehearsalEnvironment.trim(), 'VITE_NATIVE_SQLITE_PRODUCTION_AUTHORITY=1')
 
