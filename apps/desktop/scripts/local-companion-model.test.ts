@@ -45,6 +45,25 @@ test('adapter accepts multiple exact allowed trainer IDs for the downstream doma
   ] }), JSON.parse(output))
 })
 
+test('provider schema constrains all model-returned references to request allowlists', async () => {
+  const trainerRuntime = new StubRuntime('[{"kind":"TASK","title":"Jawne","exerciseIds":["a","b"]}]')
+  await new RealLocalCompanionModel(trainerRuntime).propose({ text: 'synthetic', exercises: [
+    { id: 'a', name: 'A' }, { id: 'b', name: 'B' },
+  ] })
+  const proposal = ((trainerRuntime.request!.jsonSchema.items as { oneOf: Array<{ properties: Record<string, unknown> }> }).oneOf[0])
+  assert.deepEqual(proposal.properties.exerciseIds, {
+    type: 'array', maxItems: 2, uniqueItems: true, items: { type: 'string', enum: ['a', 'b'] },
+  })
+
+  const commandRuntime = new StubRuntime('{"action":"CHANGE_TEMPLATE_REP_RANGE","candidateRefs":["r"],"minReps":6,"maxReps":8}')
+  await new RealLocalCompanionModel(commandRuntime).propose({ text: 'synthetic', candidates: [
+    { reference: 'r', templateId: 't', templateExerciseId: 'te', exerciseId: 'e', templateName: 'T', exerciseName: 'E', prescription: '3x8' },
+  ] })
+  assert.deepEqual((commandRuntime.request!.jsonSchema.properties as Record<string, unknown>).candidateRefs, {
+    type: 'array', maxItems: 1, uniqueItems: true, items: { type: 'string', enum: ['r'] },
+  })
+})
+
 test('asset identity is versioned and checksum-pinned', () => {
   assert.equal(LOCAL_MODEL.license, 'MIT')
   assert.match(LOCAL_MODEL.manifestSha256, /^[a-f0-9]{64}$/)
