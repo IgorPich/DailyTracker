@@ -15,7 +15,7 @@
     "test:workout": "node --experimental-strip-types --test tests/workoutOperations.test.ts",
     "test:gym": "node --experimental-strip-types --test tests/gymOperations.test.ts",
     "test:template": "node --experimental-strip-types --test tests/templateOperations.test.ts tests/program.test.ts",
-    "test:selectors": "node --experimental-strip-types --test tests/workoutSelectors.test.ts"
+    "test:selectors": "node --experimental-strip-types --test tests/workoutSelectors.test.ts tests/exerciseMentionResolver.test.ts"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

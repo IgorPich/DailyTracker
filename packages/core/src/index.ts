@@ -22,13 +22,15 @@ export {
   classifyExerciseIdentity,
   exerciseDefinitionFor,
   normalizeExerciseName,
+  normalizeAuthoritativeExerciseMention,
   registerExerciseDefinition,
   renameExerciseDefinition,
   resolvedExerciseDefinitionId,
+  resolveUniqueExerciseMention,
   resolveTemplateExerciseId,
   UNRESOLVED_EXERCISE_IDENTITY,
 } from './exerciseIdentity.ts'
-export type { ExerciseIdentityIssueReason, ExerciseIdentityResolution, ExerciseReference } from './exerciseIdentity.ts'
+export type { ExerciseIdentityIssueReason, ExerciseIdentityResolution, ExerciseMentionResolution, ExerciseReference } from './exerciseIdentity.ts'
 export { auditExerciseIdentities } from './exerciseIdentityAudit.ts'
 export type { ExerciseIdentityAuditIssue, ExerciseIdentityAuditResult } from './exerciseIdentityAudit.ts'
 export {

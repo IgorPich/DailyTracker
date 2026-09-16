@@ -1,4 +1,5 @@
 import type { CompanionModel } from '@greekgod/companion'
+import { resolveUniqueExerciseMention } from '@greekgod/core'
 
 export const LOCAL_MODEL = Object.freeze({
   id: 'microsoft/Phi-3.5-mini-instruct-gguf-q4_0@61819fb370a3',
@@ -32,12 +33,6 @@ const normalized = (value: string) => value.normalize('NFKC').toLocaleLowerCase(
 const exactMention = (text: string, name: string) => {
   const escaped = normalized(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, 'u').test(normalized(text))
-}
-const exactNamed = <T extends { name: string }>(text: string, items: T[]) => {
-  const matches = items.filter((item) => exactMention(text, item.name))
-  const counts = new Map<string, number>()
-  for (const item of matches) counts.set(normalized(item.name), (counts.get(normalized(item.name)) ?? 0) + 1)
-  return matches.filter((item) => counts.get(normalized(item.name)) === 1)
 }
 const explicitRange = (text: string) => {
   const match = normalized(text).match(/(?:\bod\s+|\bfrom\s+)(\d{1,4})\s+(?:do|to)\s+(\d{1,4})\b|\b(\d{1,4})\s*[-–]\s*(\d{1,4})\b/)
@@ -94,15 +89,17 @@ const promptFor = (raw: unknown): LocalInferenceRequest => {
     }),
   }
   if (typeof request.text === 'string' && Array.isArray(request.candidates)) {
-    const exactCandidates = (request.candidates as Array<{ reference: string; exerciseName: string }>).filter((item) => {
-      return exactMention(request.text as string, item.exerciseName)
-    })
-    const counts = new Map<string, number>()
-    for (const item of exactCandidates) counts.set(normalized(item.exerciseName), (counts.get(normalized(item.exerciseName)) ?? 0) + 1)
-    const exactRefs = exactCandidates.filter((item) => counts.get(normalized(item.exerciseName)) === 1).map((item) => item.reference)
-    const candidateOptions = (request.candidates as Array<{ reference: string; exerciseName: string }>).filter((item) => exactRefs.includes(item.reference))
+    const candidates = request.candidates as Array<{ reference: string; exerciseId: string; canonicalName: string; authoritativeMentions: string[] }>
+    const definitions = [...new Map(candidates.map((item) => [item.exerciseId, {
+      id: item.exerciseId, name: item.canonicalName, aliases: item.authoritativeMentions.filter((mention) => normalized(mention) !== normalized(item.canonicalName)),
+    }])).values()]
+    const resolution = resolveUniqueExerciseMention(request.text, definitions)
+    const matchingCandidates = resolution.classification === 'RESOLVED'
+      ? candidates.filter((item) => item.exerciseId === resolution.exerciseId) : []
+    const exactRefs = matchingCandidates.length === 1 ? [matchingCandidates[0].reference] : []
+    const candidateOptions = matchingCandidates.filter((item) => exactRefs.includes(item.reference))
       .map((item) => objectSchema(['reference', 'sourceMention'], {
-        reference: { const: item.reference }, sourceMention: { const: item.exerciseName },
+        reference: { const: item.reference }, sourceMention: { const: resolution.classification === 'RESOLVED' ? resolution.authoritativeMention : '' },
       }))
     const range = explicitRange(request.text)
     const proposal = objectSchema(['action', 'candidate', 'minReps', 'maxReps'], {
@@ -112,20 +109,24 @@ const promptFor = (raw: unknown): LocalInferenceRequest => {
     return {
       promptVersion: 'greekgod-command-v2',
       system: 'Interpretujesz jawne polecenie zmiany zakresu powtórzeń, ale go nie wykonujesz. Zwróć propozycję tylko wtedy, gdy tekst dokładnie wspiera jeden z exactCandidates oraz podaje dolną i górną granicę. sourceMention skopiuj dosłownie z pola text jako najkrótszy fragment nazywający ćwiczenie; nigdy nie kopiuj nazwy, prescription ani innych metadanych kandydata. Allowlista oznacza dozwolone, nie wymagane. Gdy brak jednoznacznego kandydata lub zakresu, zwróć NO_PROPOSAL. Zwróć wyłącznie JSON.',
-      input: JSON.stringify({ ...request, exactCandidateRefs: exactRefs, explicitRange: range ?? null }),
+      input: JSON.stringify({ ...request, groundedExerciseId: resolution.classification === 'RESOLVED' ? resolution.exerciseId : null,
+        groundedSourceMention: resolution.classification === 'RESOLVED' ? resolution.authoritativeMention : null, exactCandidateRefs: exactRefs, explicitRange: range ?? null }),
       jsonSchema: candidateOptions.length && range ? { oneOf: [proposal, objectSchema(['outcome'], { outcome: { const: 'NO_PROPOSAL' } })] }
         : objectSchema(['outcome'], { outcome: { const: 'NO_PROPOSAL' } }),
     }
   }
   if (typeof request.text === 'string' && Array.isArray(request.exercises)) {
     const clearKind = clearTrainerKind(request.text)
-    const grounded = exactNamed(request.text, request.exercises as Array<{ id: string; name: string }>)
-    const grounding = grounded.map((item) => objectSchema(['exerciseId', 'mention'], { exerciseId: { const: item.id }, mention: { const: item.name } }))
+    const exercises = request.exercises as Array<{ id: string; name: string; aliases?: string[] }>
+    const resolution = resolveUniqueExerciseMention(request.text, exercises)
+    const grounded = resolution.classification === 'RESOLVED'
+      ? exercises.filter((item) => item.id === resolution.exerciseId).map((item) => ({ ...item, sourceMention: resolution.authoritativeMention })) : []
+    const grounding = grounded.map((item) => objectSchema(['exerciseId', 'mention'], { exerciseId: { const: item.id }, mention: { const: item.sourceMention } }))
     const groundings = { type: 'array', maxItems: grounded.length, uniqueItems: true, items: grounding.length ? { oneOf: grounding } : { type: 'object' } }
     const range = explicitRange(request.text)
     const targetMeasure = clearTargetMeasure(request.text)
     const repTarget = grounded.map((item) => objectSchema(['type', 'scope', 'exerciseId', 'sourceMention', 'min', 'max', 'unit'], {
-      type: { const: 'REP_RANGE' }, scope: { const: 'EXERCISE' }, exerciseId: { const: item.id }, sourceMention: { const: item.name },
+      type: { const: 'REP_RANGE' }, scope: { const: 'EXERCISE' }, exerciseId: { const: item.id }, sourceMention: { const: item.sourceMention },
       min: range ? { const: range.min } : { type: 'integer', minimum: 1 }, max: range ? { const: range.max } : { type: 'integer', minimum: 1 }, unit: { const: 'reps' },
     }))
     const kinds = [
@@ -137,10 +138,11 @@ const promptFor = (raw: unknown): LocalInferenceRequest => {
         ] } }),
         objectSchema(['kind', 'text', 'entityGroundings'], { kind: { const: 'DECISION' }, text: { type: 'string' }, entityGroundings: groundings }),
       ]
-    const exerciseSpecificButUngrounded = clearKind === 'TASK' && (request.exercises as unknown[]).length > 0 && !grounded.length
+    const ambiguousGrounding = resolution.classification === 'UNRESOLVED' && resolution.reason !== 'NO_MENTION'
+    const exerciseSpecificButUngrounded = clearKind === 'TASK' && exercises.length > 0 && !grounded.length
       && /(?:^|[^\p{L}])dla(?=$|[^\p{L}])/u.test(normalized(request.text))
     const ungroundedRepTarget = clearKind === 'TARGET' && Boolean(range) && !grounded.length
-    const allowedKinds = exerciseSpecificButUngrounded || ungroundedRepTarget || !clearKind ? [] : kinds.filter((kind) => (kind.properties as Record<string, { const?: string }>).kind.const === clearKind)
+    const allowedKinds = ambiguousGrounding || exerciseSpecificButUngrounded || ungroundedRepTarget || !clearKind ? [] : kinds.filter((kind) => (kind.properties as Record<string, { const?: string }>).kind.const === clearKind)
     return {
       promptVersion: 'greekgod-trainer-v2',
       system: 'Wyodrębnij z TrainerText pewne propozycje. TASK to przyszła czynność do wykonania, np. „przygotuj posiłek jutro”. TARGET to pożądany mierzalny stan, wartość lub zakres, np. „celem jest masa 75 kg”. DECISION to już ustalona reguła lub wniosek, np. „ustaliliśmy dwie minuty odpoczynku”. Kategorie są rozłączne. Użyj entityGroundings wyłącznie z exactGroundedExercises; allowlista nie wymaga wyboru. Dla REP_RANGE sourceMention skopiuj dosłownie z pola text jako najkrótszy fragment nazywający ćwiczenie; nigdy nie kopiuj samej nazwy z allowlisty. Nie łącz po podobnej nazwie. Niejednoznaczne lub nieobsługiwane odniesienie oznacza pustą tablicę. Niczego nie zapisujesz. Zwróć wyłącznie JSON.',
@@ -239,31 +241,38 @@ const validateOutput = (request: unknown, raw: unknown): unknown => {
       closed(raw, ['outcome']); return structuredClone(raw)
     }
     const output = closed(raw, ['action', 'candidate', 'minReps', 'maxReps'])
-    const candidates = dense(input.candidates, 500).map((item) => closed(item, ['reference', 'templateId', 'templateExerciseId', 'exerciseId', 'templateName', 'exerciseName', 'prescription']))
+    const candidates = dense(input.candidates, 500).map((item) => closed(item, ['reference', 'templateId', 'templateExerciseId', 'exerciseId', 'templateName', 'exerciseName', 'prescription', 'canonicalName', 'authoritativeMentions']))
     const allowed = new Set(candidates.map((item) => boundedText(item.reference)))
     const candidate = closed(output.candidate, ['reference', 'sourceMention']); const reference = boundedText(candidate.reference); const mention = boundedText(candidate.sourceMention)
     if (output.action !== 'CHANGE_TEMPLATE_REP_RANGE' || !Number.isSafeInteger(output.minReps) || !Number.isSafeInteger(output.maxReps)
       || (output.minReps as number) < 1 || (output.maxReps as number) < (output.minReps as number)) fail()
     if (!allowed.has(reference) || !exactMention(input.text, mention)) fail()
-    const candidateNames = candidates.map((item) => ({ reference: boundedText(item.reference), name: boundedText(item.exerciseName) }))
-    const exactlyNamed = exactNamed(input.text, candidateNames)
-    const exactRefs = new Set(exactlyNamed.map((item) => item.reference))
-    if (!exactRefs.has(reference)) fail()
-    const exactCandidate = candidates.find((item) => item.reference === reference && exactMention(input.text as string, boundedText(item.exerciseName)))
-    if (exactCandidate && candidate.sourceMention !== exactCandidate.exerciseName) fail()
+    const definitions = [...new Map(candidates.map((item) => {
+      const canonicalName = boundedText(item.canonicalName); const mentions = dense(item.authoritativeMentions, 100).map(boundedText)
+      if (!mentions.some((value) => normalized(value) === normalized(canonicalName))) fail()
+      return [boundedText(item.exerciseId), { id: item.exerciseId as string, name: canonicalName,
+        aliases: mentions.filter((value) => normalized(value) !== normalized(canonicalName)) }]
+    })).values()]
+    const resolution = resolveUniqueExerciseMention(input.text, definitions)
+    const exactCandidates = resolution.classification === 'RESOLVED' ? candidates.filter((item) => item.exerciseId === resolution.exerciseId) : []
+    if (resolution.classification !== 'RESOLVED' || exactCandidates.length !== 1 || exactCandidates[0].reference !== reference
+      || mention !== resolution.authoritativeMention) fail()
     const range = explicitRange(input.text); if (!range || output.minReps !== range.min || output.maxReps !== range.max) fail()
     return { action: output.action, candidateRefs: [reference], minReps: output.minReps, maxReps: output.maxReps }
   }
   if (typeof input.text === 'string' && Array.isArray(input.exercises)) {
-    const exercises = dense(input.exercises, 500).map((item) => closed(item, ['id', 'name']))
+    const exercises = dense(input.exercises, 500).map((item) => closed(item, ['id', 'name'], ['aliases']))
     const allowedIds = new Set(exercises.map((item) => boundedText(item.id)))
     if (allowedIds.size !== exercises.length) fail()
-    const allowed = new Map(exercises.map((item) => [item.id as string, item.name as string]))
-    const groundedItems = exactNamed(input.text, exercises.map((item) => ({ id: item.id as string, name: boundedText(item.name) })))
-    const grounded = new Map(groundedItems.map((item) => [item.id, item.name]))
+    const definitions = exercises.map((item) => ({ id: item.id as string, name: boundedText(item.name),
+      ...(item.aliases ? { aliases: dense(item.aliases, 100).map(boundedText) } : {}) }))
+    const allowed = new Map(definitions.map((item) => [item.id, item.name]))
+    const resolution = resolveUniqueExerciseMention(input.text, definitions)
+    const grounded = new Map(resolution.classification === 'RESOLVED' ? [[resolution.exerciseId, resolution.authoritativeMention]] : [])
     const result = validateTrainerOutput(raw, input.text, allowed, grounded)
     const clearKind = clearTrainerKind(input.text)
     if (!clearKind && result.length || result.some((item) => item.kind !== clearKind)) fail()
+    if (resolution.classification === 'UNRESOLVED' && resolution.reason !== 'NO_MENTION' && result.length) fail()
     if (clearKind === 'TASK' && exercises.length && !grounded.size && /(?:^|[^\p{L}])dla(?=$|[^\p{L}])/u.test(normalized(input.text)) && result.length) fail()
     const range = explicitRange(input.text); const measure = clearTargetMeasure(input.text)
     for (const item of result) if (item.kind === 'TARGET') {
@@ -303,17 +312,32 @@ const sanitizeRequest = (raw: unknown): Record<string, unknown> => {
   if (typeof input?.text === 'string' && Array.isArray(input.candidates)) {
     const request = closed(input, ['text', 'candidates']); boundedText(request.text)
     const candidates = dense(request.candidates, 500).map((item) => {
-      const value = closed(item, ['reference', 'templateId', 'templateExerciseId', 'exerciseId', 'templateName', 'exerciseName', 'prescription'])
-      for (const field of Object.values(value)) boundedText(field)
+      const value = closed(item, ['reference', 'templateId', 'templateExerciseId', 'exerciseId', 'templateName', 'exerciseName', 'prescription', 'canonicalName', 'authoritativeMentions'])
+      for (const key of ['reference', 'templateId', 'templateExerciseId', 'exerciseId', 'templateName', 'exerciseName', 'prescription', 'canonicalName']) boundedText(value[key])
+      const mentions = dense(value.authoritativeMentions, 100).map(boundedText)
+      if (!mentions.length || new Set(mentions.map(normalized)).size !== mentions.length
+        || !mentions.some((mention) => normalized(mention) === normalized(value.canonicalName as string))) fail()
       return value
     })
     if (new Set(candidates.map((item) => item.reference)).size !== candidates.length) fail()
+    for (const candidate of candidates) {
+      const peers = candidates.filter((item) => item.exerciseId === candidate.exerciseId)
+      const signature = JSON.stringify([normalized(candidate.canonicalName as string),
+        [...(candidate.authoritativeMentions as string[])].map(normalized).sort()])
+      if (peers.some((item) => JSON.stringify([normalized(item.canonicalName as string),
+        [...(item.authoritativeMentions as string[])].map(normalized).sort()]) !== signature)) fail()
+    }
     return structuredClone(request)
   }
   if (typeof input?.text === 'string' && Array.isArray(input.exercises)) {
     const request = closed(input, ['text', 'exercises']); boundedText(request.text)
     const exercises = dense(request.exercises, 500).map((item) => {
-      const value = closed(item, ['id', 'name']); boundedText(value.id); boundedText(value.name); return value
+      const value = closed(item, ['id', 'name'], ['aliases']); boundedText(value.id); boundedText(value.name)
+      if (value.aliases !== undefined) {
+        const aliases = dense(value.aliases, 100).map(boundedText)
+        if (new Set(aliases.map(normalized)).size !== aliases.length) fail()
+      }
+      return value
     })
     if (new Set(exercises.map((item) => item.id)).size !== exercises.length) fail()
     return structuredClone(request)

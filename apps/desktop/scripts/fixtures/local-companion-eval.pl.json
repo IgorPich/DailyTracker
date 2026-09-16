@@ -13,7 +13,7 @@
       "id": "trainer-target",
       "type": "TRAINER_EXTRACTION",
       "text": "Cel dla Przysiadu próbnego: od 6 do 8 powtórzeń.",
-      "entities": [{ "id": "exercise-squat-synthetic", "name": "Przysiad próbny" }],
+      "entities": [{ "id": "exercise-squat-synthetic", "name": "Przysiad próbny", "aliases": ["Przysiadu próbnego"] }],
       "expect": "TARGET REP_RANGE 6..8 using exact supplied ID"
     },
     {

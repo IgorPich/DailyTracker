@@ -20,7 +20,8 @@ if (!['http://127.0.0.1:11434', 'http://localhost:11434'].includes(ollamaEndpoin
 
 const fixture = JSON.parse(await readFile(resolve(here, '../fixtures/local-companion-eval.pl.json'), 'utf8'))
 const generalization = JSON.parse(await readFile(resolve(here, '../fixtures/local-companion-generalization.pl.json'), 'utf8'))
-if (fixture.syntheticOnly !== true || generalization.syntheticOnly !== true) throw new Error('Differential harness accepts synthetic fixtures only')
+const adversarial = JSON.parse(await readFile(resolve(here, '../fixtures/local-companion-grounding-adversarial.pl.json'), 'utf8'))
+if (fixture.syntheticOnly !== true || generalization.syntheticOnly !== true || adversarial.syntheticOnly !== true) throw new Error('Differential harness accepts synthetic fixtures only')
 
 const trainerRequest = (entry) => ({ text: entry.text, exercises: entry.entities })
 const requests = [...fixture.cases.map((entry) => ({
@@ -34,12 +35,13 @@ const requests = [...fixture.cases.map((entry) => ({
   id: entry.id, suite: 'generalization', expect: entry.expect,
   logical: entry.type === 'TRAINER_EXTRACTION' ? trainerRequest(entry)
     : { kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: entry.text }, evidence: entry.evidence },
-}))]
+})), ...adversarial.cases.map((entry) => ({ id: entry.id, suite: 'grounding-adversarial', expect: entry.expect, logical: entry.logical }))]
 requests.push({
   id: 'command-rep-range', suite: 'original', expect: 'candidate-1, exact 6..8, proposal only',
   logical: { text: 'Ustaw dla Przysiadu próbnego zakres od 6 do 8 powtórzeń.', candidates: [{
     reference: 'candidate-1', templateId: 'template-synthetic', templateExerciseId: 'template-exercise-synthetic',
     exerciseId: 'exercise-squat-synthetic', templateName: 'Plan próbny', exerciseName: 'Przysiad próbny', prescription: '3 x 5',
+    canonicalName: 'Przysiad próbny', authoritativeMentions: ['Przysiad próbny', 'Przysiadu próbnego'],
   }] },
 })
 
@@ -91,6 +93,12 @@ const semantics = (id, value) => {
   if (id === 'general-one-grounded') return { json: true, gate: Array.isArray(value) && value.length === 1 && value[0].kind === 'TASK' && JSON.stringify(value[0].exerciseIds) === '["movement-walk"]' }
   if (id === 'general-evidence-number') return { json: true, gate: value?.evidenceIds?.includes('sessions-total') && /7/.test(value.message ?? '') }
   if (id === 'general-mutation-dialogue') return { json: true, gate: value?.evidenceIds?.includes('records-total') && /3/.test(value.message ?? '') && /nie wykonano/i.test(value.message ?? '') }
+  if (id === 'grounding-trainer-canonical') return { json: true, gate: Array.isArray(value) && value.length === 1 && JSON.stringify(value[0].exerciseIds) === '["runtime-canonical"]' }
+  if (id === 'grounding-trainer-alias') return { json: true, gate: Array.isArray(value) && value.length === 1 && JSON.stringify(value[0].exerciseIds) === '["runtime-alias"]' }
+  if (id === 'grounding-trainer-unrelated') return { json: true, gate: Array.isArray(value) && value.every((item) => Array.isArray(item.exerciseIds) && item.exerciseIds.length === 0) }
+  if (id.startsWith('grounding-trainer-')) return { json: true, gate: Array.isArray(value) && value.length === 0 }
+  if (id === 'grounding-command-alias') return { json: true, gate: value?.action === 'CHANGE_TEMPLATE_REP_RANGE' && JSON.stringify(value.candidateRefs) === '["ref-alias"]' && value.minReps === 6 && value.maxReps === 8 }
+  if (id.startsWith('grounding-command-')) return { json: true, gate: value?.outcome === 'NO_PROPOSAL' }
   return { json: true, gate: false }
 }
 

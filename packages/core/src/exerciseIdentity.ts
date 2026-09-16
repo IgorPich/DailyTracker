@@ -24,6 +24,52 @@ export const normalizeExerciseName = (name: string) => name
   .replace(/\s+/g, ' ')
   .toLocaleLowerCase('pl-PL')
 
+export const normalizeAuthoritativeExerciseMention = (mention: string) => mention
+  .normalize('NFKC')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase('pl-PL')
+
+export type ExerciseMentionResolution =
+  | { classification: 'RESOLVED'; exerciseId: string; authoritativeMention: string }
+  | { classification: 'UNRESOLVED'; reason: 'NO_MENTION' | 'AMBIGUOUS_MENTION' | 'MULTIPLE_EXERCISES' | 'INVALID_DEFINITIONS' }
+
+const containsExactMention = (source: string, mention: string) => {
+  const normalized = normalizeAuthoritativeExerciseMention(mention)
+  if (!normalized) return false
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, 'u')
+    .test(normalizeAuthoritativeExerciseMention(source))
+}
+
+/** Resolves identity only from canonical names and identity-owned aliases. */
+export const resolveUniqueExerciseMention = (
+  source: string,
+  definitions: readonly Pick<ExerciseDefinition, 'id' | 'name' | 'aliases'>[],
+): ExerciseMentionResolution => {
+  if (!source.trim() || definitions.some((definition) => !definition.id.trim()
+    || definition.id !== definition.id.trim()
+    || definitions.filter((candidate) => candidate.id === definition.id).length !== 1)) {
+    return { classification: 'UNRESOLVED', reason: 'INVALID_DEFINITIONS' }
+  }
+  const mentions = new Map<string, { display: Set<string>; exerciseIds: Set<string> }>()
+  for (const definition of definitions) for (const mention of [definition.name, ...(definition.aliases ?? [])]) {
+    if (typeof mention !== 'string') return { classification: 'UNRESOLVED', reason: 'INVALID_DEFINITIONS' }
+    const normalized = normalizeAuthoritativeExerciseMention(mention)
+    if (!normalized) return { classification: 'UNRESOLVED', reason: 'INVALID_DEFINITIONS' }
+    const entry = mentions.get(normalized) ?? { display: new Set<string>(), exerciseIds: new Set<string>() }
+    entry.display.add(mention.trim().replace(/\s+/g, ' ')); entry.exerciseIds.add(definition.id); mentions.set(normalized, entry)
+  }
+  const matched = [...mentions.entries()].filter(([, entry]) => containsExactMention(source, [...entry.display][0]))
+  if (!matched.length) return { classification: 'UNRESOLVED', reason: 'NO_MENTION' }
+  if (matched.some(([, entry]) => entry.exerciseIds.size !== 1)) return { classification: 'UNRESOLVED', reason: 'AMBIGUOUS_MENTION' }
+  const exerciseIds = new Set(matched.flatMap(([, entry]) => [...entry.exerciseIds]))
+  if (exerciseIds.size !== 1) return { classification: 'UNRESOLVED', reason: 'MULTIPLE_EXERCISES' }
+  const selected = matched.map(([normalized, entry]) => ({ normalized, display: [...entry.display].sort()[0] }))
+    .sort((left, right) => right.normalized.length - left.normalized.length || left.normalized.localeCompare(right.normalized, 'pl-PL'))[0]
+  return { classification: 'RESOLVED', exerciseId: [...exerciseIds][0], authoritativeMention: selected.display }
+}
+
 export const canonicalExerciseId = (
   exercise: Pick<ExerciseReference, 'exerciseId'>,
 ): string | undefined => {

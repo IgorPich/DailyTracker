@@ -17,7 +17,7 @@ test('real adapter sends only the bounded trainer request and returns untrusted 
     [{ kind: 'TASK', title: 'Zapisz wynik', exerciseIds: ['ex-ż'] }])
   assert.equal(runtime.request?.promptVersion, 'greekgod-trainer-v2')
   const sent = JSON.parse(runtime.request!.input)
-  assert.deepEqual(sent, { text: 'Zapisz wynik: Żuraw.', exercises: [{ id: 'ex-ż', name: 'Żuraw' }], clearKind: 'TASK', clearTargetMeasure: null, exactGroundedExercises: [{ id: 'ex-ż', name: 'Żuraw' }], explicitRange: null })
+  assert.deepEqual(sent, { text: 'Zapisz wynik: Żuraw.', exercises: [{ id: 'ex-ż', name: 'Żuraw' }], clearKind: 'TASK', clearTargetMeasure: null, exactGroundedExercises: [{ id: 'ex-ż', name: 'Żuraw', sourceMention: 'Żuraw' }], explicitRange: null })
   assert.doesNotMatch(runtime.request!.input, /dailyEntries|workouts|templates|calorieTarget/)
 })
 
@@ -32,36 +32,35 @@ test('closed validators reject unknown fields, invalid refs and semantic ranges 
   await assert.rejects(new RealLocalCompanionModel(new StubRuntime('[{"kind":"TASK","title":"X","entityGroundings":[{"exerciseId":"unknown","mention":"X"}]}]')).propose(trainer))
   await assert.rejects(new RealLocalCompanionModel(new StubRuntime('[{"kind":"TASK","title":"X","entityGroundings":[],"action":"WRITE"}]')).propose(trainer))
   await assert.rejects(new RealLocalCompanionModel(new StubRuntime('{"action":"CHANGE_TEMPLATE_REP_RANGE","candidateRefs":["r"],"minReps":9,"maxReps":3}')).propose({
-    text: 'synthetic', candidates: [{ reference: 'r', templateId: 't', templateExerciseId: 'row', exerciseId: 'e', templateName: 'T', exerciseName: 'E', prescription: '1x1' }],
+    text: 'synthetic', candidates: [{ reference: 'r', templateId: 't', templateExerciseId: 'row', exerciseId: 'e', templateName: 'T', exerciseName: 'E', prescription: '1x1', canonicalName: 'E', authoritativeMentions: ['E'] }],
   }))
   await assert.rejects(new RealLocalCompanionModel(new StubRuntime('{"message":"ok","evidenceIds":["other"]}')).propose({
     kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: 'x' }, evidence: [{ id: 'ev', text: 'fact' }],
   }))
 })
 
-test('adapter accepts multiple exact allowed trainer IDs for the downstream domain validator to apply its contract', async () => {
+test('adapter rejects multiple distinct exercise mentions for one Trainer proposal', async () => {
   const output = '[{"kind":"TASK","title":"Dwa jawne ćwiczenia","entityGroundings":[{"exerciseId":"a","mention":"Ćwiczenie A"},{"exerciseId":"b","mention":"Ćwiczenie B"}]}]'
-  assert.deepEqual(await new RealLocalCompanionModel(new StubRuntime(output)).propose({ text: 'Zapisz Ćwiczenie A oraz Ćwiczenie B', exercises: [
+  await assert.rejects(new RealLocalCompanionModel(new StubRuntime(output)).propose({ text: 'Zapisz Ćwiczenie A oraz Ćwiczenie B', exercises: [
     { id: 'a', name: 'Ćwiczenie A' }, { id: 'b', name: 'Ćwiczenie B' },
-  ] }), [{ kind: 'TASK', title: 'Dwa jawne ćwiczenia', exerciseIds: ['a', 'b'] }])
+  ] }))
 })
 
 test('provider schema constrains all model-returned references to request allowlists', async () => {
-  const trainerRuntime = new StubRuntime('[{"kind":"TASK","title":"Jawne","entityGroundings":[{"exerciseId":"a","mention":"A"},{"exerciseId":"b","mention":"B"}]}]')
-  await new RealLocalCompanionModel(trainerRuntime).propose({ text: 'Zapisz A oraz B', exercises: [
+  const trainerRuntime = new StubRuntime('[{"kind":"TASK","title":"Jawne","entityGroundings":[{"exerciseId":"a","mention":"A"}]}]')
+  await new RealLocalCompanionModel(trainerRuntime).propose({ text: 'Zapisz A', exercises: [
     { id: 'a', name: 'A' }, { id: 'b', name: 'B' },
   ] })
   const proposal = ((trainerRuntime.request!.jsonSchema.items as { oneOf: Array<{ properties: Record<string, unknown> }> }).oneOf[0])
   assert.deepEqual(proposal.properties.entityGroundings, {
-    type: 'array', maxItems: 2, uniqueItems: true, items: { oneOf: [
+    type: 'array', maxItems: 1, uniqueItems: true, items: { oneOf: [
       { type: 'object', additionalProperties: false, required: ['exerciseId', 'mention'], properties: { exerciseId: { const: 'a' }, mention: { const: 'A' } } },
-      { type: 'object', additionalProperties: false, required: ['exerciseId', 'mention'], properties: { exerciseId: { const: 'b' }, mention: { const: 'B' } } },
     ] },
   })
 
   const commandRuntime = new StubRuntime('{"action":"CHANGE_TEMPLATE_REP_RANGE","candidate":{"reference":"r","sourceMention":"E"},"minReps":6,"maxReps":8}')
   await new RealLocalCompanionModel(commandRuntime).propose({ text: 'Ustaw E od 6 do 8 powtórzeń', candidates: [
-    { reference: 'r', templateId: 't', templateExerciseId: 'te', exerciseId: 'e', templateName: 'T', exerciseName: 'E', prescription: '3x8' },
+    { reference: 'r', templateId: 't', templateExerciseId: 'te', exerciseId: 'e', templateName: 'T', exerciseName: 'E', prescription: '3x8', canonicalName: 'E', authoritativeMentions: ['E'] },
   ] })
   const success = (commandRuntime.request!.jsonSchema.oneOf as Array<{ properties: Record<string, unknown> }>)[0]
   assert.deepEqual(success.properties.candidate, {
@@ -105,12 +104,43 @@ test('ungrounded entity-linked REP_RANGE and explicit command fail closed with a
   await assert.rejects(new RealLocalCompanionModel(new StubRuntime('[{"kind":"TARGET","title":"Zakres","specification":{"type":"REP_RANGE","scope":"EXERCISE","exerciseId":"only","sourceMention":"ruchu spoza listy","min":6,"max":8,"unit":"reps"}}]')).propose(trainerRequest))
 
   const commandRequest = { text: 'Ustaw dla ruchu spoza listy zakres od 6 do 8 powtórzeń.', candidates: [
-    { reference: 'only-ref', templateId: 't', templateExerciseId: 'te', exerciseId: 'only', templateName: 'T', exerciseName: 'Ćwiczenie próbne', prescription: '3x8' },
+    { reference: 'only-ref', templateId: 't', templateExerciseId: 'te', exerciseId: 'only', templateName: 'T', exerciseName: 'Ćwiczenie próbne', prescription: '3x8', canonicalName: 'Ćwiczenie próbne', authoritativeMentions: ['Ćwiczenie próbne'] },
   ] }
   const noProposal = new StubRuntime('{"outcome":"NO_PROPOSAL"}')
   assert.deepEqual(await new RealLocalCompanionModel(noProposal).propose(commandRequest), { outcome: 'NO_PROPOSAL' })
   assert.deepEqual(noProposal.request!.jsonSchema, { type: 'object', additionalProperties: false, required: ['outcome'], properties: { outcome: { const: 'NO_PROPOSAL' } } })
   await assert.rejects(new RealLocalCompanionModel(new StubRuntime('{"action":"CHANGE_TEMPLATE_REP_RANGE","candidate":{"reference":"only-ref","sourceMention":"ruchu spoza listy"},"minReps":6,"maxReps":8}')).propose(commandRequest))
+})
+
+test('authoritative identity cannot be overridden by model output or candidate order', async () => {
+  const trainerRequest = { text: 'Zapisz Alias A.', exercises: [
+    { id: 'runtime-a', name: 'A', aliases: ['Alias A'] },
+    { id: 'runtime-b', name: 'B', aliases: ['Alias B'] },
+  ] }
+  await assert.rejects(new RealLocalCompanionModel(new StubRuntime('[{"kind":"TASK","title":"X","entityGroundings":[{"exerciseId":"runtime-b","mention":"Alias A"}]}]')).propose(trainerRequest))
+
+  const candidates = [
+    { reference: 'ref-a', templateId: 't', templateExerciseId: 'a', exerciseId: 'runtime-a', templateName: 'T', exerciseName: 'A', prescription: '3x8', canonicalName: 'A', authoritativeMentions: ['A', 'Alias A'] },
+    { reference: 'ref-b', templateId: 't', templateExerciseId: 'b', exerciseId: 'runtime-b', templateName: 'T', exerciseName: 'B', prescription: '3x8', canonicalName: 'B', authoritativeMentions: ['B', 'Alias B'] },
+  ]
+  const substitute = '{"action":"CHANGE_TEMPLATE_REP_RANGE","candidate":{"reference":"ref-b","sourceMention":"Alias A"},"minReps":6,"maxReps":8}'
+  for (const ordered of [candidates, [...candidates].reverse()]) await assert.rejects(
+    new RealLocalCompanionModel(new StubRuntime(substitute)).propose({ text: 'Ustaw Alias A od 6 do 8 powtórzeń.', candidates: ordered }),
+  )
+})
+
+test('shared alias, multiple mentions and duplicate template rows produce NO_PROPOSAL', async () => {
+  const output = new StubRuntime('{"outcome":"NO_PROPOSAL"}')
+  const base = (reference: string, exerciseId: string, canonicalName: string, mentions: string[]) => ({ reference, templateId: 't', templateExerciseId: reference,
+    exerciseId, templateName: 'T', exerciseName: canonicalName, prescription: '3x8', canonicalName, authoritativeMentions: mentions })
+  for (const request of [
+    { text: 'Ustaw Wspólny ruch od 6 do 8.', candidates: [base('a', 'a', 'A', ['A', 'Wspólny ruch']), base('b', 'b', 'B', ['B', 'Wspólny ruch'])] },
+    { text: 'Ustaw Ruch A oraz Ruch B od 6 do 8.', candidates: [base('a', 'a', 'Ruch A', ['Ruch A']), base('b', 'b', 'Ruch B', ['Ruch B'])] },
+    { text: 'Ustaw Ruch A od 6 do 8.', candidates: [base('a1', 'a', 'Ruch A', ['Ruch A']), base('a2', 'a', 'Ruch A', ['Ruch A'])] },
+  ]) {
+    assert.deepEqual(await new RealLocalCompanionModel(output).propose(request), { outcome: 'NO_PROPOSAL' })
+    assert.deepEqual(output.request!.jsonSchema, { type: 'object', additionalProperties: false, required: ['outcome'], properties: { outcome: { const: 'NO_PROPOSAL' } } })
+  }
 })
 
 test('asset identity is versioned and checksum-pinned', () => {
