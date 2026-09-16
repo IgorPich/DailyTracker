@@ -7,10 +7,10 @@ import { daysAgoIso, isoToday, parseDate } from '../utils/date.ts'
 import { companionMemoryRepository } from './companionMemoryStorage.ts'
 import { humanCoachRepository } from './humanCoachStorage.ts'
 
-export interface CompanionProductEvidence extends CompanionEvidence { readonly label: string }
+interface CompanionProductFact { readonly label: string; readonly text: string }
 export interface CompanionProductContext {
   readonly evidence: readonly CompanionEvidence[]
-  readonly evidenceLabels: Readonly<Record<string, string>>
+  readonly evidenceDisplay: Readonly<Record<string, { readonly label: string; readonly text: string }>>
   readonly acceptedMemory: readonly string[]
 }
 export interface CompanionProductContextSources {
@@ -54,7 +54,7 @@ export const buildCompanionProductContext = async (
   today = isoToday(),
   asOf = new Date().toISOString(),
 ): Promise<CompanionProductContext> => {
-  const facts: CompanionProductEvidence[] = []
+  const facts: CompanionProductFact[] = []
   const memoryState = asksMemory(text) ? await sources.readMemory() : undefined
   const acceptedMemory = (memoryState?.items ?? [])
     .filter((item) => item.scope.kind === 'GLOBAL' && memoryStatus(item, asOf) === 'ACTIVE')
@@ -62,21 +62,31 @@ export const buildCompanionProductContext = async (
     .map(memoryText)
   if (asksAnalytics(text)) {
     const summary = trainingTimeSummary({ snapshot: data, from: daysAgoIso(29, parseDate(today)), to: today, asOf: today })
-    facts.push({ id: 'analytics:training-time:30d', label: 'Treningi z ostatnich 30 dni',
+    facts.push({ label: 'Treningi z ostatnich 30 dni',
       text: `Ostatnie 30 dni: zapisano ${summary.recordedWorkoutCount} treningów; ${summary.workoutsWithDuration} ma zapisany czas; łącznie ${summary.totalDurationMinutes} min.` })
   }
   if (asksCoach(text)) {
     const context = await sources.readHumanCoach()
     context.items.filter((item) => item.acceptance.state === 'AUTHORITATIVE').slice(-10).forEach((item, index) => {
-      facts.push({ id: `human-coach:${item.id}`, label: `Kontekst trenera ${index + 1}`, text: coachText(item, data) })
+      facts.push({ label: `Kontekst trenera ${index + 1}`, text: coachText(item, data) })
     })
   }
   if (asksMemory(text)) acceptedMemory.forEach((value, index) => {
-    facts.push({ id: `accepted-memory:${index + 1}`, label: `Przyjęta pamięć ${index + 1}`, text: value })
+    facts.push({ label: `Przyjęta pamięć ${index + 1}`, text: value })
   })
+  const presented = facts.map((fact, index) => ({ ...fact, id: `evidence-${index + 1}` }))
   return {
-    evidence: facts.map(({ id, text }) => ({ id, text })),
-    evidenceLabels: Object.freeze(Object.fromEntries(facts.map(({ id, label }) => [id, label]))),
+    evidence: presented.map(({ id, text }) => ({ id, text })),
+    evidenceDisplay: Object.freeze(Object.fromEntries(presented.map(({ id, label, text }) => [id, Object.freeze({ label, text })]))),
     acceptedMemory: Object.freeze([...acceptedMemory]),
   }
 }
+
+/** Resolves only request-local opaque handles; persistence IDs never cross this UI boundary. */
+export const resolveCompanionProductEvidence = (
+  context: CompanionProductContext,
+  handles: readonly string[],
+): readonly { label: string; text: string }[] => handles.flatMap((handle) => {
+  const display = context.evidenceDisplay[handle]
+  return display ? [{ label: display.label, text: display.text }] : []
+})

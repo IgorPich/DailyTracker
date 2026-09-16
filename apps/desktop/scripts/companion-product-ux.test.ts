@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createReadOnlyCompanion, userDialogueInput, type CompanionReadOnlyRequest } from '@greekgod/companion/readonly'
 import type { AppData } from '../src/types.ts'
-import { buildCompanionProductContext } from '../src/services/companionProductContext.ts'
+import { buildCompanionProductContext, resolveCompanionProductEvidence } from '../src/services/companionProductContext.ts'
 
 test('product dialogue remains read-only even for mutation-like text', async () => {
   let modelRequest: CompanionReadOnlyRequest | undefined
@@ -19,12 +19,14 @@ test('product dialogue remains read-only even for mutation-like text', async () 
 })
 
 test('product context exposes only selected deterministic facts and friendly labels', async () => {
-  const data = { version: 8, dailyEntries: [], workouts: [], templates: [], exerciseLibrary: [],
+  const data = { version: 8, dailyEntries: [], workouts: [], templates: [], exerciseLibrary: [
+    { id: 'internal-exercise-id', name: 'Ruch syntetyczny', equipmentSensitive: false },
+  ],
     settings: { language: 'pl', theme: 'dark', trendThresholds: { lossBelow: -0.1, stableUpper: 0.1, slowGainUpper: 0.3 } }, coachNotes: {} } as unknown as AppData
   let coachReads = 0, memoryReads = 0
   const sources = {
     readHumanCoach: async () => { coachReads++; return { version: 1 as const, items: [{
-      id: 'internal-coach-id', kind: 'DECISION' as const, text: 'Technika ma pierwszeństwo.', exerciseIds: [],
+      id: 'internal-coach-id', kind: 'DECISION' as const, text: 'Technika ma pierwszeństwo.', exerciseIds: ['internal-exercise-id'],
       createdAt: '2026-09-01T10:00:00.000Z', provenance: { sourceType: 'MANUAL' as const, createdAt: '2026-09-01T10:00:00.000Z' },
       acceptance: { state: 'AUTHORITATIVE' as const, acceptedAt: '2026-09-01T10:01:00.000Z' },
     }] } },
@@ -36,11 +38,19 @@ test('product context exposes only selected deterministic facts and friendly lab
   }
   const coach = await buildCompanionProductContext('Co ustaliliśmy z trenerem?', data, sources, '2026-09-17', '2026-09-17T10:00:00.000Z')
   assert.equal(coachReads, 1); assert.equal(memoryReads, 0); assert.equal(coach.evidence.length, 1)
-  assert.equal(Object.values(coach.evidenceLabels)[0], 'Kontekst trenera 1')
-  assert.doesNotMatch(coach.evidence[0].text, /internal-coach-id/)
+  assert.equal(coach.evidence[0].id, 'evidence-1')
+  assert.equal(Object.values(coach.evidenceDisplay)[0].label, 'Kontekst trenera 1')
+  assert.doesNotMatch(JSON.stringify(coach.evidence), /internal-(coach|exercise)-id/)
+  assert.doesNotMatch(JSON.stringify(Object.keys(coach.evidenceDisplay)), /internal-(coach|exercise)-id/)
+  const rendered = resolveCompanionProductEvidence(coach, ['evidence-1'])
+  assert.deepEqual(rendered, [{ label: 'Kontekst trenera 1', text: coach.evidence[0].text }])
+  assert.doesNotMatch(JSON.stringify(rendered), /internal-(coach|exercise)-id/)
+  assert.deepEqual(resolveCompanionProductEvidence(coach, ['human-coach:internal-coach-id']), [])
   const memory = await buildCompanionProductContext('Jaką pamiętasz preferencję podsumowania?', data, sources, '2026-09-17', '2026-09-17T10:00:00.000Z')
   assert.equal(memoryReads, 1); assert.equal(memory.acceptedMemory.length, 1)
-  assert.doesNotMatch(memory.evidence[0].text, /internal-memory-id/)
+  assert.equal(memory.evidence[0].id, 'evidence-1')
+  assert.doesNotMatch(JSON.stringify({ evidence: memory.evidence, keys: Object.keys(memory.evidenceDisplay),
+    rendered: resolveCompanionProductEvidence(memory, ['evidence-1']) }), /internal-memory-id/)
   const general = await buildCompanionProductContext('Cześć', data, sources, '2026-09-17', '2026-09-17T10:00:00.000Z')
   assert.deepEqual(general.evidence, [])
 })

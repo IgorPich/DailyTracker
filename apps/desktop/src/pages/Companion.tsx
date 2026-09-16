@@ -5,12 +5,12 @@ import type { AvatarPresentationState } from '@greekgod/companion/reactions'
 import { AvatarPresenter } from '../components/AvatarPresenter'
 import { PageHeader } from '../components/PageHeader'
 import { useApp } from '../context/AppContext'
-import { buildCompanionProductContext } from '../services/companionProductContext'
+import { buildCompanionProductContext, resolveCompanionProductEvidence } from '../services/companionProductContext'
 import { observeReadOnlyReaction, reactionSnapshot } from '../services/companionReactions'
 import { managedCompanionModel, managedCompanionRuntime, type LocalModelStatus } from '../services/localCompanionModel'
 
 type ProductAiState = 'NOT_INSTALLED' | 'LOADING' | 'READY' | 'UNAVAILABLE'
-interface DialogueTurn { question: string; answer: string; evidence: { label: string; text: string }[] }
+interface DialogueTurn { question: string; answer: string; evidence: readonly { label: string; text: string }[] }
 const initialAvatar = (): AvatarPresentationState => ({ semanticReaction: 'NEUTRAL', token: null, startedAt: null, reducedMotion: false })
 
 export const companionProductAiState = (status?: LocalModelStatus): ProductAiState => {
@@ -66,11 +66,7 @@ export function Companion({ onOpenSettings, onOpenCommand }: { onOpenSettings: (
       const result = await runtime.dialogue(userDialogueInput(question))
       observeReadOnlyReaction('USER_DIALOGUE', result.status)
       if (result.status !== 'MESSAGE') throw new Error('Invalid read-only response')
-      const selected = result.response.evidenceIds.flatMap((id) => {
-        const evidence = context.evidence.find((item) => item.id === id)
-        const label = context.evidenceLabels[id]
-        return evidence && label ? [{ label, text: evidence.text }] : []
-      })
+      const selected = resolveCompanionProductEvidence(context, result.response.evidenceIds)
       setTurns((current) => [...current, { question, answer: result.response.message, evidence: selected }])
     } catch {
       observeReadOnlyReaction('USER_DIALOGUE', 'INVALID')
