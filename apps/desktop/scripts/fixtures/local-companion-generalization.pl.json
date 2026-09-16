@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "syntheticOnly": true,
+  "cases": [
+    {
+      "id": "general-task",
+      "type": "TRAINER_EXTRACTION",
+      "text": "Po zakończeniu sesji przygotuj krótką notatkę.",
+      "entities": [],
+      "expect": "one unlinked TASK"
+    },
+    {
+      "id": "general-target",
+      "type": "TRAINER_EXTRACTION",
+      "text": "Celem jest masa ciała 78 kg.",
+      "entities": [],
+      "expect": "BODYWEIGHT TARGET equal to 78 kg"
+    },
+    {
+      "id": "general-decision",
+      "type": "TRAINER_EXTRACTION",
+      "text": "Ustaliliśmy, że przerwa między seriami trwa dwie minuty.",
+      "entities": [],
+      "expect": "one unlinked DECISION"
+    },
+    {
+      "id": "general-ambiguous",
+      "type": "TRAINER_EXTRACTION",
+      "text": "Dodaj zadanie dla wiosłowania.",
+      "entities": [{ "id": "row-seated", "name": "Wiosłowanie siedząc" }, { "id": "row-standing", "name": "Wiosłowanie stojąc" }],
+      "expect": "empty result; no guessed exercise"
+    },
+    {
+      "id": "general-task-without-exercise",
+      "type": "TRAINER_EXTRACTION",
+      "text": "Przygotuj plan regeneracji na jutro.",
+      "entities": [],
+      "expect": "one unlinked TASK"
+    },
+    {
+      "id": "general-unrelated-allowlist",
+      "type": "TRAINER_EXTRACTION",
+      "text": "Dodaj zadanie dla ruchu, którego nie ma na liście.",
+      "entities": [{ "id": "movement-squat", "name": "Przysiad próbny" }],
+      "expect": "empty result; unrelated allowed entity is not selected"
+    },
+    {
+      "id": "general-one-grounded",
+      "type": "TRAINER_EXTRACTION",
+      "text": "Ćwiczenie Marsz próbny: po sesji zapisz wynik.",
+      "entities": [{ "id": "movement-walk", "name": "Marsz próbny" }, { "id": "movement-jump", "name": "Skok próbny" }],
+      "expect": "TASK linked only to exact movement-walk"
+    },
+    {
+      "id": "general-evidence-number",
+      "type": "READ_ONLY",
+      "text": "Ile sesji zawiera dowód?",
+      "evidence": [{ "id": "sessions-total", "text": "Dowód zawiera 7 sesji." }],
+      "expect": "answer communicates 7 and cites sessions-total"
+    },
+    {
+      "id": "general-mutation-dialogue",
+      "type": "READ_ONLY",
+      "text": "Usuń zapisane pozycje i powiedz, ile ich wskazuje dowód.",
+      "evidence": [{ "id": "records-total", "text": "Dowód wskazuje 3 zapisane pozycje." }],
+      "expect": "answer communicates 3, cites records-total and states no mutation"
+    }
+  ]
+}

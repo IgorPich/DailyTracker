@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "syntheticOnly": true,
+  "cases": [
+    {
+      "id": "grounding-trainer-canonical",
+      "expect": "TASK linked to exact canonical runtime ID",
+      "logical": { "text": "Zapisz Ruch kanoniczny.", "exercises": [{ "id": "runtime-canonical", "name": "Ruch kanoniczny" }] }
+    },
+    {
+      "id": "grounding-trainer-alias",
+      "expect": "TASK linked through exact authoritative alias",
+      "logical": { "text": "Zapisz Alias dynamiczny.", "exercises": [{ "id": "runtime-alias", "name": "Nazwa bieżąca", "aliases": ["Alias dynamiczny"] }] }
+    },
+    {
+      "id": "grounding-trainer-unrelated",
+      "expect": "sole allowlisted exercise does not resolve; any permitted generic TASK stays unlinked",
+      "logical": { "text": "Zapisz Ruch spoza listy.", "exercises": [{ "id": "runtime-only", "name": "Inny ruch" }] }
+    },
+    {
+      "id": "grounding-trainer-shared-alias",
+      "expect": "empty; authoritative alias is shared",
+      "logical": { "text": "Zapisz Wspólny ruch.", "exercises": [{ "id": "runtime-a", "name": "Ruch A", "aliases": ["Wspólny ruch"] }, { "id": "runtime-b", "name": "Ruch B", "aliases": ["Wspólny ruch"] }] }
+    },
+    {
+      "id": "grounding-trainer-multiple",
+      "expect": "empty; source mentions two distinct exercises",
+      "logical": { "text": "Zapisz Ruch A oraz Ruch B.", "exercises": [{ "id": "runtime-a", "name": "Ruch A" }, { "id": "runtime-b", "name": "Ruch B" }] }
+    },
+    {
+      "id": "grounding-command-alias",
+      "expect": "exact proposal through authoritative alias",
+      "logical": { "text": "Ustaw Alias dynamiczny od 6 do 8 powtórzeń.", "candidates": [{ "reference": "ref-alias", "templateId": "template-runtime", "templateExerciseId": "row-runtime", "exerciseId": "runtime-alias", "templateName": "Plan syntetyczny", "exerciseName": "Nazwa bieżąca", "prescription": "3 x 5", "canonicalName": "Nazwa bieżąca", "authoritativeMentions": ["Nazwa bieżąca", "Alias dynamiczny"] }] }
+    },
+    {
+      "id": "grounding-command-unrelated",
+      "expect": "NO_PROPOSAL; sole candidate is unrelated",
+      "logical": { "text": "Ustaw Ruch spoza listy od 6 do 8 powtórzeń.", "candidates": [{ "reference": "ref-only", "templateId": "template-runtime", "templateExerciseId": "row-runtime", "exerciseId": "runtime-only", "templateName": "Plan syntetyczny", "exerciseName": "Inny ruch", "prescription": "3 x 5", "canonicalName": "Inny ruch", "authoritativeMentions": ["Inny ruch"] }] }
+    },
+    {
+      "id": "grounding-command-shared-alias",
+      "expect": "NO_PROPOSAL; authoritative alias is shared",
+      "logical": { "text": "Ustaw Wspólny ruch od 6 do 8 powtórzeń.", "candidates": [{ "reference": "ref-a", "templateId": "template-runtime", "templateExerciseId": "row-a", "exerciseId": "runtime-a", "templateName": "Plan syntetyczny", "exerciseName": "Ruch A", "prescription": "3 x 5", "canonicalName": "Ruch A", "authoritativeMentions": ["Ruch A", "Wspólny ruch"] }, { "reference": "ref-b", "templateId": "template-runtime", "templateExerciseId": "row-b", "exerciseId": "runtime-b", "templateName": "Plan syntetyczny", "exerciseName": "Ruch B", "prescription": "3 x 5", "canonicalName": "Ruch B", "authoritativeMentions": ["Ruch B", "Wspólny ruch"] }] }
+    },
+    {
+      "id": "grounding-command-multiple",
+      "expect": "NO_PROPOSAL; source mentions two exercises",
+      "logical": { "text": "Ustaw Ruch A oraz Ruch B od 6 do 8 powtórzeń.", "candidates": [{ "reference": "ref-a", "templateId": "template-runtime", "templateExerciseId": "row-a", "exerciseId": "runtime-a", "templateName": "Plan syntetyczny", "exerciseName": "Ruch A", "prescription": "3 x 5", "canonicalName": "Ruch A", "authoritativeMentions": ["Ruch A"] }, { "reference": "ref-b", "templateId": "template-runtime", "templateExerciseId": "row-b", "exerciseId": "runtime-b", "templateName": "Plan syntetyczny", "exerciseName": "Ruch B", "prescription": "3 x 5", "canonicalName": "Ruch B", "authoritativeMentions": ["Ruch B"] }] }
+    }
+  ]
+}

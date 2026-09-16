@@ -26,7 +26,7 @@ import { appDataStore } from '../services/appDataStore'
 import type { Phase } from '../types'
 import { phaseLabel } from '../utils/labels'
 import { exportCsv, exportJson, normalizeData } from '../utils/storage'
-import { LOCAL_MODEL, localCompanionModel, localCompanionRuntime, type LocalModelStatus } from '../services/localCompanionModel'
+import { LOCAL_MODEL, localCompanionRuntime, managedCompanionModel, managedCompanionRuntime, type LocalModelStatus } from '../services/localCompanionModel'
 
 const phases: Phase[] = ['Maintenance', 'Lean Gain', 'Mini Cut', 'Redukcja']
 
@@ -39,14 +39,18 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
   const [editingGym, setEditingGym] = useState<string | null>(null)
   const [gymNameDraft, setGymNameDraft] = useState('')
   const [aiStatus, setAiStatus] = useState<LocalModelStatus>()
+  const [ollamaStatus, setOllamaStatus] = useState<LocalModelStatus>()
   const [aiBusy, setAiBusy] = useState(false)
   const gymLocations = data.settings.gymLocations ?? []
-  const refreshAiStatus = async () => setAiStatus(await localCompanionRuntime.status())
+  const refreshAiStatus = async () => {
+    const [managed, ollama] = await Promise.all([managedCompanionRuntime.status(), localCompanionRuntime.status()])
+    setAiStatus(managed); setOllamaStatus(ollama)
+  }
   useEffect(() => { if (isDesktopApp()) void refreshAiStatus() }, [])
   const testAi = async () => {
     setAiBusy(true)
     try {
-      const result = await localCompanionModel.propose({ kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: 'Odpowiedz słowem: gotowe.' }, evidence: [] })
+      const result = await managedCompanionModel.propose({ kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: 'Odpowiedz słowem: gotowe.' }, evidence: [] })
       const value = result as { message?: unknown; evidenceIds?: unknown }
       if (typeof value.message !== 'string' || !Array.isArray(value.evidenceIds) || value.evidenceIds.length) throw new Error('Nieprawidłowy wynik testu')
       setAiStatus({ state: 'READY', detail: `Test lokalny zakończony: ${value.message}` })
@@ -196,11 +200,13 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
         <section className="card settings-section companion-ai-settings">
           <div className="settings-section__heading"><span className="settings-icon"><Cpu size={19} /></span><div><h2>Companion AI</h2><p>Opcjonalne wnioskowanie lokalne. Brak modelu nie blokuje dziennika ani treningów.</p></div></div>
           <p><strong>{LOCAL_MODEL.version}</strong> · {LOCAL_MODEL.license} · suma pliku {LOCAL_MODEL.modelFileSha256.slice(0, 12)}…</p>
+          <p><strong>GreekGod Managed Runtime — ścieżka docelowa</strong></p>
           <p role="status">{!isDesktopApp() ? 'Status dostępny tylko w aplikacji Desktop.' : aiStatus ? `${aiStatus.state}: ${aiStatus.detail}` : 'Sprawdzanie lokalnego runtime…'}</p>
           {aiStatus?.runtimeVersion && <small>Runtime: {aiStatus.runtimeVersion}</small>}
           <div><button type="button" className="button button--secondary" disabled={!isDesktopApp() || aiBusy} onClick={() => void refreshAiStatus()}>Odśwież status</button>
           <button type="button" className="button button--ghost" disabled={!isDesktopApp() || aiBusy || aiStatus?.state !== 'READY'} onClick={() => void testAi()}>{aiBusy ? 'Testowanie…' : 'Testuj lokalnie'}</button></div>
-          <small>GreekGod nie pobiera ani nie zastępuje modelu. Ten adapter deweloperski łączy się wyłącznie z 127.0.0.1.</small>
+          <small>GreekGod nie pobiera ani nie zastępuje modelu. Zarządzany sidecar nasłuchuje wyłącznie na dynamicznym porcie 127.0.0.1.</small>
+          <details><summary>Pozostałe providery</summary><p>Fake — wyłącznie testy i demonstracje deweloperskie.</p><p>Ollama Development Runtime — {ollamaStatus ? `${ollamaStatus.state}: ${ollamaStatus.detail}` : 'status nieodczytany'} Nie jest wymaganiem produktu ani automatycznym fallbackiem.</p></details>
         </section>
 
         <section className="card settings-section">
