@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FakeCompanionModel } from '@greekgod/companion'
-import { commandCandidates, createExplicitCommandSession, explicitUserCommandInput, type ActionExecutionResult, type ActionPreparationResult, type CommandModelRequest } from '@greekgod/companion/commands'
+import { createExplicitCommandSession, explicitUserCommandInput, type ActionExecutionResult, type ActionPreparationResult } from '@greekgod/companion/commands'
 import { useApp } from '../context/AppContext'
 import { PageHeader } from '../components/PageHeader'
 import { observeCommandReaction } from '../services/companionReactions'
+import { managedCompanionModel } from '../services/localCompanionModel'
 
 export function ExplicitCommand() {
   const { data, trackingCommands, lastTrackingCommandResult } = useApp()
@@ -17,14 +17,10 @@ export function ExplicitCommand() {
   }), [])
   useEffect(() => () => session.cancel(), [session])
   const [text, setText] = useState('')
-  const [reference, setReference] = useState('')
-  const [min, setMin] = useState('')
-  const [max, setMax] = useState('')
   const [result, setResult] = useState<ActionPreparationResult>()
   const [execution, setExecution] = useState<ActionExecutionResult>()
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
-  const candidates = commandCandidates(data)
   const reconciliation = execution?.status === 'INDETERMINATE' && lastTrackingCommandResult?.status === 'INDETERMINATE'
     ? lastTrackingCommandResult.reconciliation : undefined
   const invalidate = () => { session.cancel(); setResult(undefined); setExecution(undefined) }
@@ -32,11 +28,8 @@ export function ExplicitCommand() {
     if (busyRef.current) return
     busyRef.current = true; setBusy(true); invalidate()
     try {
-      // Explicitly configured fake response. Never parse text or choose the first matching name.
-      const model = new FakeCompanionModel<CommandModelRequest>({ action: 'CHANGE_TEMPLATE_REP_RANGE',
-        candidateRefs: reference ? [reference] : candidates.map((item) => item.reference), minReps: Number(min), maxReps: Number(max) })
-      setResult(await session.prepare(explicitUserCommandInput(text), data, model))
-    } catch (error) { setResult({ status: 'INVALID', message: error instanceof Error ? error.message : 'Nieprawidłowe polecenie' }) }
+      setResult(await session.prepare(explicitUserCommandInput(text), data, managedCompanionModel))
+    } catch { setResult({ status: 'INVALID', message: 'Nie udało się bezpiecznie przygotować polecenia.' }) }
     finally { busyRef.current = false; setBusy(false) }
   }
   const apply = async () => {
@@ -51,23 +44,17 @@ export function ExplicitCommand() {
     finally { setResult(undefined); busyRef.current = false; setBusy(false) }
   }
   return <div className="page human-coach-page">
-    <PageHeader eyebrow="JAWNE POLECENIE" title="Polecenie dla aplikacji" description="Oddzielna ścieżka od notatek trenera. Tylko zmiana zakresu powtórzeń jednego wiersza szablonu." />
-    <p>Tryb fake: tekst nie jest analizowany. Poniższa konfiguracja podaje odpowiedź testowego modelu; nic nie zapisuje się bez osobnego potwierdzenia.</p>
+    <PageHeader eyebrow="JAWNE POLECENIE" title="Polecenie dla aplikacji" description="Oddzielna ścieżka od rozmowy. Tylko zmiana zakresu powtórzeń jednego wiersza szablonu." />
+    <p>Lokalny model może wyłącznie przygotować propozycję. Dopiero osobny podgląd, potwierdzenie i ponowna walidacja mogą uruchomić bezpieczny zapis.</p>
     <form className="human-coach-form" onSubmit={(event) => event.preventDefault()}>
       <fieldset disabled={busy}>
-        <legend>Konfiguracja odpowiedzi fake — nie parser języka</legend>
-        <label>Twoje jawne polecenie<textarea value={text} onChange={(event) => { invalidate(); setText(event.target.value) }} /></label>
-        <label>Kandydat<select value={reference} onChange={(event) => { invalidate(); setReference(event.target.value) }}>
-          <option value="">Wszyscy kandydaci — wymagaj rozstrzygnięcia</option>
-          {candidates.map((item, index) => <option key={item.reference} value={item.reference}>{item.templateName} · {item.exerciseName} · pozycja {index + 1}</option>)}
-        </select></label>
-        <label>Nowe minimum powtórzeń<input type="number" min="1" step="1" value={min} onChange={(event) => { invalidate(); setMin(event.target.value) }} /></label>
-        <label>Nowe maksimum powtórzeń<input type="number" min="1" step="1" value={max} onChange={(event) => { invalidate(); setMax(event.target.value) }} /></label>
-        <button type="button" className="button button--primary" onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault() }} onClick={() => void prepare()}>Przygotuj zmianę</button>
+        <legend>Jawny tryb zmiany aplikacji</legend>
+        <label>Twoje polecenie<textarea rows={4} placeholder="Np. Ustaw dla Przysiadu próbnego zakres od 6 do 8 powtórzeń." value={text} onChange={(event) => { invalidate(); setText(event.target.value) }} /></label>
+        <button type="button" className="button button--primary" disabled={!text.trim()} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault() }} onClick={() => void prepare()}>Przygotuj podgląd</button>
       </fieldset>
     </form>
     {!trackingCommands.supportsConfirmedTrackingMutations && <p>Ta zmiana może zostać zastosowana tylko w aplikacji Desktop z bezpiecznym zapisem. Tutaj dostępny jest podgląd.</p>}
-    {result?.status === 'INVALID' && <p role="alert">{result.message}</p>}
+    {result?.status === 'INVALID' && <p role="alert">Nie udało się jednoznacznie i bezpiecznie przygotować zmiany. Sprawdź nazwę ćwiczenia i podaj pełny zakres powtórzeń.</p>}
     {result?.status === 'AMBIGUOUS' && <section><h2>Niejednoznaczny cel — wybierz dokładny wiersz</h2>{result.candidates.map((item, index) => <button type="button" key={item.reference} className="button button--ghost" onClick={() => setResult(session.resolve(item.reference, data))}>{item.templateName} · {item.exerciseName} · {item.prescription} · kandydat {index + 1}</button>)}</section>}
     {result?.status === 'PREVIEWED' && <section className="human-coach-item">
       <h2>CHANGE_TEMPLATE_REP_RANGE</h2><h3>{result.templateName} · {result.exerciseName}</h3>

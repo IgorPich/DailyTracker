@@ -4,6 +4,7 @@ import {
   BookOpen,
   Dumbbell,
   FileText,
+  MessageCircle,
   TrendingUp,
   Menu,
   Settings as SettingsIcon,
@@ -17,14 +18,19 @@ const Training = lazy(async () => ({ default: (await import('./pages/Training'))
 const Progress = lazy(async () => ({ default: (await import('./pages/Progress')).Progress }))
 const CoachReport = lazy(async () => ({ default: (await import('./pages/CoachReport')).CoachReport }))
 const HumanCoach = lazy(async () => ({ default: (await import('./pages/HumanCoach')).HumanCoach }))
+const Companion = lazy(async () => ({ default: (await import('./pages/Companion')).Companion }))
 const ExplicitCommand = lazy(async () => ({ default: (await import('./pages/ExplicitCommand')).ExplicitCommand }))
-const CompanionMemory = lazy(async () => ({ default: (await import('./pages/CompanionMemory')).CompanionMemory }))
-const CompanionReactions = lazy(async () => ({ default: (await import('./pages/CompanionReactions')).CompanionReactions }))
+const CompanionMemory = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import('./pages/CompanionMemory')).CompanionMemory }))
+  : undefined
+const CompanionReactions = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import('./pages/CompanionReactions')).CompanionReactions }))
+  : undefined
 const Settings = lazy(async () => ({ default: (await import('./pages/Settings')).Settings }))
 const ProgramBuilder = lazy(async () => ({ default: (await import('./pages/ProgramBuilder')).ProgramBuilder }))
 const JournalSettings = lazy(async () => ({ default: (await import('./pages/JournalSettings')).JournalSettings }))
 
-export type View = 'dashboard' | 'training' | 'progress' | 'journal' | 'report' | 'settings' | 'human-coach' | 'explicit-command' | 'companion-memory' | 'companion-reactions' | 'program-builder' | 'journal-settings'
+export type View = 'dashboard' | 'training' | 'progress' | 'journal' | 'report' | 'settings' | 'human-coach' | 'companion' | 'explicit-command' | 'companion-memory' | 'companion-reactions' | 'program-builder' | 'journal-settings'
 
 const navItems = [
   { id: 'dashboard' as const, label: 'Panel', mobileLabel: 'Panel', icon: BarChart3 },
@@ -65,12 +71,18 @@ export default function App() {
         <button className={view === 'human-coach' ? 'active' : ''} onClick={() => navigate('human-coach')}>
           <BookOpen size={19} /> <span>Kontekst trenera</span>
         </button>
+        <button className={view === 'companion' ? 'active' : ''} onClick={() => navigate('companion')}>
+          <MessageCircle size={19} /> <span>Companion</span>
+        </button>
         <button className={view === 'explicit-command' ? 'active' : ''} onClick={() => navigate('explicit-command')}>
           <FileText size={19} /> <span>Polecenie dla aplikacji</span>
         </button>
         </nav>
-        <button className={view === 'companion-memory' ? 'active' : ''} onClick={() => navigate('companion-memory')}><BookOpen size={19} /> <span>Pamięć Companion</span></button>
-        <button className={view === 'companion-reactions' ? 'active' : ''} onClick={() => navigate('companion-reactions')}><BookOpen size={19} /> <span>Reakcje Companion</span></button>
+        {import.meta.env.DEV && <div className="developer-nav" aria-label="Narzędzia deweloperskie">
+          <small>DEVELOPMENT</small>
+          <button className={view === 'companion-memory' ? 'active' : ''} onClick={() => navigate('companion-memory')}><BookOpen size={19} /> <span>Pamięć — inspekcja</span></button>
+          <button className={view === 'companion-reactions' ? 'active' : ''} onClick={() => navigate('companion-reactions')}><BookOpen size={19} /> <span>Reakcje — diagnostyka</span></button>
+        </div>}
         <button className={`settings-link ${view === 'settings' ? 'active' : ''}`} onClick={() => navigate('settings')}>
           <SettingsIcon size={19} /> <span>Ustawienia</span>
         </button>
@@ -93,9 +105,10 @@ export default function App() {
             {view === 'journal' && <Journal />}
             {view === 'report' && <CoachReport />}
             {view === 'human-coach' && <HumanCoach />}
+            {view === 'companion' && <Companion onOpenSettings={() => navigate('settings')} onOpenCommand={() => navigate('explicit-command')} />}
             {view === 'explicit-command' && <ExplicitCommand />}
-            {view === 'companion-memory' && <CompanionMemory />}
-            {view === 'companion-reactions' && <CompanionReactions />}
+            {import.meta.env.DEV && CompanionMemory && view === 'companion-memory' && <CompanionMemory />}
+            {import.meta.env.DEV && CompanionReactions && view === 'companion-reactions' && <CompanionReactions />}
             {view === 'settings' && <Settings onEditProgram={() => navigate('program-builder')} onEditJournal={()=>navigate('journal-settings')} />}
             {view === 'journal-settings' && <JournalSettings onClose={()=>navigate('settings')} />}
             {view === 'program-builder' && <ProgramBuilder onClose={() => navigate('settings')} />}
