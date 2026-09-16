@@ -5,6 +5,7 @@ export type CommandSnapshot = Pick<AppData, 'templates' | 'exerciseLibrary'>
 export interface CommandCandidate {
   reference: string; templateId: string; templateExerciseId: string; exerciseId: string
   templateName: string; exerciseName: string; prescription: string
+  canonicalName: string; authoritativeMentions: readonly string[]
 }
 export interface CommandModelRequest { text: string; candidates: readonly CommandCandidate[] }
 export interface ExplicitUserCommandInput { readonly kind: 'EXPLICIT_USER_COMMAND'; readonly text: string }
@@ -19,11 +20,14 @@ export const explicitUserCommandInput = (text: string): ExplicitUserCommandInput
 export const commandCandidates = (snapshot: CommandSnapshot): CommandCandidate[] => snapshot.templates.flatMap((template) => {
   if (snapshot.templates.filter((item) => item.id === template.id).length !== 1) return []
   return template.exercises.flatMap((row) => {
+    const definitions = snapshot.exerciseLibrary.filter((item) => item.id === row.exerciseId)
     if (!row.exerciseId || row.exerciseId.trim() !== row.exerciseId || !row.exerciseId.trim()
-      || snapshot.exerciseLibrary.filter((item) => item.id === row.exerciseId).length !== 1
+      || definitions.length !== 1
       || template.exercises.filter((item) => item.id === row.id).length !== 1) return []
+    const definition = definitions[0]
     return [{ reference: JSON.stringify([template.id, row.id, row.exerciseId]), templateId: template.id,
-      templateExerciseId: row.id, exerciseId: row.exerciseId, templateName: template.name, exerciseName: row.name, prescription: row.prescription }]
+      templateExerciseId: row.id, exerciseId: row.exerciseId, templateName: template.name, exerciseName: row.name, prescription: row.prescription,
+      canonicalName: definition.name, authoritativeMentions: [definition.name, ...(definition.aliases ?? [])] }]
   })
 })
 

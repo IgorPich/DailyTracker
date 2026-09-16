@@ -5,7 +5,7 @@ import { validateModelOutput } from '../validation/modelOutput.ts'
 
 export interface ProposeCoachDraftsInput {
   note: CoachNote
-  exercises: readonly { id: string; name: string }[]
+  exercises: readonly { id: string; name: string; aliases?: readonly string[] }[]
   allowedExerciseIds: readonly string[]
 }
 
@@ -18,7 +18,7 @@ export const proposeCoachDraftsFromNote = async (input: ProposeCoachDraftsInput,
   const exercises = [...allowed].map((id) => {
     const matches = input.exercises.filter((item) => item.id === id)
     if (!id.trim() || id.trim() !== id || matches.length !== 1) throw new Error('Unknown or ambiguous allowed exercise ID')
-    return { id, name: matches[0].name }
+    return { id, name: matches[0].name, ...(matches[0].aliases?.length ? { aliases: [...matches[0].aliases] } : {}) }
   })
   // Only note text and explicitly allowed definition labels/IDs cross the port.
   // Keep the binding and allowlist private, independent of provider mutation.
