@@ -41,6 +41,7 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
   const [aiStatus, setAiStatus] = useState<LocalModelStatus>()
   const [ollamaStatus, setOllamaStatus] = useState<LocalModelStatus>()
   const [aiBusy, setAiBusy] = useState(false)
+  const [showAiInstall, setShowAiInstall] = useState(false)
   const gymLocations = data.settings.gymLocations ?? []
   const refreshAiStatus = async () => {
     const [managed, ollama] = await Promise.all([managedCompanionRuntime.status(), localCompanionRuntime.status()])
@@ -49,11 +50,14 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
   useEffect(() => { if (isDesktopApp()) void refreshAiStatus() }, [])
   const testAi = async () => {
     setAiBusy(true)
+    setAiStatus(aiStatus?.state === 'READY_WARM'
+      ? { state: 'INFERENCE_ACTIVE', detail: 'Trwa lokalne wnioskowanie.' }
+      : { state: 'STARTING', detail: 'Uruchamianie runtime i ładowanie modelu.' })
     try {
       const result = await managedCompanionModel.propose({ kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: 'Odpowiedz słowem: gotowe.' }, evidence: [] })
       const value = result as { message?: unknown; evidenceIds?: unknown }
       if (typeof value.message !== 'string' || !Array.isArray(value.evidenceIds) || value.evidenceIds.length) throw new Error('Nieprawidłowy wynik testu')
-      setAiStatus({ state: 'READY', detail: `Test lokalny zakończony: ${value.message}` })
+      await refreshAiStatus()
     } catch (error) { setAiStatus({ state: 'INFERENCE_FAILED', detail: error instanceof Error ? error.message : 'Test lokalny nie powiódł się.' }) }
     finally { setAiBusy(false) }
   }
@@ -200,12 +204,14 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
         <section className="card settings-section companion-ai-settings">
           <div className="settings-section__heading"><span className="settings-icon"><Cpu size={19} /></span><div><h2>Companion AI</h2><p>Opcjonalne wnioskowanie lokalne. Brak modelu nie blokuje dziennika ani treningów.</p></div></div>
           <p><strong>{LOCAL_MODEL.version}</strong> · {LOCAL_MODEL.license} · suma pliku {LOCAL_MODEL.modelFileSha256.slice(0, 12)}…</p>
-          <p><strong>GreekGod Managed Runtime — ścieżka docelowa</strong></p>
+          <p><strong>GreekGod Managed Runtime</strong> · opcjonalnie · około 2,3 GB na dysku</p>
           <p role="status">{!isDesktopApp() ? 'Status dostępny tylko w aplikacji Desktop.' : aiStatus ? `${aiStatus.state}: ${aiStatus.detail}` : 'Sprawdzanie lokalnego runtime…'}</p>
           {aiStatus?.runtimeVersion && <small>Runtime: {aiStatus.runtimeVersion}</small>}
           <div><button type="button" className="button button--secondary" disabled={!isDesktopApp() || aiBusy} onClick={() => void refreshAiStatus()}>Odśwież status</button>
-          <button type="button" className="button button--ghost" disabled={!isDesktopApp() || aiBusy || aiStatus?.state !== 'READY'} onClick={() => void testAi()}>{aiBusy ? 'Testowanie…' : 'Testuj lokalnie'}</button></div>
-          <small>GreekGod nie pobiera ani nie zastępuje modelu. Zarządzany sidecar nasłuchuje wyłącznie na dynamicznym porcie 127.0.0.1.</small>
+          <button type="button" className="button button--ghost" disabled={!isDesktopApp() || aiBusy || !['READY_UNLOADED', 'READY_WARM', 'IDLE_UNLOADED'].includes(aiStatus?.state ?? '')} onClick={() => void testAi()}>{aiBusy ? 'Testowanie…' : 'Testuj lokalnie'}</button>
+          <button type="button" className="button button--ghost" onClick={() => setShowAiInstall((value) => !value)}>Zainstaluj lokalne AI</button></div>
+          {showAiInstall && <div className="message-banner"><div><strong>Instalacja ręczna — bez automatycznego pobierania</strong><p>Komponenty muszą pochodzić z zatwierdzonego pakietu GreekGod i trafić do zarządzanego katalogu użytkownika. Kanał dystrybucji nie został jeszcze zatwierdzony, dlatego aplikacja nie pobiera ani nie zastępuje plików.</p><p>Model działa wyłącznie na tym komputerze. Podczas użycia może chwilowo zajmować kilka GB RAM/VRAM; po 5 minutach bezczynności jest zwalniany. Dziennik, treningi i analityka działają bez AI.</p>{aiStatus?.assetRoot && <small>Katalog: {aiStatus.assetRoot}<br />Runtime: runtime\llama.cpp-b10760<br />Model: models\{LOCAL_MODEL.expectedFileName}<br />Manifesty: manifests<br />Licencje: licenses</small>}</div></div>}
+          <small>Brak cichej instalacji, aktualizacji lub fallbacku. Sidecar nasłuchuje wyłącznie na dynamicznym porcie 127.0.0.1.</small>
           <details><summary>Pozostałe providery</summary><p>Fake — wyłącznie testy i demonstracje deweloperskie.</p><p>Ollama Development Runtime — {ollamaStatus ? `${ollamaStatus.state}: ${ollamaStatus.detail}` : 'status nieodczytany'} Nie jest wymaganiem produktu ani automatycznym fallbackiem.</p></details>
         </section>
 

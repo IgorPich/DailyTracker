@@ -8,6 +8,8 @@ $manifestPath = Join-Path $PSScriptRoot 'llama-b10760-win-vulkan-x64.manifest.js
 $downloads = Join-Path $DestinationRoot 'downloads'
 $runtime = Join-Path $DestinationRoot 'runtime\llama.cpp-b10760'
 $staging = Join-Path $DestinationRoot 'staging\llama.cpp-b10760'
+$managedManifests = Join-Path $DestinationRoot 'manifests'
+$managedLicenses = Join-Path $DestinationRoot 'licenses'
 $archive = Join-Path $downloads $archiveName
 New-Item -ItemType Directory -Force -Path $downloads | Out-Null
 if (!(Test-Path -LiteralPath $archive)) {
@@ -35,4 +37,7 @@ foreach ($expected in $manifest.files) {
   $file = Get-Item -LiteralPath $path
   if ($file.Length -ne $expected.bytes -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected.sha256) { throw "Runtime inventory mismatch: $($expected.name)" }
 }
-Write-Output "Verified llama.cpp $release at $runtime. Model installation is intentionally separate and manual."
+New-Item -ItemType Directory -Force -Path $managedManifests,$managedLicenses | Out-Null
+Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $managedManifests 'llama-b10760-win-vulkan-x64.manifest.json')
+Copy-Item -LiteralPath $license -Destination (Join-Path $managedLicenses 'llama.cpp-LICENSE')
+Write-Output "Verified llama.cpp $release at $runtime. Model and its license installation are intentionally separate and manual."

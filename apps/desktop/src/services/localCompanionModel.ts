@@ -6,15 +6,17 @@ export const LOCAL_MODEL = Object.freeze({
   developmentLocator: 'phi3.5:latest',
   version: 'Phi-3.5 Mini Instruct · Q4_0',
   expectedFileName: 'Phi-3.5-mini-instruct-Q4_0.gguf',
-  expectedPath: '%LOCALAPPDATA%\\GreekGod\\companion\\models\\Phi-3.5-mini-instruct-Q4_0.gguf',
+  expectedPath: '%LOCALAPPDATA%\\com.igorpich.formlog\\companion-managed-runtime\\models\\Phi-3.5-mini-instruct-Q4_0.gguf',
   modelFileSha256: 'b5374915da534cb93df39f03bd4f2cd5a0c533df0d5e21957dc9556c260be9eb',
   manifestSha256: '61819fb370a3c1a9be6694869331e5f85f867a079e9271d66cb223acb81d04ba',
   approximateBytes: 2_176_178_843,
   license: 'MIT',
 })
 
-export type LocalModelState = 'READY' | 'STARTING' | 'RUNTIME_UNAVAILABLE' | 'MODEL_MISSING' | 'CHECKSUM_MISMATCH' | 'UNSUPPORTED_HARDWARE' | 'INFERENCE_FAILED'
-export interface LocalModelStatus { state: LocalModelState; runtimeVersion?: string; detail: string }
+export type LocalModelState = 'READY' | 'STARTING' | 'RUNTIME_UNAVAILABLE' | 'RUNTIME_MISSING' | 'RUNTIME_INVALID'
+  | 'MODEL_MISSING' | 'MODEL_INVALID' | 'CHECKSUM_MISMATCH' | 'READY_UNLOADED' | 'READY_WARM'
+  | 'INFERENCE_ACTIVE' | 'IDLE_UNLOADED' | 'STOPPING' | 'FAILED' | 'UNSUPPORTED_HARDWARE' | 'INFERENCE_FAILED'
+export interface LocalModelStatus { state: LocalModelState; runtimeVersion?: string; detail: string; assetRoot?: string; installation?: 'MANUAL_ONLY' }
 export interface LocalInferenceRequest {
   readonly promptVersion: 'greekgod-trainer-v2' | 'greekgod-dialogue-v2' | 'greekgod-memory-v2' | 'greekgod-command-v2'
   readonly system: string
@@ -409,8 +411,9 @@ export class OllamaDevelopmentRuntime implements LocalInferenceRuntime {
 export const localCompanionRuntime = new OllamaDevelopmentRuntime()
 export const localCompanionModel = new RealLocalCompanionModel(localCompanionRuntime)
 
-export type ManagedModelState = 'MODEL_MISSING' | 'MODEL_CHECKSUM_MISMATCH' | 'RUNTIME_MISSING' | 'RUNTIME_INCOMPATIBLE' | 'STARTING' | 'READY' | 'FAILED'
-export interface ManagedModelStatus { state: ManagedModelState; runtimeVersion: string; detail: string; endpoint?: string }
+export type ManagedModelState = 'MODEL_MISSING' | 'MODEL_INVALID' | 'RUNTIME_MISSING' | 'RUNTIME_INVALID'
+  | 'READY_UNLOADED' | 'STARTING' | 'READY_WARM' | 'INFERENCE_ACTIVE' | 'IDLE_UNLOADED' | 'STOPPING' | 'FAILED'
+export interface ManagedModelStatus { state: ManagedModelState; runtimeVersion: string; detail: string; endpoint?: string; assetRoot?: string; installation: 'MANUAL_ONLY' }
 
 /** Product-intended transport. Native code owns the process, token, loopback port and verified assets. */
 export class ManagedLocalInferenceRuntime implements LocalInferenceRuntime {
@@ -419,10 +422,7 @@ export class ManagedLocalInferenceRuntime implements LocalInferenceRuntime {
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       const value = await invoke<ManagedModelStatus>('managed_companion_status')
-      const mapped: LocalModelState = value.state === 'MODEL_CHECKSUM_MISMATCH' ? 'CHECKSUM_MISMATCH'
-        : value.state === 'RUNTIME_MISSING' || value.state === 'RUNTIME_INCOMPATIBLE' ? 'RUNTIME_UNAVAILABLE'
-          : value.state === 'FAILED' ? 'INFERENCE_FAILED' : value.state
-      return { state: mapped, runtimeVersion: value.runtimeVersion, detail: value.detail }
+      return { state: value.state, runtimeVersion: value.runtimeVersion, detail: value.detail, assetRoot: value.assetRoot, installation: value.installation }
     } catch (error) { return { state: 'RUNTIME_UNAVAILABLE', detail: error instanceof Error ? error.message : 'GreekGod Managed Runtime is unavailable.' } }
   }
   async complete(request: LocalInferenceRequest): Promise<string> {
