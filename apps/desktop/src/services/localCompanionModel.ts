@@ -39,17 +39,6 @@ const exactNamed = <T extends { name: string }>(text: string, items: T[]) => {
   for (const item of matches) counts.set(normalized(item.name), (counts.get(normalized(item.name)) ?? 0) + 1)
   return matches.filter((item) => counts.get(normalized(item.name)) === 1)
 }
-// Per-request evidence spans only: these are never retained or used as a name-to-ID map.
-const sourceMentionOptions = (text: string) => {
-  const words = [...text.matchAll(/\p{L}+(?:[-’']\p{L}+)*/gu)].map((match) => ({ start: match.index, end: match.index + match[0].length }))
-  const spans: string[] = []
-  for (let start = 0; start < words.length; start += 1) {
-    for (let length = 1; length <= 4 && start + length <= words.length; length += 1) {
-      spans.push(text.slice(words[start].start, words[start + length - 1].end))
-    }
-  }
-  return [...new Set(spans)].slice(0, 200)
-}
 const explicitRange = (text: string) => {
   const match = normalized(text).match(/(?:\bod\s+|\bfrom\s+)(\d{1,4})\s+(?:do|to)\s+(\d{1,4})\b|\b(\d{1,4})\s*[-–]\s*(\d{1,4})\b/)
   if (!match) return undefined
@@ -105,16 +94,15 @@ const promptFor = (raw: unknown): LocalInferenceRequest => {
     }),
   }
   if (typeof request.text === 'string' && Array.isArray(request.candidates)) {
-    const mentionOptions = sourceMentionOptions(request.text)
     const exactCandidates = (request.candidates as Array<{ reference: string; exerciseName: string }>).filter((item) => {
       return exactMention(request.text as string, item.exerciseName)
     })
     const counts = new Map<string, number>()
     for (const item of exactCandidates) counts.set(normalized(item.exerciseName), (counts.get(normalized(item.exerciseName)) ?? 0) + 1)
     const exactRefs = exactCandidates.filter((item) => counts.get(normalized(item.exerciseName)) === 1).map((item) => item.reference)
-    const candidateOptions = (exactRefs.length ? (request.candidates as Array<{ reference: string; exerciseName: string }>).filter((item) => exactRefs.includes(item.reference))
-      : request.candidates as Array<{ reference: string; exerciseName: string }>).map((item) => objectSchema(['reference', 'sourceMention'], {
-        reference: { const: item.reference }, sourceMention: exactRefs.length ? { const: item.exerciseName } : { type: 'string', enum: mentionOptions },
+    const candidateOptions = (request.candidates as Array<{ reference: string; exerciseName: string }>).filter((item) => exactRefs.includes(item.reference))
+      .map((item) => objectSchema(['reference', 'sourceMention'], {
+        reference: { const: item.reference }, sourceMention: { const: item.exerciseName },
       }))
     const range = explicitRange(request.text)
     const proposal = objectSchema(['action', 'candidate', 'minReps', 'maxReps'], {
@@ -124,28 +112,26 @@ const promptFor = (raw: unknown): LocalInferenceRequest => {
     return {
       promptVersion: 'greekgod-command-v2',
       system: 'Interpretujesz jawne polecenie zmiany zakresu powtórzeń, ale go nie wykonujesz. Zwróć propozycję tylko wtedy, gdy tekst dokładnie wspiera jeden z exactCandidates oraz podaje dolną i górną granicę. sourceMention skopiuj dosłownie z pola text jako najkrótszy fragment nazywający ćwiczenie; nigdy nie kopiuj nazwy, prescription ani innych metadanych kandydata. Allowlista oznacza dozwolone, nie wymagane. Gdy brak jednoznacznego kandydata lub zakresu, zwróć NO_PROPOSAL. Zwróć wyłącznie JSON.',
-      input: JSON.stringify({ ...request, exactCandidateRefs: exactRefs, sourceMentionOptions: mentionOptions, explicitRange: range ?? null }),
+      input: JSON.stringify({ ...request, exactCandidateRefs: exactRefs, explicitRange: range ?? null }),
       jsonSchema: candidateOptions.length && range ? { oneOf: [proposal, objectSchema(['outcome'], { outcome: { const: 'NO_PROPOSAL' } })] }
         : objectSchema(['outcome'], { outcome: { const: 'NO_PROPOSAL' } }),
     }
   }
   if (typeof request.text === 'string' && Array.isArray(request.exercises)) {
     const clearKind = clearTrainerKind(request.text)
-    const mentionOptions = sourceMentionOptions(request.text)
     const grounded = exactNamed(request.text, request.exercises as Array<{ id: string; name: string }>)
     const grounding = grounded.map((item) => objectSchema(['exerciseId', 'mention'], { exerciseId: { const: item.id }, mention: { const: item.name } }))
     const groundings = { type: 'array', maxItems: grounded.length, uniqueItems: true, items: grounding.length ? { oneOf: grounding } : { type: 'object' } }
     const range = explicitRange(request.text)
     const targetMeasure = clearTargetMeasure(request.text)
-    const targetCandidates = grounded.length ? grounded : request.exercises as Array<{ id: string; name: string }>
-    const repTarget = targetCandidates.map((item) => objectSchema(['type', 'scope', 'exerciseId', 'sourceMention', 'min', 'max', 'unit'], {
-      type: { const: 'REP_RANGE' }, scope: { const: 'EXERCISE' }, exerciseId: { const: item.id }, sourceMention: grounded.length ? { const: item.name } : { type: 'string', enum: mentionOptions },
+    const repTarget = grounded.map((item) => objectSchema(['type', 'scope', 'exerciseId', 'sourceMention', 'min', 'max', 'unit'], {
+      type: { const: 'REP_RANGE' }, scope: { const: 'EXERCISE' }, exerciseId: { const: item.id }, sourceMention: { const: item.name },
       min: range ? { const: range.min } : { type: 'integer', minimum: 1 }, max: range ? { const: range.max } : { type: 'integer', minimum: 1 }, unit: { const: 'reps' },
     }))
     const kinds = [
         objectSchema(['kind', 'title', 'entityGroundings'], { kind: { const: 'TASK' }, title: { type: 'string' }, description: { type: 'string', minLength: 1 }, entityGroundings: groundings }),
         objectSchema(['kind', 'title', 'specification'], { kind: { const: 'TARGET' }, title: { type: 'string' }, specification: { oneOf: [
-          ...(range && targetCandidates.length ? repTarget : []),
+          ...(range && grounded.length ? repTarget : []),
           ...(!range && (!targetMeasure || targetMeasure === 'BODYWEIGHT') ? [objectSchema(['type', 'scope', 'value', 'unit'], { type: { const: 'BODYWEIGHT' }, scope: { const: 'PERSON' }, value: { type: 'number', exclusiveMinimum: 0 }, unit: { const: 'kg' } })] : []),
           ...(!range && (!targetMeasure || targetMeasure === 'WAIST') ? [objectSchema(['type', 'scope', 'value', 'unit'], { type: { const: 'WAIST' }, scope: { const: 'PERSON' }, value: { type: 'number', exclusiveMinimum: 0 }, unit: { const: 'cm' } })] : []),
         ] } }),
@@ -153,11 +139,12 @@ const promptFor = (raw: unknown): LocalInferenceRequest => {
       ]
     const exerciseSpecificButUngrounded = clearKind === 'TASK' && (request.exercises as unknown[]).length > 0 && !grounded.length
       && /(?:^|[^\p{L}])dla(?=$|[^\p{L}])/u.test(normalized(request.text))
-    const allowedKinds = exerciseSpecificButUngrounded || !clearKind ? [] : kinds.filter((kind) => (kind.properties as Record<string, { const?: string }>).kind.const === clearKind)
+    const ungroundedRepTarget = clearKind === 'TARGET' && Boolean(range) && !grounded.length
+    const allowedKinds = exerciseSpecificButUngrounded || ungroundedRepTarget || !clearKind ? [] : kinds.filter((kind) => (kind.properties as Record<string, { const?: string }>).kind.const === clearKind)
     return {
       promptVersion: 'greekgod-trainer-v2',
       system: 'Wyodrębnij z TrainerText pewne propozycje. TASK to przyszła czynność do wykonania, np. „przygotuj posiłek jutro”. TARGET to pożądany mierzalny stan, wartość lub zakres, np. „celem jest masa 75 kg”. DECISION to już ustalona reguła lub wniosek, np. „ustaliliśmy dwie minuty odpoczynku”. Kategorie są rozłączne. Użyj entityGroundings wyłącznie z exactGroundedExercises; allowlista nie wymaga wyboru. Dla REP_RANGE sourceMention skopiuj dosłownie z pola text jako najkrótszy fragment nazywający ćwiczenie; nigdy nie kopiuj samej nazwy z allowlisty. Nie łącz po podobnej nazwie. Niejednoznaczne lub nieobsługiwane odniesienie oznacza pustą tablicę. Niczego nie zapisujesz. Zwróć wyłącznie JSON.',
-      input: JSON.stringify({ ...request, clearKind: clearKind ?? null, clearTargetMeasure: targetMeasure ?? null, exactGroundedExercises: grounded, sourceMentionOptions: mentionOptions, explicitRange: range ?? null }),
+      input: JSON.stringify({ ...request, clearKind: clearKind ?? null, clearTargetMeasure: targetMeasure ?? null, exactGroundedExercises: grounded, explicitRange: range ?? null }),
       jsonSchema: allowedKinds.length ? { type: 'array', minItems: 1, maxItems: 20, items: { oneOf: allowedKinds } } : { type: 'array', maxItems: 0, items: { type: 'object' } },
     }
   }
@@ -213,7 +200,7 @@ const validateTrainerOutput = (raw: unknown, source: string, allowed: ReadonlyMa
     if (target.scope !== 'EXERCISE' || target.unit !== 'reps' || !Number.isSafeInteger(target.min) || !Number.isSafeInteger(target.max)
       || (target.min as number) < 1 || (target.max as number) < (target.min as number)
       || typeof target.exerciseId !== 'string' || typeof target.sourceMention !== 'string' || !exactMention(source, target.sourceMention)
-      || !allowed.has(target.exerciseId) || grounded.has(target.exerciseId) && grounded.get(target.exerciseId) !== target.sourceMention) fail()
+      || !allowed.has(target.exerciseId) || grounded.get(target.exerciseId) !== target.sourceMention) fail()
     return { kind: 'TARGET', title: item.title, specification: { type: 'REP_RANGE', scope: 'EXERCISE', exerciseId: target.exerciseId,
       min: target.min, max: target.max, unit: 'reps' } }
   } else if (targetKind === 'BODYWEIGHT' || targetKind === 'WAIST') {
@@ -261,7 +248,7 @@ const validateOutput = (request: unknown, raw: unknown): unknown => {
     const candidateNames = candidates.map((item) => ({ reference: boundedText(item.reference), name: boundedText(item.exerciseName) }))
     const exactlyNamed = exactNamed(input.text, candidateNames)
     const exactRefs = new Set(exactlyNamed.map((item) => item.reference))
-    if (exactRefs.size && !exactRefs.has(reference)) fail()
+    if (!exactRefs.has(reference)) fail()
     const exactCandidate = candidates.find((item) => item.reference === reference && exactMention(input.text as string, boundedText(item.exerciseName)))
     if (exactCandidate && candidate.sourceMention !== exactCandidate.exerciseName) fail()
     const range = explicitRange(input.text); if (!range || output.minReps !== range.min || output.maxReps !== range.max) fail()

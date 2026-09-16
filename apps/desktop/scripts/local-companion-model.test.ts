@@ -17,8 +17,7 @@ test('real adapter sends only the bounded trainer request and returns untrusted 
     [{ kind: 'TASK', title: 'Zapisz wynik', exerciseIds: ['ex-ż'] }])
   assert.equal(runtime.request?.promptVersion, 'greekgod-trainer-v2')
   const sent = JSON.parse(runtime.request!.input)
-  assert.deepEqual({ ...sent, sourceMentionOptions: undefined }, { text: 'Zapisz wynik: Żuraw.', exercises: [{ id: 'ex-ż', name: 'Żuraw' }], clearKind: 'TASK', clearTargetMeasure: null, exactGroundedExercises: [{ id: 'ex-ż', name: 'Żuraw' }], explicitRange: null, sourceMentionOptions: undefined })
-  assert.ok(sent.sourceMentionOptions.includes('Żuraw'))
+  assert.deepEqual(sent, { text: 'Zapisz wynik: Żuraw.', exercises: [{ id: 'ex-ż', name: 'Żuraw' }], clearKind: 'TASK', clearTargetMeasure: null, exactGroundedExercises: [{ id: 'ex-ż', name: 'Żuraw' }], explicitRange: null })
   assert.doesNotMatch(runtime.request!.input, /dailyEntries|workouts|templates|calorieTarget/)
 })
 
@@ -96,6 +95,22 @@ test('trainer targets must use a value and measurement kind supported by the cur
   const request = { text: 'Celem jest masa ciała 78 kg.', exercises: [] }
   await assert.rejects(new RealLocalCompanionModel(new StubRuntime('[{"kind":"TARGET","title":"Cel","specification":{"type":"BODYWEIGHT","scope":"PERSON","value":79,"unit":"kg"}}]')).propose(request))
   await assert.rejects(new RealLocalCompanionModel(new StubRuntime('[{"kind":"TARGET","title":"Cel","specification":{"type":"WAIST","scope":"PERSON","value":78,"unit":"cm"}}]')).propose(request))
+})
+
+test('ungrounded entity-linked REP_RANGE and explicit command fail closed with a sole unrelated candidate', async () => {
+  const trainerRequest = { text: 'Celem jest zakres od 6 do 8 dla ruchu spoza listy.', exercises: [{ id: 'only', name: 'Ćwiczenie próbne' }] }
+  const trainerEmpty = new StubRuntime('[]')
+  assert.deepEqual(await new RealLocalCompanionModel(trainerEmpty).propose(trainerRequest), [])
+  assert.equal((trainerEmpty.request!.jsonSchema as { maxItems?: number }).maxItems, 0)
+  await assert.rejects(new RealLocalCompanionModel(new StubRuntime('[{"kind":"TARGET","title":"Zakres","specification":{"type":"REP_RANGE","scope":"EXERCISE","exerciseId":"only","sourceMention":"ruchu spoza listy","min":6,"max":8,"unit":"reps"}}]')).propose(trainerRequest))
+
+  const commandRequest = { text: 'Ustaw dla ruchu spoza listy zakres od 6 do 8 powtórzeń.', candidates: [
+    { reference: 'only-ref', templateId: 't', templateExerciseId: 'te', exerciseId: 'only', templateName: 'T', exerciseName: 'Ćwiczenie próbne', prescription: '3x8' },
+  ] }
+  const noProposal = new StubRuntime('{"outcome":"NO_PROPOSAL"}')
+  assert.deepEqual(await new RealLocalCompanionModel(noProposal).propose(commandRequest), { outcome: 'NO_PROPOSAL' })
+  assert.deepEqual(noProposal.request!.jsonSchema, { type: 'object', additionalProperties: false, required: ['outcome'], properties: { outcome: { const: 'NO_PROPOSAL' } } })
+  await assert.rejects(new RealLocalCompanionModel(new StubRuntime('{"action":"CHANGE_TEMPLATE_REP_RANGE","candidate":{"reference":"only-ref","sourceMention":"ruchu spoza listy"},"minReps":6,"maxReps":8}')).propose(commandRequest))
 })
 
 test('asset identity is versioned and checksum-pinned', () => {
