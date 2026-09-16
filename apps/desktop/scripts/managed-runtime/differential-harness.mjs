@@ -52,8 +52,8 @@ const renderPhi = ({ system, input, promptVersion }) => `<|system|>\n[greekgod-c
 const port = await new Promise((accept, reject) => { const socket = createServer(); socket.once('error', reject); socket.listen(0, '127.0.0.1', () => { const value = socket.address().port; socket.close((error) => error ? reject(error) : accept(value)) }) })
 const token = randomBytes(32).toString('hex')
 const endpoint = `http://127.0.0.1:${port}`
-const child = spawn(serverExe, ['--host', '127.0.0.1', '--port', String(port), '--model', modelPath, '--n-gpu-layers', '99', '--ctx-size', '4096', '--parallel', '1', '--no-webui', '--log-disable'], {
-  cwd: dirname(serverExe), windowsHide: true, stdio: 'ignore', env: { ...process.env, LLAMA_ARG_API_KEY: token },
+const child = spawn(serverExe, ['--host', '127.0.0.1', '--port', String(port), '--model', modelPath, '--n-gpu-layers', '99', '--ctx-size', '4096', '--parallel', '1', '--no-webui', '--offline', '--cors-origins', 'localhost', '--log-disable'], {
+  cwd: dirname(serverExe), windowsHide: true, stdio: 'ignore', env: { ...process.env, LLAMA_API_KEY: token },
 })
 const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 const sleep = (ms) => new Promise((accept) => setTimeout(accept, ms))
