@@ -4,46 +4,33 @@ use sha2::{Digest, Sha256};
 use std::{fs::File, io::Read, net::TcpListener, path::{Path, PathBuf}, process::{Child, Command, Stdio}, sync::{Arc, Mutex}, thread, time::{Duration, Instant}};
 use tauri::{AppHandle, Manager};
 
-const RUNTIME_VERSION: &str = "llama.cpp-b7081-80deff3648b93727422461c41c7279ef1dac7452";
+const RUNTIME_VERSION: &str = "llama.cpp-b10760-0f3a71be15af836d277c9f918adfafb45732677e";
 const MODEL_SHA256: &str = "b5374915da534cb93df39f03bd4f2cd5a0c533df0d5e21957dc9556c260be9eb";
 const RUNTIME_FILES: &[(&str, &str)] = &[
-    ("ggml-base.dll", "5a6fea6cac4e2c8b4bee1a3a2794eb155df735b8b6b6e9335c58d580685876b5"),
-    ("ggml-cpu-alderlake.dll", "4ee3e8989d3a55feda6f2e40aeac63ea72ca57fca88959ed000151bf834b6e86"),
-    ("ggml-cpu-haswell.dll", "52df4fd91959512af8306ee8f68e3f541d922fe0de7f47a63631dbc8e07117bf"),
-    ("ggml-cpu-icelake.dll", "622274167f83032e2c7d9e1a8e3eafc5691f58e58afff958b98ded18c3ff314d"),
-    ("ggml-cpu-sandybridge.dll", "2bd7facdbd2d942d48817084ab1f4f9bc05835e807d9a1533876693b606138b4"),
-    ("ggml-cpu-sapphirerapids.dll", "e1d43a2953f32cb5964ab7ba4aafe28ffb5e0cfb576cca5e1515b28140fb1a01"),
-    ("ggml-cpu-skylakex.dll", "86cff1690467a9ee5dadc47abf1ae8bf89e2fd70e9caa019d9eee87ae69934d6"),
-    ("ggml-cpu-sse42.dll", "291656099c0de4e7b0ef227d321c6f2d2dbd340807ff3bcb0598e606c6105305"),
-    ("ggml-cpu-x64.dll", "22f72dd3e02617f38c771b4ecff18b5b000058b06a695447170bc809e80e710c"),
-    ("ggml-rpc.dll", "15ddfdf6b712635f1261f7aae599faf703b0bb7df27c7e4fc644beb17e558e05"),
-    ("ggml-vulkan.dll", "e7f88ecba3042fbbb39b223062e158ecca5f5dbdc73786feff8b5b414f037255"),
-    ("ggml.dll", "528bfab8fe9636f33341b9ab4fb686d31fe76bc3130909151c6c537c4a803e08"),
-    ("libcurl-x64.dll", "5bd5fda8cf2bef630dd4eed5e60b65af2aed9c76c1818c36133701c09cf6d0ac"),
-    ("libomp140.x86_64.dll", "9ab1cb787e52b2a36133899c01c1db1f876067d1471cd224ead85f40a8152b99"),
-    ("LICENSE-curl", "55f407e7e7100c3188c8988374f472e0a7c0ecaf7ee3ff4796ea391274cc346d"),
-    ("LICENSE-httplib", "d5eab7ee2adb2247b367450741f932c6820a883a45ea682a4e2588a8d28b88e9"),
-    ("LICENSE-jsonhpp", "61e08da79c44061654015ce6b0c4061c23ee1dd18237fbf09e9bfda3c0ea2831"),
-    ("LICENSE-linenoise", "6d7830bc0b53fa551168ef13b12e27073f451edd751d4b4b2ff03442cfe77378"),
-    ("llama-batched-bench.exe", "197da3cfacd5cc49e4ede7e655e8228dc1fc2a336c99a425dfbd311657eb14ff"),
-    ("llama-bench.exe", "4b4b1960fbe1838d9dd61421a931649e03e5d8856a7f5009d1b0c5fc6a66afe8"),
-    ("llama-cli.exe", "f1fa4ec718ab68bfba227001db36f93dbfc5210a25d1804593dbc12e919e256c"),
-    ("llama-gemma3-cli.exe", "1e13fbc0398902c22ea1c88452df667832321caeb08de2efff7a1b176123d376"),
-    ("llama-gguf-split.exe", "82c009aa95bb892c9d0d9ca9869e6ef6db32cdb0410a6e1b0f0ee05dd832bb78"),
-    ("llama-imatrix.exe", "64206408077e8bbaaba948de58a71b5eb296f409b0d8f035dc97856c134ff666"),
-    ("llama-llava-cli.exe", "1e13fbc0398902c22ea1c88452df667832321caeb08de2efff7a1b176123d376"),
-    ("llama-minicpmv-cli.exe", "1e13fbc0398902c22ea1c88452df667832321caeb08de2efff7a1b176123d376"),
-    ("llama-mtmd-cli.exe", "f77135794f340934ec241245f79fbc43c53511599ec34ca68df93fb93858b99d"),
-    ("llama-perplexity.exe", "91de5a6203dee3ac3d55c57b76420c5f8fe0ac315632fde0432951f018b61b87"),
-    ("llama-quantize.exe", "68706a17673b4b128999d0ac6abf30048f57ea8b1315bd2131a4ce70813f1f62"),
-    ("llama-qwen2vl-cli.exe", "1e13fbc0398902c22ea1c88452df667832321caeb08de2efff7a1b176123d376"),
-    ("llama-run.exe", "40ee410a46bb20b7d9b9e64c1c8a7cfd4b138c7c9608bfc291ab891a0ef2b7f6"),
-    ("llama-server.exe", "190847eff6c0e3b1897ffd1ff0a6038de41f37ee9dd60e1884857e5f74b8c5f1"),
-    ("llama-tokenize.exe", "e49bd97703f32a60bc243074427c146d8cf73a32696c7cced5a6d0b4b530a978"),
-    ("llama-tts.exe", "d440a5d7d823cf48821e45a2c9cc8c9dfac28ce6fb53561bc11858b44e635859"),
-    ("llama.dll", "4ca9a291a9d51231c0760f0df8790b6a38facb7ff1c466382185e5216f7751d7"),
-    ("mtmd.dll", "12b5f6c6268d366902b7426eca3e353f755f845abeb28e31bf4595bf4f3d9151"),
-    ("rpc-server.exe", "06bf3b8905f0efeddf1d3936d9d01f88b7a1067cb942e3b32e86c86084a5b27b"),
+    ("ggml-base.dll", "90019653b09ba00db880004c7416d4351e54f70d47a0f605bec1d5df8a7fb8c8"),
+    ("ggml-cpu-alderlake.dll", "2af74a6602a8d38844afcbb99763948fcd619cd02631c3ed10790b48e0f9db4e"),
+    ("ggml-cpu-cannonlake.dll", "fd77af00d34b50c3884a15e4beb5672c433ae29b18951b9e36857179a4689bd4"),
+    ("ggml-cpu-cascadelake.dll", "ee3a00bb925efdb1ca640a0e1c7bf6492fcb12767d8650f89d2afa565ba92af6"),
+    ("ggml-cpu-cooperlake.dll", "8efe676c118e854d43836f1141638114cb6f668dad098384dcbfaf8bb1ccec15"),
+    ("ggml-cpu-haswell.dll", "8e3bbf8d0aced02762d6a2280fe74c0f29f9d373161b3244b71c43632b8537da"),
+    ("ggml-cpu-icelake.dll", "ec91e456d2c595a442bead5ad42dea076d4badd64572dbc444d501165a409746"),
+    ("ggml-cpu-ivybridge.dll", "085a820be42eac511108a9935c058bbf2b4c943814e38378d90481b45d74248b"),
+    ("ggml-cpu-piledriver.dll", "d740a0a7c261ba443ae7905f71b2791be1bc3b228e90b058ede9f7c1615cb93a"),
+    ("ggml-cpu-sandybridge.dll", "4a2d34cc0506b2f71366de5ad8c8f4a14d7990f62aa6b10792861ba0475878bf"),
+    ("ggml-cpu-sapphirerapids.dll", "c7461fc8b85fe4e081d875cb653cb821b49dd1a3ff46806557c97af6d686024f"),
+    ("ggml-cpu-skylakex.dll", "6afca980f1b1bcc7c0e096dcce54d83c8705afb02d44a16b46b9af85a59d645f"),
+    ("ggml-cpu-sse42.dll", "0f76727fec2dcf5259d708cb583ae6bf9cc7a8b21e8c0f93fbfd1c5ccc16291c"),
+    ("ggml-cpu-x64.dll", "fd24bebb1f3403bd631295d74b7330414fbd3545b52a890c07c330b998170a49"),
+    ("ggml-cpu-zen4.dll", "3a64862960db433186edc40b806e1e82e5b39b4af91a8cf3ff64685b1b42896b"),
+    ("ggml-vulkan.dll", "3d7141d851ed7c8a31693c1413696bae536a8f40add24fd79fa2612fc144790c"),
+    ("ggml.dll", "ca63f33a59b8dff8ea66bbec024eca31ae86f43685f80b65c48f1a120795876b"),
+    ("libomp.dll", "a12116ba72d1d6820407cf30be23da04ce79d6bb8a71a5ee71759c5a1faa6f1c"),
+    ("LICENSE-LLVM-OpenMP", "fdad1758a9e1f9d5a81e18879b3406772115edc92c24bfa36b70c654f325e8e4"),
+    ("llama-common.dll", "c3e30505b5e4b3e986251aad01d72c1f2c8e83681f12b261f4458ba4e24d6b5a"),
+    ("llama-server-impl.dll", "1ba1fd9c009101036b682ea83967dc42e6c2d5863fc88b368479f311679740be"),
+    ("llama-server.exe", "4d2f56c46859a3679fbfa35cc0fbad405ac239a7a35f64e9f2ff613407be0963"),
+    ("llama.dll", "f5afd819fb0e8632228740f1aa5fde3ff165794eaca07ca2ee71a9fffdf9e6b1"),
+    ("mtmd.dll", "70045cfa7ce5dc68a938fc76736c4156be5117d655bc3c74f8bc65a5a8482db0"),
 ];
 
 #[derive(Default)]
@@ -71,7 +58,7 @@ fn root(app: &AppHandle) -> Result<PathBuf, String> {
 }
 fn paths(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
     let root = root(app)?;
-    Ok((root.join("runtime").join("llama.cpp-b7081"), root.join("models").join("Phi-3.5-mini-instruct-Q4_0.gguf")))
+    Ok((root.join("runtime").join("llama.cpp-b10760"), root.join("models").join("Phi-3.5-mini-instruct-Q4_0.gguf")))
 }
 fn verify(app: &AppHandle) -> Result<(PathBuf, PathBuf), ManagedStatus> {
     let (runtime, model) = paths(app).map_err(|detail| status("FAILED", detail, None))?;
@@ -119,7 +106,7 @@ fn ensure_started(app: &AppHandle, slot: &mut Option<ManagedProcess>) -> Result<
     let secret = token()?; let endpoint = format!("http://127.0.0.1:{port}");
     let mut command = Command::new(runtime.join("llama-server.exe"));
     command.current_dir(&runtime).args(["--host", "127.0.0.1", "--port", &port.to_string(), "--model"]).arg(&model)
-        .args(["--n-gpu-layers", "99", "--ctx-size", "4096", "--parallel", "1", "--no-webui", "--log-disable", "--chat-template", "chatml"])
+        .args(["--n-gpu-layers", "99", "--ctx-size", "4096", "--parallel", "1", "--no-webui", "--log-disable"])
         .env("LLAMA_ARG_API_KEY", &secret).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     #[cfg(windows)] { use std::os::windows::process::CommandExt; command.creation_flags(0x08000000); }
     let child = command.spawn().map_err(|error| format!("managed sidecar start failed: {error}"))?;
@@ -151,15 +138,17 @@ pub async fn managed_companion_status(app: AppHandle, state: tauri::State<'_, Ma
 
 #[tauri::command]
 pub async fn managed_companion_infer(app: AppHandle, state: tauri::State<'_, ManagedRuntimeState>, request_data: ManagedInferenceRequest) -> Result<String, String> {
-    if request_data.prompt_version != "greekgod-companion-v1" || request_data.system.len() > 20_000 || request_data.input.len() > 100_000 || !request_data.json_schema.is_object() { return Err("invalid bounded inference request".into()); }
+    let supported_contract = matches!(request_data.prompt_version.as_str(), "greekgod-trainer-v2" | "greekgod-dialogue-v2" | "greekgod-memory-v2" | "greekgod-command-v2");
+    if !supported_contract || request_data.system.len() > 20_000 || request_data.input.len() > 100_000 || !request_data.json_schema.is_object() { return Err("invalid bounded inference request".into()); }
     let shared = Arc::clone(&state.0);
     tauri::async_runtime::spawn_blocking(move || {
         let mut slot = shared.lock().map_err(|_| "managed runtime lock poisoned".to_string())?;
         ensure_started(&app, &mut slot)?;
         let process = slot.as_mut().ok_or_else(|| "managed runtime unavailable".to_string())?;
-        let body = json!({"model":"greekgod-phi3.5","temperature":0,"max_tokens":512,"messages":[{"role":"system","content":format!("[{}] {}",request_data.prompt_version,request_data.system)},{"role":"user","content":request_data.input}],"response_format":{"type":"json_schema","json_schema":{"name":"greekgod_response","strict":true,"schema":request_data.json_schema}}});
-        let response = request(&process.endpoint, &process.token, "/v1/chat/completions", Some(body))?;
-        response.pointer("/choices/0/message/content").and_then(Value::as_str).map(str::to_owned).ok_or_else(|| "incomplete managed sidecar response".into())
+        let prompt = format!("<|system|>\n[greekgod-companion-v1] [{}] {}<|end|>\n<|user|>\n{}<|end|>\n<|assistant|>\n", request_data.prompt_version, request_data.system, request_data.input);
+        let body = json!({"prompt":prompt,"n_predict":512,"temperature":0,"seed":42,"top_k":40,"top_p":0.9,"min_p":0.1,"repeat_last_n":64,"repeat_penalty":1,"presence_penalty":0,"frequency_penalty":0,"stop":["<|system|>","<|user|>","<|end|>","<|assistant|>"],"json_schema":request_data.json_schema});
+        let response = request(&process.endpoint, &process.token, "/completion", Some(body))?;
+        response.get("content").and_then(Value::as_str).map(str::to_owned).ok_or_else(|| "incomplete managed sidecar response".into())
     }).await.map_err(|error| format!("managed runtime task failed: {error}"))?
 }
 

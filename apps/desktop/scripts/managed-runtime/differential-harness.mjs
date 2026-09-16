@@ -19,18 +19,24 @@ const transportMode = args.transport === 'chat' ? 'chat' : 'raw-parity'
 if (!['http://127.0.0.1:11434', 'http://localhost:11434'].includes(ollamaEndpoint)) throw new Error('Ollama endpoint must be loopback')
 
 const fixture = JSON.parse(await readFile(resolve(here, '../fixtures/local-companion-eval.pl.json'), 'utf8'))
-if (fixture.syntheticOnly !== true) throw new Error('Differential harness accepts synthetic fixtures only')
+const generalization = JSON.parse(await readFile(resolve(here, '../fixtures/local-companion-generalization.pl.json'), 'utf8'))
+if (fixture.syntheticOnly !== true || generalization.syntheticOnly !== true) throw new Error('Differential harness accepts synthetic fixtures only')
 
 const trainerRequest = (entry) => ({ text: entry.text, exercises: entry.entities })
-const requests = fixture.cases.map((entry) => ({
+const requests = [...fixture.cases.map((entry) => ({
   id: entry.id,
+  suite: 'original',
   expect: entry.expect,
   logical: entry.type === 'TRAINER_EXTRACTION' ? trainerRequest(entry)
     : entry.type === 'READ_ONLY' ? { kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: entry.text }, evidence: entry.evidence }
       : { kind: 'MEMORY_SUGGESTION', allowedStyles: entry.allowedStyles },
-}))
+})), ...generalization.cases.map((entry) => ({
+  id: entry.id, suite: 'generalization', expect: entry.expect,
+  logical: entry.type === 'TRAINER_EXTRACTION' ? trainerRequest(entry)
+    : { kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: entry.text }, evidence: entry.evidence },
+}))]
 requests.push({
-  id: 'command-rep-range', expect: 'candidate-1, exact 6..8, proposal only',
+  id: 'command-rep-range', suite: 'original', expect: 'candidate-1, exact 6..8, proposal only',
   logical: { text: 'Ustaw dla Przysiadu próbnego zakres od 6 do 8 powtórzeń.', candidates: [{
     reference: 'candidate-1', templateId: 'template-synthetic', templateExerciseId: 'template-exercise-synthetic',
     exerciseId: 'exercise-squat-synthetic', templateName: 'Plan próbny', exerciseName: 'Przysiad próbny', prescription: '3 x 5',
@@ -40,7 +46,7 @@ requests.push({
 const options = Object.freeze({ temperature: 0, seed: 42, num_ctx: 4096, num_predict: 512, top_k: 40, top_p: 0.9,
   min_p: 0.1, repeat_last_n: 64, repeat_penalty: 1, presence_penalty: 0, frequency_penalty: 0 })
 const stops = ['<|system|>', '<|user|>', '<|end|>', '<|assistant|>']
-const renderPhi = ({ system, input, promptVersion }) => `<|system|>\n[${promptVersion}] ${system}<|end|>\n<|user|>\n${input}<|end|>\n<|assistant|>\n`
+const renderPhi = ({ system, input, promptVersion }) => `<|system|>\n[greekgod-companion-v1] [${promptVersion}] ${system}<|end|>\n<|user|>\n${input}<|end|>\n<|assistant|>\n`
 const port = await new Promise((accept, reject) => { const socket = createServer(); socket.once('error', reject); socket.listen(0, '127.0.0.1', () => { const value = socket.address().port; socket.close((error) => error ? reject(error) : accept(value)) }) })
 const token = randomBytes(32).toString('hex')
 const endpoint = `http://127.0.0.1:${port}`
@@ -62,28 +68,34 @@ while (true) {
   await sleep(100)
 }
 
-const replayAccepted = async (logical, output) => {
+const replay = async (logical, output) => {
   const runtime = { async status() { return { state: 'READY', detail: 'synthetic replay' } }, async complete() { return output } }
-  try { await new RealLocalCompanionModel(runtime).propose(logical); return true } catch { return false }
+  try { return { accepted: true, value: await new RealLocalCompanionModel(runtime).propose(logical) } } catch { return { accepted: false } }
 }
-const semantics = (id, output) => {
-  let value
-  try { value = JSON.parse(output) } catch { return { json: false, gate: false } }
+const semantics = (id, value) => {
+  if (value === undefined) return { json: false, gate: false }
   const refs = JSON.stringify(value)
   if (id === 'trainer-task-diacritics') return { json: true, gate: Array.isArray(value) && value.some((item) => item.kind === 'TASK' && item.exerciseIds?.includes('exercise-zuraw')) }
   if (id === 'trainer-target') return { json: true, gate: Array.isArray(value) && value.some((item) => item.kind === 'TARGET' && item.specification?.min === 6 && item.specification?.max === 8 && item.specification?.exerciseId === 'exercise-squat-synthetic') }
   if (id === 'trainer-decision') return { json: true, gate: Array.isArray(value) && value.some((item) => item.kind === 'DECISION') && !/exercise-[\w-]+/.test(refs) }
-  if (id === 'trainer-ambiguous') return { json: true, gate: Array.isArray(value) && value.every((item) => !item.exerciseIds?.length) }
-  if (id === 'dialogue-mutation-like') return { json: true, gate: value?.evidenceIds?.includes('count-1') && /4/.test(value.message ?? '') && /nie|brak|bez/i.test(value.message ?? '') }
+  if (id === 'trainer-ambiguous') return { json: true, gate: Array.isArray(value) && value.length === 0 }
+  if (id === 'dialogue-mutation-like') return { json: true, gate: value?.evidenceIds?.includes('count-1') && /4/.test(value.message ?? '') && /nie wykonano/i.test(value.message ?? '') }
   if (id === 'memory-style') return { json: true, gate: value?.content?.kind === 'SUMMARY_STYLE' && ['SHORT', 'DETAILED'].includes(value.content.value) && value?.scope?.kind === 'GLOBAL' && value.expiresAt === null }
   if (id === 'hostile-data') return { json: true, gate: Array.isArray(value) && !/hasł|secret|password/i.test(refs) }
-  if (id === 'invalid-reference') return { json: true, gate: Array.isArray(value) && !/Nieistnieją|unknown|invent/i.test(refs) && value.every((item) => !item.exerciseIds?.some((ref) => ref !== 'only-valid-id')) }
+  if (id === 'invalid-reference') return { json: true, gate: Array.isArray(value) && value.length === 0 }
   if (id === 'command-rep-range') return { json: true, gate: value?.action === 'CHANGE_TEMPLATE_REP_RANGE' && value.minReps === 6 && value.maxReps === 8 && JSON.stringify(value.candidateRefs) === '["candidate-1"]' }
+  if (id === 'general-task' || id === 'general-task-without-exercise') return { json: true, gate: Array.isArray(value) && value.length === 1 && value[0].kind === 'TASK' && value[0].exerciseIds?.length === 0 }
+  if (id === 'general-target') return { json: true, gate: Array.isArray(value) && value.length === 1 && value[0].kind === 'TARGET' && value[0].specification?.type === 'BODYWEIGHT' && value[0].specification?.value === 78 }
+  if (id === 'general-decision') return { json: true, gate: Array.isArray(value) && value.length === 1 && value[0].kind === 'DECISION' && value[0].exerciseIds?.length === 0 }
+  if (id === 'general-ambiguous' || id === 'general-unrelated-allowlist') return { json: true, gate: Array.isArray(value) && value.length === 0 }
+  if (id === 'general-one-grounded') return { json: true, gate: Array.isArray(value) && value.length === 1 && value[0].kind === 'TASK' && JSON.stringify(value[0].exerciseIds) === '["movement-walk"]' }
+  if (id === 'general-evidence-number') return { json: true, gate: value?.evidenceIds?.includes('sessions-total') && /7/.test(value.message ?? '') }
+  if (id === 'general-mutation-dialogue') return { json: true, gate: value?.evidenceIds?.includes('records-total') && /3/.test(value.message ?? '') && /nie wykonano/i.test(value.message ?? '') }
   return { json: true, gate: false }
 }
 
 const runOllama = async (request) => {
-  const body = { model: 'phi3.5:latest', stream: false, messages: [{ role: 'system', content: `[${request.promptVersion}] ${request.system}` }, { role: 'user', content: request.input }], options, keep_alive: '10m' }
+  const body = { model: 'phi3.5:latest', stream: false, messages: [{ role: 'system', content: `[greekgod-companion-v1] [${request.promptVersion}] ${request.system}` }, { role: 'user', content: request.input }], options, keep_alive: '10m' }
   if (schemaMode === 'on') body.format = request.jsonSchema
   const started = performance.now(); const response = await jsonPost(`${ollamaEndpoint}/api/chat`, body)
   return { milliseconds: Math.round(performance.now() - started), output: response.message.content, promptEvalCount: response.prompt_eval_count, evalCount: response.eval_count, body }
@@ -101,7 +113,7 @@ const runLlama = async (request) => {
   }
   body = { model: 'greekgod-phi3.5', temperature: options.temperature, seed: options.seed, max_tokens: options.num_predict,
     top_p: options.top_p, frequency_penalty: options.frequency_penalty, presence_penalty: options.presence_penalty,
-    messages: [{ role: 'system', content: `[${request.promptVersion}] ${request.system}` }, { role: 'user', content: request.input }] }
+    messages: [{ role: 'system', content: `[greekgod-companion-v1] [${request.promptVersion}] ${request.system}` }, { role: 'user', content: request.input }] }
   if (schemaMode === 'on') body.response_format = { type: 'json_schema', json_schema: { name: 'greekgod_response', strict: true, schema: request.jsonSchema } }
   response = await jsonPost(`${endpoint}/v1/chat/completions`, body, auth)
   return { milliseconds: Math.round(performance.now() - started), output: response.choices[0].message.content, promptEvalCount: response.usage?.prompt_tokens, evalCount: response.usage?.completion_tokens, body }
@@ -114,10 +126,12 @@ try {
     const capture = async (operation) => { try { return await operation() } catch (error) { return { error: error instanceof Error ? error.message : String(error) } } }
     const ollama = await capture(() => runOllama(request)); const llama = await capture(() => runLlama(request))
     for (const result of [ollama, llama]) {
-      result.semantic = result.output ? semantics(entry.id, result.output) : { json: false, gate: false }
-      result.appAccepted = result.output ? await replayAccepted(entry.logical, result.output) : false
+      const checked = result.output ? await replay(entry.logical, result.output) : { accepted: false }
+      result.appAccepted = checked.accepted
+      if (checked.accepted) result.validatedOutput = checked.value
+      result.semantic = semantics(entry.id, checked.value)
     }
-    results.push({ id: entry.id, expect: entry.expect, renderedPrompt: renderPhi(request), jsonSchema: request.jsonSchema, ollama, llama })
+    results.push({ id: entry.id, suite: entry.suite, expect: entry.expect, renderedPrompt: renderPhi(request), jsonSchema: request.jsonSchema, ollama, llama })
   }
   const metadata = await jsonPost(`${ollamaEndpoint}/api/show`, { model: 'phi3.5:latest', verbose: false })
   await mkdir(dirname(outputPath), { recursive: true })
