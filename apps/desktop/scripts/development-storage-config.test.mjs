@@ -31,6 +31,8 @@ const [authorityLiveSmokeConfig, authorityLiveSmokeEnvironment] = await Promise.
 ])
 const nativeDesktopSource = await readFile(join(repositoryRoot, 'src-tauri/src/lib.rs'), 'utf8')
 const schema8PhysicalSmokeLauncher = await readFile(join(repositoryRoot, 'scripts/start-schema8-physical-smoke.ps1'), 'utf8')
+const companionUxSmokeConfig = await readJson('src-tauri/tauri.companion-product-ux-smoke.conf.json')
+const companionUxSmokeLauncher = await readFile(join(repositoryRoot, 'scripts/start-companion-product-ux-smoke.ps1'), 'utf8')
 const [schema8PhysicalSmokeConfig, schema8PhysicalSmokeEnvironment] = await Promise.all([
   readJson('src-tauri/tauri.schema8-physical-smoke.conf.json'),
   readFile(join(repositoryRoot, '.env.schema8-physical-smoke'), 'utf8'),
@@ -46,6 +48,11 @@ assert.equal(smokeConfig.identifier, 'com.igorpich.formlog.sqlitesmoke')
 assert.equal(authoritySmokeConfig.identifier, 'com.igorpich.formlog.authoritysmoke')
 assert.equal(authorityLiveSmokeConfig.identifier, 'com.igorpich.formlog.authoritylivesmoke')
 assert.equal(schema8PhysicalSmokeConfig.identifier, 'com.igorpich.formlog.schema8smoke')
+assert.equal(companionUxSmokeConfig.identifier, 'com.igorpich.formlog.schema8smoke')
+assert.match(companionUxSmokeConfig.productName, /Companion UX Smoke/)
+assert.match(companionUxSmokeLauncher, /GREEKGOD_MANAGED_RUNTIME_ROOT/)
+assert.match(companionUxSmokeLauncher, /VITE_NATIVE_SQLITE_AUTHORITY/)
+assert.doesNotMatch(companionUxSmokeLauncher, /greekgod-sync-service|start-schema8-physical-smoke/i)
 assert.equal(rehearsalConfig.identifier, 'com.igorpich.formlog.rehearsal')
 assert.equal(productionAuthorityConfig.identifier, 'com.igorpich.formlog')
 assert.equal(productionConfig.version, '3.0.2')
