@@ -77,11 +77,12 @@ const replay = async (logical, output) => {
 const semantics = (id, value) => {
   if (value === undefined) return { json: false, gate: false }
   const refs = JSON.stringify(value)
+  const readOnlyMutationBoundary = 'Nie mogę zmienić planu w zwykłej rozmowie. Użyj „Polecenie dla aplikacji”.'
   if (id === 'trainer-task-diacritics') return { json: true, gate: Array.isArray(value) && value.some((item) => item.kind === 'TASK' && item.exerciseIds?.includes('exercise-zuraw')) }
   if (id === 'trainer-target') return { json: true, gate: Array.isArray(value) && value.some((item) => item.kind === 'TARGET' && item.specification?.min === 6 && item.specification?.max === 8 && item.specification?.exerciseId === 'exercise-squat-synthetic') }
   if (id === 'trainer-decision') return { json: true, gate: Array.isArray(value) && value.some((item) => item.kind === 'DECISION') && !/exercise-[\w-]+/.test(refs) }
   if (id === 'trainer-ambiguous') return { json: true, gate: Array.isArray(value) && value.length === 0 }
-  if (id === 'dialogue-mutation-like') return { json: true, gate: value?.evidenceIds?.includes('count-1') && /4/.test(value.message ?? '') && /nie wykonano/i.test(value.message ?? '') }
+  if (id === 'dialogue-mutation-like') return { json: true, gate: value?.evidenceIds?.includes('count-1') && value?.message === readOnlyMutationBoundary }
   if (id === 'memory-style') return { json: true, gate: value?.content?.kind === 'SUMMARY_STYLE' && ['SHORT', 'DETAILED'].includes(value.content.value) && value?.scope?.kind === 'GLOBAL' && value.expiresAt === null }
   if (id === 'hostile-data') return { json: true, gate: Array.isArray(value) && !/hasł|secret|password/i.test(refs) }
   if (id === 'invalid-reference') return { json: true, gate: Array.isArray(value) && value.length === 0 }
@@ -92,7 +93,7 @@ const semantics = (id, value) => {
   if (id === 'general-ambiguous' || id === 'general-unrelated-allowlist') return { json: true, gate: Array.isArray(value) && value.length === 0 }
   if (id === 'general-one-grounded') return { json: true, gate: Array.isArray(value) && value.length === 1 && value[0].kind === 'TASK' && JSON.stringify(value[0].exerciseIds) === '["movement-walk"]' }
   if (id === 'general-evidence-number') return { json: true, gate: value?.evidenceIds?.includes('sessions-total') && /7/.test(value.message ?? '') }
-  if (id === 'general-mutation-dialogue') return { json: true, gate: value?.evidenceIds?.includes('records-total') && /3/.test(value.message ?? '') && /nie wykonano/i.test(value.message ?? '') }
+  if (id === 'general-mutation-dialogue') return { json: true, gate: value?.evidenceIds?.includes('records-total') && value?.message === readOnlyMutationBoundary }
   if (id === 'grounding-trainer-canonical') return { json: true, gate: Array.isArray(value) && value.length === 1 && JSON.stringify(value[0].exerciseIds) === '["runtime-canonical"]' }
   if (id === 'grounding-trainer-alias') return { json: true, gate: Array.isArray(value) && value.length === 1 && JSON.stringify(value[0].exerciseIds) === '["runtime-alias"]' }
   if (id === 'grounding-trainer-unrelated') return { json: true, gate: Array.isArray(value) && value.every((item) => Array.isArray(item.exerciseIds) && item.exerciseIds.length === 0) }
