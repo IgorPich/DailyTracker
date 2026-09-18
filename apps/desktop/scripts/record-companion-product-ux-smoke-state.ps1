@@ -17,7 +17,7 @@ if ($session.desktopIdentifier -ne $identifier -or [IO.Path]::GetFullPath($sessi
 $desktop = Get-Process -Id $session.desktopPid -ErrorAction SilentlyContinue
 if (-not $desktop) { throw 'Isolated Desktop process is not running.' }
 $managed = @(Get-CimInstance Win32_Process -Filter "name='llama-server.exe'" | Where-Object {
-  $_.CommandLine -and $_.CommandLine.Contains($assetRoot, [StringComparison]::OrdinalIgnoreCase)
+  $_.CommandLine -and $_.CommandLine.IndexOf($assetRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0
 })
 if ($managed.Count -gt 1) { throw 'More than one isolated managed sidecar is running.' }
 if ($ExpectedSidecar -eq 'Present' -and $managed.Count -ne 1) { throw 'Expected one isolated managed sidecar.' }
@@ -44,6 +44,11 @@ $record = [ordered]@{
   freePhysicalMemoryBytes = [int64]$os.FreePhysicalMemory * 1024
 }
 $existing = @()
-if (Test-Path -LiteralPath $outputPath -PathType Leaf) { $existing = @(Get-Content -LiteralPath $outputPath -Raw | ConvertFrom-Json) }
-@($existing + [pscustomobject]$record) | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $outputPath -Encoding UTF8
+if (Test-Path -LiteralPath $outputPath -PathType Leaf) {
+  $decoded = Get-Content -LiteralPath $outputPath -Raw | ConvertFrom-Json
+  if ($decoded -is [Array]) { $existing = @($decoded | ForEach-Object { $_ }) }
+  elseif ($null -eq $decoded) { $existing = @() }
+  else { $existing = @($decoded) }
+}
+ConvertTo-Json -InputObject @($existing + [pscustomobject]$record) -Depth 4 | Set-Content -LiteralPath $outputPath -Encoding UTF8
 $record | ConvertTo-Json

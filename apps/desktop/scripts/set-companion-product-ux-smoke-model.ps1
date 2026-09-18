@@ -13,7 +13,7 @@ if ($assetRoot -eq $productionRoot -or $assetRoot.StartsWith("$productionRoot\",
   throw 'Smoke model path overlaps production managed assets.'
 }
 $managed = @(Get-CimInstance Win32_Process -Filter "name='llama-server.exe'" | Where-Object {
-  $_.CommandLine -and $_.CommandLine.Contains($assetRoot, [StringComparison]::OrdinalIgnoreCase)
+  $_.CommandLine -and $_.CommandLine.IndexOf($assetRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0
 })
 if ($managed.Count) { throw 'Stop or wait for the isolated managed sidecar before changing the smoke model state.' }
 

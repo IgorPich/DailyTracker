@@ -116,7 +116,7 @@ try {
     (Join-Path $PSScriptRoot 'audit-companion-product-ux-smoke.mjs'), $smokeRoot, $productionRoot
   )
   $managed = @(Get-CimInstance Win32_Process -Filter "name='llama-server.exe'" | Where-Object {
-    $_.CommandLine -and $_.CommandLine.Contains($assetRoot, [StringComparison]::OrdinalIgnoreCase)
+    $_.CommandLine -and $_.CommandLine.IndexOf($assetRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0
   })
   if ($managed.Count -ne 0) { throw 'Cold-start guard failed: managed sidecar exists before Companion use.' }
   [ordered]@{

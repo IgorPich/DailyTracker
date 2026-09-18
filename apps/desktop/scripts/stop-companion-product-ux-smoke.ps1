@@ -20,7 +20,7 @@ if ($controller) {
 }
 Start-Sleep -Seconds 2
 $managed = @(Get-CimInstance Win32_Process -Filter "name='llama-server.exe'" | Where-Object {
-  $_.CommandLine -and $_.CommandLine.Contains([string]$session.managedAssetRoot, [StringComparison]::OrdinalIgnoreCase)
+  $_.CommandLine -and $_.CommandLine.IndexOf([string]$session.managedAssetRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0
 })
 if ($managed.Count) { throw 'Owned managed sidecar remained after Desktop close.' }
 

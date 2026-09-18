@@ -8,6 +8,13 @@ const audit = readFileSync(new URL('./audit-companion-product-ux-smoke.mjs', imp
 const seed = readFileSync(new URL('./seed-companion-product-ux-smoke.mjs', import.meta.url), 'utf8')
 const invoke = readFileSync(new URL('./invoke-smoke-node.ps1', import.meta.url), 'utf8')
 const readiness = readFileSync(new URL('./wait-companion-product-ux-bootstrap.mjs', import.meta.url), 'utf8')
+const recorder = readFileSync(new URL('./record-companion-product-ux-smoke-state.ps1', import.meta.url), 'utf8')
+const processFilterScripts = [
+  'record-companion-product-ux-smoke-state.ps1',
+  'set-companion-product-ux-smoke-model.ps1',
+  'start-companion-product-ux-smoke.ps1',
+  'stop-companion-product-ux-smoke.ps1',
+].map(name => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8'))
 
 test('fresh Companion UX smoke always archives isolated state and restores the baseline seed', () => {
   assert.match(audit, /expectedPrescription = '3 × 5–7'/)
@@ -57,4 +64,25 @@ test('Node wrapper handles empty streams and failures in the Windows PowerShell 
 
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
   assert.match(result.stdout, /stream and exit handling: PASS/)
+})
+
+test('managed sidecar filters use a case-insensitive Windows PowerShell 5.1-compatible API', () => {
+  for (const source of processFilterScripts) {
+    assert.doesNotMatch(source, /\.Contains\([^\r\n]*\[StringComparison\]::/)
+    assert.match(source, /\.IndexOf\([^\r\n]*\[StringComparison\]::OrdinalIgnoreCase\) -ge 0/)
+  }
+
+  const script = new URL('./companion-smoke-process-filter.test.ps1', import.meta.url)
+  const result = spawnSync('powershell.exe', [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    decodeURIComponent(script.pathname).replace(/^\/(.:)/, '$1'),
+  ], { encoding: 'utf8' })
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.match(result.stdout, /process filter compatibility: PASS/)
+  assert.match(recorder, /if \(\$decoded -is \[Array\]\) \{ \$existing = @\(/)
+  assert.match(recorder, /ConvertTo-Json -InputObject @\(\$existing \+ \[pscustomobject\]\$record\)/)
 })
