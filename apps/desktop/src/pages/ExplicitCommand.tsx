@@ -5,6 +5,10 @@ import { PageHeader } from '../components/PageHeader'
 import { observeCommandReaction } from '../services/companionReactions'
 import { managedCompanionModel } from '../services/localCompanionModel'
 
+const commandActionLabels = {
+  CHANGE_TEMPLATE_REP_RANGE: 'Zmiana zakresu powtórzeń',
+} as const
+
 export function ExplicitCommand() {
   const { data, trackingCommands, lastTrackingCommandResult } = useApp()
   const gateway = useRef(trackingCommands); gateway.current = trackingCommands
@@ -57,7 +61,7 @@ export function ExplicitCommand() {
     {result?.status === 'INVALID' && <p role="alert">Nie udało się jednoznacznie i bezpiecznie przygotować zmiany. Sprawdź nazwę ćwiczenia i podaj pełny zakres powtórzeń.</p>}
     {result?.status === 'AMBIGUOUS' && <section><h2>Niejednoznaczny cel — wybierz dokładny wiersz</h2>{result.candidates.map((item, index) => <button type="button" key={item.reference} className="button button--ghost" onClick={() => setResult(session.resolve(item.reference, data))}>{item.templateName} · {item.exerciseName} · {item.prescription} · kandydat {index + 1}</button>)}</section>}
     {result?.status === 'PREVIEWED' && <section className="human-coach-item">
-      <h2>CHANGE_TEMPLATE_REP_RANGE</h2><h3>{result.templateName} · {result.exerciseName}</h3>
+      <h2>{commandActionLabels[result.plan.action]}</h2><h3>{result.templateName} · {result.exerciseName}</h3>
       <p>{result.plan.beforePrescription} → {result.plan.afterPrescription}</p>
       <details><summary>Tożsamość techniczna celu</summary><small>Szablon: {result.plan.templateId} · Wiersz: {result.plan.templateExerciseId} · Ćwiczenie: {result.plan.exerciseId}</small></details>
       <p>Historia i tożsamość ćwiczenia pozostają bez zmian. Zmiana stanu szablonu unieważni ten podgląd.</p>

@@ -10,7 +10,7 @@ import {
 const turn = {
   question: 'Ile treningów wykonałem?',
   answer: 'W zapisanych danych są 3 treningi.',
-  evidence: [{ label: 'Treningi z ostatnich 30 dni', text: 'Ostatnie 30 dni: zapisano 3 treningi.' }],
+  evidence: [{ label: 'Treningi z ostatnich 30 dni', text: 'Ostatnie 30 dni — treningi: 3.' }],
 }
 
 test('application-session owner preserves transcript across repeated route changes', () => {

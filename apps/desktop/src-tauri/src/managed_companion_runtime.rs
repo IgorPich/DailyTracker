@@ -331,7 +331,7 @@ mod tests {
         assert_eq!(lifecycle.process.as_ref().unwrap().child.id(), first.0, "ready runtime must not spawn a duplicate sidecar");
 
         let process = lifecycle.process.as_ref().unwrap();
-        let fact = "Ostatnie 30 dni: zapisano 3 treningi; 3 ma zapisany czas; łącznie 135 min.";
+        let fact = "Ostatnie 30 dni — treningi: 3; z zapisanym czasem: 3; łącznie: 135 min.";
         let prompt = format!("<|system|>\n[greekgod-companion-v1] [greekgod-dialogue-v2] Jesteś modułem odpowiedzi tylko do odczytu. Odpowiedz krótko po polsku na pytanie, używając wartości z evidence. Zwróć wyłącznie JSON.<|end|>\n<|user|>\n{{\"kind\":\"COMPANION_READ_ONLY\",\"input\":{{\"kind\":\"USER_DIALOGUE\",\"text\":\"Ile treningów wykonałem w ostatnich 30 dniach?\"}},\"evidence\":[{{\"id\":\"evidence-1\",\"text\":\"{fact}\"}}],\"mutationLike\":false}}<|end|>\n<|assistant|>\n");
         let body = json!({"prompt":prompt,"n_predict":512,"temperature":0,"seed":42,"top_k":40,"top_p":0.9,"min_p":0.1,"repeat_last_n":64,"repeat_penalty":1,"presence_penalty":0,"frequency_penalty":0,"stop":["<|system|>","<|user|>","<|end|>","<|assistant|>"],"json_schema":{
             "type":"object","additionalProperties":false,"required":["message","evidenceUses","mutationStatus"],"properties":{

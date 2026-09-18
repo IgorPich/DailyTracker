@@ -55,6 +55,18 @@ test('product context exposes only selected deterministic facts and friendly lab
   assert.deepEqual(general.evidence, [])
 })
 
+test('workout evidence keeps deterministic counts and duration with number-neutral Polish copy', async () => {
+  const workout = (id: string, date: string, duration: number) => ({ id, date, duration,
+    templateId: 'synthetic-template', templateCode: 'S', templateName: 'Syntetyczny', exercises: [] })
+  const data = { version: 8, dailyEntries: [], templates: [], exerciseLibrary: [], coachNotes: {}, workouts: [
+    workout('workout-1', '2026-09-01', 30), workout('workout-2', '2026-09-08', 40), workout('workout-3', '2026-09-17', 50),
+  ], settings: { language: 'pl', theme: 'dark', trendThresholds: { lossBelow: -0.1, stableUpper: 0.1, slowGainUpper: 0.3 } } } as unknown as AppData
+  const sources = { readHumanCoach: async () => { throw new Error('not requested') }, readMemory: async () => { throw new Error('not requested') } }
+  const context = await buildCompanionProductContext('Ile czasu trenowałem?', data, sources, '2026-09-17', '2026-09-17T10:00:00.000Z')
+  assert.deepEqual(context.evidence, [{ id: 'evidence-1', text: 'Ostatnie 30 dni — treningi: 3; z zapisanym czasem: 3; łącznie: 120 min.' }])
+  assert.deepEqual(resolveCompanionProductEvidence(context, ['evidence-1']), [{ label: 'Treningi z ostatnich 30 dni', text: context.evidence[0].text }])
+})
+
 test('normal navigation uses managed product model and gates development surfaces', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
   const page = readFileSync(new URL('../src/pages/Companion.tsx', import.meta.url), 'utf8')
@@ -76,6 +88,9 @@ test('normal navigation uses managed product model and gates development surface
   assert.match(command, /createExplicitCommandSession/)
   assert.match(command, /session\.prepare/)
   assert.match(command, /session\.execute\(session\.confirm\(result\)\)/)
+  assert.match(command, /CHANGE_TEMPLATE_REP_RANGE: 'Zmiana zakresu powtórzeń'/)
+  assert.match(command, /commandActionLabels\[result\.plan\.action\]/)
+  assert.doesNotMatch(command, /<h2>CHANGE_TEMPLATE_REP_RANGE<\/h2>/)
   assert.match(memory, /service\.accept\(accepted\)/)
   assert.match(memory, /service\.reject\(candidate\)/)
 })

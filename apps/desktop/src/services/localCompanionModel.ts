@@ -234,7 +234,7 @@ const validateTrainerOutput = (raw: unknown, source: string, allowed: ReadonlyMa
 const validateOutput = (request: unknown, raw: unknown): unknown => {
   const input = request as Record<string, unknown>
   if (input.kind === 'COMPANION_READ_ONLY') {
-    const output = closed(raw, ['message', 'evidenceUses', 'mutationStatus']); boundedText(output.message)
+    const output = closed(raw, ['message', 'evidenceUses', 'mutationStatus']); const modelMessage = boundedText(output.message)
     const evidence = dense(input.evidence, 100).map((item) => closed(item, ['id', 'text']))
     const byId = new Map(evidence.map((item) => [boundedText(item.id), boundedText(item.text)]))
     const uses = dense(output.evidenceUses, byId.size).map((item) => {
@@ -245,9 +245,10 @@ const validateOutput = (request: unknown, raw: unknown): unknown => {
     const dialogue = input.input as { kind?: unknown; text?: unknown }
     const isMutation = dialogue.kind === 'USER_DIALOGUE' && typeof dialogue.text === 'string' && mutationLike(dialogue.text)
     if (output.mutationStatus !== (isMutation ? 'NO_MUTATION_PERFORMED' : 'NOT_APPLICABLE')) fail()
-    const facts = uses.map((item) => item.fact).join(' ')
-    const boundary = isMutation ? 'Nie wykonano żadnej zmiany; zmiana stanu wymaga jawnego przepływu polecenia.' : ''
-    return { message: [facts, output.message, boundary].filter(Boolean).join(' '), evidenceIds: uses.map((item) => item.id) }
+    const message = isMutation
+      ? 'Nie mogę zmienić planu w zwykłej rozmowie. Użyj „Polecenie dla aplikacji”.'
+      : modelMessage
+    return { message, evidenceIds: uses.map((item) => item.id) }
   }
   if (input.kind === 'MEMORY_SUGGESTION') {
     const output = closed(raw, ['content', 'scope', 'expiresAt'])

@@ -63,7 +63,7 @@ export const buildCompanionProductContext = async (
   if (asksAnalytics(text)) {
     const summary = trainingTimeSummary({ snapshot: data, from: daysAgoIso(29, parseDate(today)), to: today, asOf: today })
     facts.push({ label: 'Treningi z ostatnich 30 dni',
-      text: `Ostatnie 30 dni: zapisano ${summary.recordedWorkoutCount} treningów; ${summary.workoutsWithDuration} ma zapisany czas; łącznie ${summary.totalDurationMinutes} min.` })
+      text: `Ostatnie 30 dni — treningi: ${summary.recordedWorkoutCount}; z zapisanym czasem: ${summary.workoutsWithDuration}; łącznie: ${summary.totalDurationMinutes} min.` })
   }
   if (asksCoach(text)) {
     const context = await sources.readHumanCoach()

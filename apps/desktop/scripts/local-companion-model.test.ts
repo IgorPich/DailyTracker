@@ -39,6 +39,24 @@ test('closed validators reject unknown fields, invalid refs and semantic ranges 
   }))
 })
 
+test('read-only evidence is referenced without duplicating its full fact in the answer', async () => {
+  const runtime = new StubRuntime('{"message":"W ostatnich 30 dniach wykonałeś 3 treningi.","evidenceUses":[{"id":"evidence-1","fact":"Treningi: 3; czas: 120 min."}],"mutationStatus":"NOT_APPLICABLE"}')
+  assert.deepEqual(await new RealLocalCompanionModel(runtime).propose({
+    kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: 'Ile trenowałem?' },
+    evidence: [{ id: 'evidence-1', text: 'Treningi: 3; czas: 120 min.' }],
+  }), { message: 'W ostatnich 30 dniach wykonałeś 3 treningi.', evidenceIds: ['evidence-1'] })
+})
+
+test('mutation-like read-only dialogue uses deterministic boundary copy without reframing user numbers', async () => {
+  const runtime = new StubRuntime('{"message":"Nie zmieniłem zakresu na 10–13.","evidenceUses":[],"mutationStatus":"NO_MUTATION_PERFORMED"}')
+  const result = await new RealLocalCompanionModel(runtime).propose({
+    kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: 'Zmień zakres powtórzeń na 10–15.' }, evidence: [],
+  })
+  assert.deepEqual(result, { message: 'Nie mogę zmienić planu w zwykłej rozmowie. Użyj „Polecenie dla aplikacji”.', evidenceIds: [] })
+  assert.doesNotMatch(JSON.stringify(result), /10[–-](?:13|15)/)
+  assert.equal(runtime.request?.promptVersion, 'greekgod-dialogue-v2')
+})
+
 test('adapter rejects multiple distinct exercise mentions for one Trainer proposal', async () => {
   const output = '[{"kind":"TASK","title":"Dwa jawne ćwiczenia","entityGroundings":[{"exerciseId":"a","mention":"Ćwiczenie A"},{"exerciseId":"b","mention":"Ćwiczenie B"}]}]'
   await assert.rejects(new RealLocalCompanionModel(new StubRuntime(output)).propose({ text: 'Zapisz Ćwiczenie A oraz Ćwiczenie B', exercises: [
