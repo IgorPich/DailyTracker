@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react'
 import greekGodIcon from './assets/formlog-logo.png'
+import { appendCompanionSessionTurn, clearCompanionSession, createCompanionSession } from './services/companionSession'
 
 const Dashboard = lazy(async () => ({ default: (await import('./pages/Dashboard')).Dashboard }))
 const Journal = lazy(async () => ({ default: (await import('./pages/Journal')).Journal }))
@@ -44,6 +45,7 @@ export default function App() {
   const [view, setView] = useState<View>('dashboard')
   const [menuOpen, setMenuOpen] = useState(false)
   const [requestedWorkoutId, setRequestedWorkoutId] = useState<string | undefined>()
+  const [companionSession, setCompanionSession] = useState(createCompanionSession)
 
   const navigate = (next: View) => {
     setRequestedWorkoutId(undefined)
@@ -105,7 +107,10 @@ export default function App() {
             {view === 'journal' && <Journal />}
             {view === 'report' && <CoachReport />}
             {view === 'human-coach' && <HumanCoach />}
-            {view === 'companion' && <Companion onOpenSettings={() => navigate('settings')} onOpenCommand={() => navigate('explicit-command')} />}
+            {view === 'companion' && <Companion turns={companionSession.turns}
+              onAppendTurn={(turn) => setCompanionSession((current) => appendCompanionSessionTurn(current, turn))}
+              onClearSession={() => setCompanionSession(clearCompanionSession())}
+              onOpenSettings={() => navigate('settings')} onOpenCommand={() => navigate('explicit-command')} />}
             {view === 'explicit-command' && <ExplicitCommand />}
             {import.meta.env.DEV && CompanionMemory && view === 'companion-memory' && <CompanionMemory />}
             {import.meta.env.DEV && CompanionReactions && view === 'companion-reactions' && <CompanionReactions />}

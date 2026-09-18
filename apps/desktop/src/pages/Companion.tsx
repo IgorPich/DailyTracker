@@ -8,9 +8,9 @@ import { useApp } from '../context/AppContext'
 import { buildCompanionProductContext, resolveCompanionProductEvidence } from '../services/companionProductContext'
 import { observeReadOnlyReaction, reactionSnapshot } from '../services/companionReactions'
 import { managedCompanionModel, managedCompanionRuntime, type LocalModelStatus } from '../services/localCompanionModel'
+import type { CompanionSessionTurn } from '../services/companionSession'
 
 type ProductAiState = 'NOT_INSTALLED' | 'LOADING' | 'READY' | 'UNAVAILABLE'
-interface DialogueTurn { question: string; answer: string; evidence: readonly { label: string; text: string }[] }
 const initialAvatar = (): AvatarPresentationState => ({ semanticReaction: 'NEUTRAL', token: null, startedAt: null, reducedMotion: false })
 
 export const companionProductAiState = (status?: LocalModelStatus): ProductAiState => {
@@ -27,11 +27,16 @@ const statusLabel: Record<ProductAiState, string> = {
   UNAVAILABLE: 'Tymczasowo niedostępny',
 }
 
-export function Companion({ onOpenSettings, onOpenCommand }: { onOpenSettings: () => void; onOpenCommand: () => void }) {
+export function Companion({ turns, onAppendTurn, onClearSession, onOpenSettings, onOpenCommand }: {
+  turns: readonly CompanionSessionTurn[]
+  onAppendTurn: (turn: CompanionSessionTurn) => void
+  onClearSession: () => void
+  onOpenSettings: () => void
+  onOpenCommand: () => void
+}) {
   const { data } = useApp()
   const dataRef = useRef(data); dataRef.current = data
   const [text, setText] = useState('')
-  const [turns, setTurns] = useState<DialogueTurn[]>([])
   const [status, setStatus] = useState<LocalModelStatus>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -68,7 +73,7 @@ export function Companion({ onOpenSettings, onOpenCommand }: { onOpenSettings: (
       observeReadOnlyReaction('USER_DIALOGUE', result.status)
       if (result.status !== 'MESSAGE') throw new Error('Invalid read-only response')
       const selected = resolveCompanionProductEvidence(context, result.response.evidenceIds)
-      setTurns((current) => [...current, { question, answer: result.response.message, evidence: selected }])
+      onAppendTurn({ question, answer: result.response.message, evidence: selected })
       completed = true
       setStatus({ state: 'READY_WARM', detail: 'Local model is loaded and ready' })
     } catch {
@@ -97,7 +102,7 @@ export function Companion({ onOpenSettings, onOpenCommand }: { onOpenSettings: (
       <button type="button" className="button button--ghost" onClick={onOpenSettings}>Otwórz ustawienia</button></section>}
 
     <section className="companion-dialogue" aria-label="Bieżąca rozmowa">
-      {!turns.length && <div className="companion-empty"><MessageCircle size={24} /><h2>Zapytaj o swoje zapisane dane lub kontekst trenera</h2><p>Historia tej rozmowy istnieje tylko do czasu opuszczenia ekranu.</p></div>}
+      {!turns.length && <div className="companion-empty"><MessageCircle size={24} /><h2>Zapytaj o swoje zapisane dane lub kontekst trenera</h2><p>Historia tej rozmowy jest przechowywana tylko do zamknięcia aplikacji.</p></div>}
       {turns.map((turn, index) => <article className="companion-turn" key={index}>
         <p className="companion-turn__user"><strong>Ty</strong>{turn.question}</p>
         <div className="companion-turn__answer"><strong>Companion</strong><p>{turn.answer}</p>
@@ -114,7 +119,7 @@ export function Companion({ onOpenSettings, onOpenCommand }: { onOpenSettings: (
         placeholder={productState === 'READY' ? 'Np. Ile czasu trenowałem w ostatnich 30 dniach?' : statusLabel[productState]}
         onChange={(event) => setText(event.target.value)} />
       <div><button type="submit" className="button button--primary" disabled={busy || productState !== 'READY' || !text.trim()}>{busy ? 'Companion odpowiada…' : 'Wyślij'}</button>
-        {!!turns.length && <button type="button" className="button button--ghost" disabled={busy} onClick={() => setTurns([])}>Wyczyść tę sesję</button>}</div>
+        {!!turns.length && <button type="button" className="button button--ghost" disabled={busy} onClick={onClearSession}>Wyczyść tę sesję</button>}</div>
     </form>
 
     <section className="card companion-command-boundary"><div><SlidersHorizontal size={20} /><div><h2>Polecenie dla aplikacji</h2>
