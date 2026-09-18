@@ -66,8 +66,12 @@ $stdoutPath = Join-Path $smokeRoot 'companion-ux-tauri.stdout.log'
 $stderrPath = Join-Path $smokeRoot 'companion-ux-tauri.stderr.log'
 $oldRuntimeRoot = $env:GREEKGOD_MANAGED_RUNTIME_ROOT
 $oldAuthority = $env:VITE_NATIVE_SQLITE_AUTHORITY
+$oldDevOptLevel = $env:CARGO_PROFILE_DEV_OPT_LEVEL
 $env:GREEKGOD_MANAGED_RUNTIME_ROOT = $assetRoot
 $env:VITE_NATIVE_SQLITE_AUTHORITY = '1'
+# The physical smoke uses a dev binary; optimize it so the pinned 2 GiB SHA-256
+# verification completes within the same bounded product timeout as release builds.
+$env:CARGO_PROFILE_DEV_OPT_LEVEL = '2'
 try {
   $startedAt = [DateTime]::UtcNow
   $controller = Start-Process -FilePath 'npm.cmd' -ArgumentList @(
@@ -77,6 +81,7 @@ try {
 } finally {
   $env:GREEKGOD_MANAGED_RUNTIME_ROOT = $oldRuntimeRoot
   $env:VITE_NATIVE_SQLITE_AUTHORITY = $oldAuthority
+  $env:CARGO_PROFILE_DEV_OPT_LEVEL = $oldDevOptLevel
 }
 
 $desktop = $null

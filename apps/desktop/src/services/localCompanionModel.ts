@@ -28,6 +28,23 @@ export interface LocalInferenceRuntime {
   complete(request: LocalInferenceRequest, signal?: AbortSignal): Promise<string>
 }
 
+const settleWithAbort = <T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> => {
+  if (!signal) return operation
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const finish = (callback: () => void) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      callback()
+    }
+    const onAbort = () => finish(() => reject(new Error('Local model operation aborted')))
+    if (signal.aborted) { onAbort(); return }
+    signal.addEventListener('abort', onAbort, { once: true })
+    operation.then((value) => finish(() => resolve(value)), (error) => finish(() => reject(error)))
+  })
+}
+
 const objectSchema = (required: string[], properties: Record<string, unknown>) => ({
   type: 'object', additionalProperties: false, required, properties,
 })
@@ -360,7 +377,8 @@ export class RealLocalCompanionModel<Request = unknown> implements CompanionMode
     const timeout = globalThis.setTimeout(() => controller.abort('local-model-timeout'), this.timeoutMs)
     try {
       const snapshot = sanitizeRequest(structuredClone(request))
-      return validateOutput(snapshot, strictJson(await this.runtime.complete(promptFor(snapshot), controller.signal)))
+      const completion = this.runtime.complete(promptFor(snapshot), controller.signal)
+      return validateOutput(snapshot, strictJson(await settleWithAbort(completion, controller.signal)))
     }
     catch (error) {
       if (controller.signal.reason === 'local-model-timeout') throw new Error('Local Companion timed out')
@@ -417,18 +435,25 @@ export interface ManagedModelStatus { state: ManagedModelState; runtimeVersion: 
 
 /** Product-intended transport. Native code owns the process, token, loopback port and verified assets. */
 export class ManagedLocalInferenceRuntime implements LocalInferenceRuntime {
-  async status(): Promise<LocalModelStatus> {
+  async status(signal?: AbortSignal): Promise<LocalModelStatus> {
     if (!(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return { state: 'RUNTIME_UNAVAILABLE', detail: 'GreekGod Managed Runtime requires the Desktop application.' }
+    const ownedController = signal ? undefined : new AbortController()
+    const effectiveSignal = signal ?? ownedController!.signal
+    const timeout = ownedController ? globalThis.setTimeout(() => ownedController.abort('managed-runtime-status-timeout'), 45_000) : undefined
     try {
       const { invoke } = await import('@tauri-apps/api/core')
-      const value = await invoke<ManagedModelStatus>('managed_companion_status')
+      const value = await settleWithAbort(invoke<ManagedModelStatus>('managed_companion_status'), effectiveSignal)
       return { state: value.state, runtimeVersion: value.runtimeVersion, detail: value.detail, assetRoot: value.assetRoot, installation: value.installation }
-    } catch (error) { return { state: 'RUNTIME_UNAVAILABLE', detail: error instanceof Error ? error.message : 'GreekGod Managed Runtime is unavailable.' } }
+    } catch (error) {
+      const detail = effectiveSignal.aborted ? 'GreekGod Managed Runtime status timed out.'
+        : error instanceof Error ? error.message : 'GreekGod Managed Runtime is unavailable.'
+      return { state: 'RUNTIME_UNAVAILABLE', detail }
+    } finally { if (timeout !== undefined) globalThis.clearTimeout(timeout) }
   }
-  async complete(request: LocalInferenceRequest): Promise<string> {
+  async complete(request: LocalInferenceRequest, signal?: AbortSignal): Promise<string> {
     if (!(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) throw new Error('GreekGod Managed Runtime requires the Desktop application')
     const { invoke } = await import('@tauri-apps/api/core')
-    return invoke<string>('managed_companion_infer', { requestData: request })
+    return settleWithAbort(invoke<string>('managed_companion_infer', { requestData: request }), signal)
   }
 }
 
