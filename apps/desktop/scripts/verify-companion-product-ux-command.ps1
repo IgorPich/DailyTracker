@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'invoke-smoke-node.ps1')
 
 $identifier = 'com.igorpich.formlog.schema8smoke'
 $appDataRoot = (Resolve-Path -LiteralPath $env:APPDATA).Path
@@ -17,9 +18,10 @@ if (-not (Get-Process -Id $session.desktopPid -ErrorAction SilentlyContinue)) {
   throw 'The isolated Companion UX Desktop is not running.'
 }
 
-$auditOutput = & node --no-warnings --experimental-strip-types --experimental-sqlite `
-  (Join-Path $PSScriptRoot 'audit-companion-product-ux-smoke.mjs') `
-  $smokeRoot $productionRoot '3 × 6–8' 2>&1
-if ($LASTEXITCODE -ne 0) { throw "Confirmed command persistence audit failed: $auditOutput" }
+$auditOutput = Invoke-SmokeNode -Label 'Confirmed command persistence audit' -Arguments @(
+  '--no-warnings', '--experimental-strip-types', '--experimental-sqlite',
+  (Join-Path $PSScriptRoot 'audit-companion-product-ux-smoke.mjs'),
+  $smokeRoot, $productionRoot, '3 × 6–8'
+)
 Write-Output $auditOutput
 Write-Output 'Confirmed command persisted exactly as 3 × 6–8 in isolated schema-8 storage.'

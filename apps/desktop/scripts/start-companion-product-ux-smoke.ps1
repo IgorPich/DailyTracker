@@ -1,5 +1,6 @@
 param([switch]$Reset, [switch]$StageAssets)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'invoke-smoke-node.ps1')
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $identifier = 'com.igorpich.formlog.schema8smoke'
@@ -46,20 +47,25 @@ if (Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $deskto
 if ($StageAssets) { & (Join-Path $PSScriptRoot 'prepare-companion-product-ux-smoke-assets.ps1') -Stage | Out-Null }
 else { & (Join-Path $PSScriptRoot 'prepare-companion-product-ux-smoke-assets.ps1') | Out-Null }
 
-if ($Reset -and (Test-Path -LiteralPath $smokeRoot)) {
+if (Test-Path -LiteralPath $smokeRoot) {
   $existingRoot = (Resolve-Path -LiteralPath $smokeRoot).Path
   if ($existingRoot -ne $resolvedSmoke) { throw "Refusing to archive unexpected path: $existingRoot" }
+  if (-not (Test-Path -LiteralPath $fixturePath -PathType Leaf)) {
+    throw 'Existing isolated AppData has no Companion UX synthetic marker; refusing automatic reset.'
+  }
+  $existingFixture = Get-Content -LiteralPath $fixturePath -Raw | ConvertFrom-Json
+  if ($existingFixture.syntheticOnly -ne $true) { throw 'Existing isolated AppData is not marked synthetic; refusing automatic reset.' }
   $archivePath = "$existingRoot.previous-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff'))"
   if ((Split-Path -Parent $archivePath) -ne $appDataRoot) { throw 'Unsafe smoke archive destination.' }
   Move-Item -LiteralPath $existingRoot -Destination $archivePath
   Write-Output "Preserved previous isolated smoke data at $archivePath"
 }
-if (-not (Test-Path -LiteralPath $smokeRoot)) {
-  & node --no-warnings --experimental-strip-types (Join-Path $PSScriptRoot 'seed-companion-product-ux-smoke.mjs') $smokeRoot $productionRoot
-  if ($LASTEXITCODE -ne 0) { throw 'Synthetic Companion UX seed failed.' }
-} elseif (-not (Test-Path -LiteralPath $fixturePath -PathType Leaf)) {
-  throw 'Existing test AppData is not a Companion UX synthetic fixture. Use -Reset to preserve/archive it.'
-}
+$seedOutput = Invoke-SmokeNode -Label 'Synthetic Companion UX seed' -Arguments @(
+  '--no-warnings', '--experimental-strip-types',
+  (Join-Path $PSScriptRoot 'seed-companion-product-ux-smoke.mjs'), $smokeRoot, $productionRoot
+)
+if ($seedOutput) { Write-Output $seedOutput }
+if (-not (Test-Path -LiteralPath $fixturePath -PathType Leaf)) { throw 'Synthetic Companion UX seed did not create its fixture marker.' }
 ConvertTo-Json -InputObject @(Get-ProductionSnapshot) -Depth 4 | Set-Content -LiteralPath $productionSnapshotPath -Encoding UTF8
 
 $stdoutPath = Join-Path $smokeRoot 'companion-ux-tauri.stdout.log'
@@ -100,8 +106,15 @@ try {
     if ([DateTime]::UtcNow -ge $deadline) { throw 'Timed out waiting for isolated SQLite bootstrap.' }
     Start-Sleep -Milliseconds 250
   }
-  $auditOutput = & node --no-warnings --experimental-strip-types --experimental-sqlite (Join-Path $PSScriptRoot 'audit-companion-product-ux-smoke.mjs') $smokeRoot $productionRoot 2>&1
-  if ($LASTEXITCODE -ne 0) { throw "Synthetic smoke state audit failed: $auditOutput" }
+  $bootstrapOutput = Invoke-SmokeNode -Label 'Isolated SQLite bootstrap readiness' -Arguments @(
+    '--no-warnings', '--experimental-sqlite',
+    (Join-Path $PSScriptRoot 'wait-companion-product-ux-bootstrap.mjs'), $smokeRoot, $productionRoot, '60000'
+  )
+  if ($bootstrapOutput) { Write-Output $bootstrapOutput }
+  $auditOutput = Invoke-SmokeNode -Label 'Synthetic smoke state audit' -Arguments @(
+    '--no-warnings', '--experimental-strip-types', '--experimental-sqlite',
+    (Join-Path $PSScriptRoot 'audit-companion-product-ux-smoke.mjs'), $smokeRoot, $productionRoot
+  )
   $managed = @(Get-CimInstance Win32_Process -Filter "name='llama-server.exe'" | Where-Object {
     $_.CommandLine -and $_.CommandLine.Contains($assetRoot, [StringComparison]::OrdinalIgnoreCase)
   })

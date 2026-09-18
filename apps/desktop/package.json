@@ -16,7 +16,7 @@
     "test:weight-window": "node scripts/weight-window.test.mjs && node scripts/journal.test.mjs",
     "test:human-coach": "node --experimental-strip-types --test scripts/human-coach-storage.test.ts scripts/coach-proposal-review.test.ts",
     "test:companion-memory": "node --experimental-strip-types --test scripts/companion-memory-storage.test.ts",
-    "test:companion-reactions": "node --experimental-strip-types --test scripts/companion-reactions.test.ts scripts/companion-product-ux.test.ts scripts/companion-session.test.ts scripts/local-companion-model.test.ts && node scripts/managed-runtime.test.mjs",
+    "test:companion-reactions": "node --experimental-strip-types --test scripts/companion-reactions.test.ts scripts/companion-product-ux.test.ts scripts/companion-session.test.ts scripts/local-companion-model.test.ts scripts/companion-smoke-harness.test.mjs && node scripts/managed-runtime.test.mjs",
     "test:human-coach:native": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
     "tauri:human-coach-smoke:build": "tauri build --debug --no-bundle --config src-tauri/tauri.human-coach-smoke.conf.json",
     "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
