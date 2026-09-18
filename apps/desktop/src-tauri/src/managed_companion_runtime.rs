@@ -327,6 +327,23 @@ mod tests {
         start_verified(&mut lifecycle, assets).expect("first start");
         let first = lifecycle.process.as_ref().map(|value| (value.child.id(), value.endpoint.clone(), value.token.clone())).unwrap();
         assert!(owned_ready(lifecycle.process.as_ref().unwrap()));
+        ensure_started_assets(&mut lifecycle, asset_paths(root.clone())).expect("ready runtime must be reused");
+        assert_eq!(lifecycle.process.as_ref().unwrap().child.id(), first.0, "ready runtime must not spawn a duplicate sidecar");
+
+        let process = lifecycle.process.as_ref().unwrap();
+        let fact = "Ostatnie 30 dni: zapisano 3 treningi; 3 ma zapisany czas; łącznie 135 min.";
+        let prompt = format!("<|system|>\n[greekgod-companion-v1] [greekgod-dialogue-v2] Jesteś modułem odpowiedzi tylko do odczytu. Odpowiedz krótko po polsku na pytanie, używając wartości z evidence. Zwróć wyłącznie JSON.<|end|>\n<|user|>\n{{\"kind\":\"COMPANION_READ_ONLY\",\"input\":{{\"kind\":\"USER_DIALOGUE\",\"text\":\"Ile treningów wykonałem w ostatnich 30 dniach?\"}},\"evidence\":[{{\"id\":\"evidence-1\",\"text\":\"{fact}\"}}],\"mutationLike\":false}}<|end|>\n<|assistant|>\n");
+        let body = json!({"prompt":prompt,"n_predict":512,"temperature":0,"seed":42,"top_k":40,"top_p":0.9,"min_p":0.1,"repeat_last_n":64,"repeat_penalty":1,"presence_penalty":0,"frequency_penalty":0,"stop":["<|system|>","<|user|>","<|end|>","<|assistant|>"],"json_schema":{
+            "type":"object","additionalProperties":false,"required":["message","evidenceUses","mutationStatus"],"properties":{
+                "message":{"type":"string"},"evidenceUses":{"type":"array","minItems":1,"maxItems":1,"items":{"type":"object","additionalProperties":false,"required":["id","fact"],"properties":{"id":{"const":"evidence-1"},"fact":{"const":fact}}}},"mutationStatus":{"const":"NOT_APPLICABLE"}
+            }
+        }});
+        let value = request(&process.endpoint, &process.token, "/completion", Some(body)).expect("cold synthetic inference must complete");
+        let content = value.get("content").and_then(Value::as_str).expect("cold synthetic inference content");
+        let parsed: Value = serde_json::from_str(content).expect("cold synthetic inference must return JSON");
+        assert_eq!(parsed["evidenceUses"][0]["id"], "evidence-1");
+        assert_eq!(parsed["evidenceUses"][0]["fact"], fact);
+        assert_eq!(parsed["mutationStatus"], "NOT_APPLICABLE");
 
         let state = ManagedRuntimeState::with_idle_timeout(Duration::from_millis(100));
         { let (lock, _) = &*state.shared; let mut slot = lock.lock().unwrap(); slot.process = lifecycle.process.take(); slot.phase = LifecyclePhase::Warm; slot.generation = 1; slot.has_run = true; }

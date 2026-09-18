@@ -161,3 +161,40 @@ test('pending inference can be cancelled explicitly and fails closed', async () 
   model.cancelPending()
   await assert.rejects(pending, /cancelled/)
 })
+
+test('inference timeout settles even when the runtime ignores AbortSignal', async () => {
+  const runtime: LocalInferenceRuntime = {
+    async status() { return { state: 'READY', detail: 'synthetic' } },
+    complete() { return new Promise<string>(() => undefined) },
+  }
+  const startedAt = Date.now()
+  await assert.rejects(
+    new RealLocalCompanionModel(runtime, 20).propose({ kind: 'MEMORY_SUGGESTION', allowedStyles: ['SHORT', 'DETAILED'] }),
+    /timed out/,
+  )
+  assert.ok(Date.now() - startedAt < 1_000, 'ignored AbortSignal must not leave product UX pending')
+})
+
+test('late completion after timeout cannot become success and a later retry can recover', async () => {
+  let finishLate: ((value: string) => void) | undefined
+  let calls = 0
+  const valid = '{"message":"Odpowiedź po ponowieniu.","evidenceUses":[],"mutationStatus":"NOT_APPLICABLE"}'
+  const runtime: LocalInferenceRuntime = {
+    async status() { return { state: 'READY', detail: 'synthetic' } },
+    complete() {
+      calls += 1
+      if (calls === 1) return new Promise<string>((resolve) => { finishLate = resolve })
+      return Promise.resolve(valid)
+    },
+  }
+  const model = new RealLocalCompanionModel(runtime, 20)
+  const request = { kind: 'COMPANION_READ_ONLY', input: { kind: 'USER_DIALOGUE', text: 'Pytanie' }, evidence: [] }
+  const first = model.propose(request)
+  let falseSuccess = false
+  void first.then(() => { falseSuccess = true }, () => undefined)
+  await assert.rejects(first, /timed out/)
+  finishLate?.(valid)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(falseSuccess, false)
+  assert.deepEqual(await model.propose(request), { message: 'Odpowiedź po ponowieniu.', evidenceIds: [] })
+})

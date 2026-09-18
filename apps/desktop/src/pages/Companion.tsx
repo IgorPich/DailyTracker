@@ -60,6 +60,7 @@ export function Companion({ onOpenSettings, onOpenCommand }: { onOpenSettings: (
     if (busyRef.current || !question.trim() || productState !== 'READY') return
     busyRef.current = true; setBusy(true); setError(''); setText('')
     setStatus({ state: status?.state === 'READY_WARM' ? 'INFERENCE_ACTIVE' : 'STARTING', detail: 'Local inference in progress' })
+    let completed = false
     try {
       const context = await buildCompanionProductContext(question, dataRef.current)
       const runtime = createReadOnlyCompanion({ readEvidence: async () => context.evidence }, managedCompanionModel)
@@ -68,11 +69,15 @@ export function Companion({ onOpenSettings, onOpenCommand }: { onOpenSettings: (
       if (result.status !== 'MESSAGE') throw new Error('Invalid read-only response')
       const selected = resolveCompanionProductEvidence(context, result.response.evidenceIds)
       setTurns((current) => [...current, { question, answer: result.response.message, evidence: selected }])
+      completed = true
+      setStatus({ state: 'READY_WARM', detail: 'Local model is loaded and ready' })
     } catch {
       observeReadOnlyReaction('USER_DIALOGUE', 'INVALID')
       setError('Companion nie może teraz bezpiecznie odpowiedzieć. Dane treningowe nie zostały zmienione.')
+      setStatus({ state: 'INFERENCE_FAILED', detail: 'Local inference failed safely' })
     } finally {
-      busyRef.current = false; setBusy(false); await refreshStatus()
+      busyRef.current = false; setBusy(false)
+      if (completed) void refreshStatus()
     }
   }
 
