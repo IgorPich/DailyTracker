@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
@@ -37,5 +38,23 @@ test('Node wrapper captures both streams and keeps exit and stderr failures fata
   assert.match(invoke, /failed \(exit code \$\(\$process\.ExitCode\)\)/)
   assert.match(invoke, /STDOUT:/)
   assert.match(invoke, /STDERR:/)
+  assert.doesNotMatch(invoke, /\.ArgumentList\.Add/)
+  assert.match(invoke, /\$startInfo\.Arguments/)
+  assert.match(invoke, /\$null -eq \$stdoutResult/)
+  assert.match(invoke, /\$null -eq \$stderrResult/)
   assert.doesNotMatch(start, /2>&1/)
+})
+
+test('Node wrapper handles empty streams and failures in the Windows PowerShell launcher host', () => {
+  const script = new URL('./invoke-smoke-node.test.ps1', import.meta.url)
+  const result = spawnSync('powershell.exe', [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    decodeURIComponent(script.pathname).replace(/^\/(.:)/, '$1'),
+  ], { encoding: 'utf8' })
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.match(result.stdout, /stream and exit handling: PASS/)
 })
