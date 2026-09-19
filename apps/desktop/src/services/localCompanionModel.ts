@@ -389,47 +389,6 @@ export class RealLocalCompanionModel<Request = unknown> implements CompanionMode
   }
 }
 
-type OllamaTags = { models?: Array<{ name?: string; digest?: string }> }
-const fetchJson = async <T>(url: string, init: RequestInit, signal?: AbortSignal): Promise<T> => {
-  const response = await fetch(url, { ...init, signal })
-  if (!response.ok) throw new Error(`Local runtime HTTP ${response.status}`)
-  return response.json() as Promise<T>
-}
-
-/** Optional developer/benchmark transport. It never installs, pulls, updates or starts Ollama. */
-export class OllamaDevelopmentRuntime implements LocalInferenceRuntime {
-  private readonly endpoint = 'http://127.0.0.1:11434'
-  async status(signal?: AbortSignal): Promise<LocalModelStatus> {
-    try {
-      const [version, tags] = await Promise.all([
-        fetchJson<{ version?: string }>(`${this.endpoint}/api/version`, {}, signal),
-        fetchJson<OllamaTags>(`${this.endpoint}/api/tags`, {}, signal),
-      ])
-      const model = tags.models?.find((item) => item.name === LOCAL_MODEL.developmentLocator)
-      if (!model) return { state: 'MODEL_MISSING', runtimeVersion: version.version, detail: 'Model nie jest zainstalowany. GreekGod niczego nie pobierze automatycznie.' }
-      if (model.digest !== LOCAL_MODEL.manifestSha256) return { state: 'CHECKSUM_MISMATCH', runtimeVersion: version.version, detail: 'Wersja lub suma modelu nie odpowiada zatwierdzonemu zasobowi.' }
-      return { state: 'READY', runtimeVersion: version.version, detail: 'Opcjonalny lokalny runtime deweloperski jest gotowy.' }
-    } catch { return { state: 'RUNTIME_UNAVAILABLE', detail: 'Lokalny runtime jest niedostępny. Pozostałe funkcje aplikacji działają normalnie.' } }
-  }
-  async complete(request: LocalInferenceRequest, signal?: AbortSignal): Promise<string> {
-    const status = await this.status(signal)
-    if (status.state !== 'READY') throw new Error(status.detail)
-    const result = await fetchJson<{ message?: { content?: string } }>(`${this.endpoint}/api/chat`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
-        model: LOCAL_MODEL.developmentLocator, stream: false, format: request.jsonSchema,
-        options: { temperature: 0, seed: 42, num_ctx: 4096, num_predict: 512, top_k: 40, top_p: 0.9,
-          min_p: 0.1, repeat_last_n: 64, repeat_penalty: 1, presence_penalty: 0, frequency_penalty: 0 },
-        messages: [{ role: 'system', content: `[greekgod-companion-v1] [${request.promptVersion}] ${request.system}` }, { role: 'user', content: request.input }],
-      }),
-    }, signal)
-    if (typeof result.message?.content !== 'string') throw new Error('Incomplete local model response')
-    return result.message.content
-  }
-}
-
-export const localCompanionRuntime = new OllamaDevelopmentRuntime()
-export const localCompanionModel = new RealLocalCompanionModel(localCompanionRuntime)
-
 export type ManagedModelState = 'MODEL_MISSING' | 'MODEL_INVALID' | 'RUNTIME_MISSING' | 'RUNTIME_INVALID'
   | 'READY_UNLOADED' | 'STARTING' | 'READY_WARM' | 'INFERENCE_ACTIVE' | 'IDLE_UNLOADED' | 'STOPPING' | 'FAILED'
 export interface ManagedModelStatus { state: ManagedModelState; runtimeVersion: string; detail: string; endpoint?: string; assetRoot?: string; installation: 'MANUAL_ONLY' }

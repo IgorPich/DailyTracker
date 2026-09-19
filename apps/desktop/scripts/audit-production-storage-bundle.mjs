@@ -15,7 +15,8 @@ const collectFiles = async (directory) => {
   return nested.flat()
 }
 
-const sourceFiles = (await collectFiles(distRoot))
+const allFiles = await collectFiles(distRoot)
+const sourceFiles = allFiles
   .filter((path) => ['.js', '.html'].includes(extname(path)))
 const productionBundle = (await Promise.all(sourceFiles.map((path) => readFile(path, 'utf8')))).join('\n')
 
@@ -36,8 +37,23 @@ for (const forbidden of [
   'native_shadow_backup_before_import',
   'native_sqlite_smoke_exit',
   'SQLITE_WEBVIEW_SMOKE_PASS',
+  'FakeCompanionModel',
+  'Fake — wyłącznie testy',
+  'Ollama Development Runtime',
+  'http://127.0.0.1:11434',
+  'Pamięć — inspekcja',
+  'Reakcje — diagnostyka',
+  'schema8-physical-smoke',
+  'companion-product-ux-smoke',
+  'api.openai.com',
+  'api.anthropic.com',
 ]) {
   assert.doesNotMatch(productionBundle, new RegExp(forbidden), `production bundle contains ${forbidden}`)
 }
 
-console.log('PASS production storage bundle: authoritative SQLite composition is present and isolated')
+for (const path of allFiles) {
+  assert.doesNotMatch(path, /\.gguf$|llama-server(?:\.exe)?$|ggml(?:-[^\\/]+)?\.dll$|physical-smoke/i,
+    `production web bundle contains an external runtime/model/smoke artifact: ${path}`)
+}
+
+console.log('PASS production bundle: authoritative SQLite composition; no dev provider, smoke, cloud, model or runtime artifacts')

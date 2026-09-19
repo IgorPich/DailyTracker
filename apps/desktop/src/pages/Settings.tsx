@@ -26,7 +26,7 @@ import { appDataStore } from '../services/appDataStore'
 import type { Phase } from '../types'
 import { phaseLabel } from '../utils/labels'
 import { exportCsv, exportJson, normalizeData } from '../utils/storage'
-import { LOCAL_MODEL, localCompanionRuntime, managedCompanionModel, managedCompanionRuntime, type LocalModelStatus } from '../services/localCompanionModel'
+import { LOCAL_MODEL, managedCompanionModel, managedCompanionRuntime, type LocalModelStatus } from '../services/localCompanionModel'
 
 const phases: Phase[] = ['Maintenance', 'Lean Gain', 'Mini Cut', 'Redukcja']
 
@@ -39,13 +39,11 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
   const [editingGym, setEditingGym] = useState<string | null>(null)
   const [gymNameDraft, setGymNameDraft] = useState('')
   const [aiStatus, setAiStatus] = useState<LocalModelStatus>()
-  const [ollamaStatus, setOllamaStatus] = useState<LocalModelStatus>()
   const [aiBusy, setAiBusy] = useState(false)
   const [showAiInstall, setShowAiInstall] = useState(false)
   const gymLocations = data.settings.gymLocations ?? []
   const refreshAiStatus = async () => {
-    const [managed, ollama] = await Promise.all([managedCompanionRuntime.status(), localCompanionRuntime.status()])
-    setAiStatus(managed); setOllamaStatus(ollama)
+    setAiStatus(await managedCompanionRuntime.status())
   }
   useEffect(() => { if (isDesktopApp()) void refreshAiStatus() }, [])
   const testAi = async () => {
@@ -212,7 +210,6 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
           <button type="button" className="button button--ghost" onClick={() => setShowAiInstall((value) => !value)}>Zainstaluj lokalne AI</button></div>
           {showAiInstall && <div className="message-banner"><div><strong>Instalacja ręczna — bez automatycznego pobierania</strong><p>Komponenty muszą pochodzić z zatwierdzonego pakietu GreekGod i trafić do zarządzanego katalogu użytkownika. Kanał dystrybucji nie został jeszcze zatwierdzony, dlatego aplikacja nie pobiera ani nie zastępuje plików.</p><p>Model działa wyłącznie na tym komputerze. Podczas użycia może chwilowo zajmować kilka GB RAM/VRAM; po 5 minutach bezczynności jest zwalniany. Dziennik, treningi i analityka działają bez AI.</p>{aiStatus?.assetRoot && <small>Katalog: {aiStatus.assetRoot}<br />Runtime: runtime\llama.cpp-b10760<br />Model: models\{LOCAL_MODEL.expectedFileName}<br />Manifesty: manifests<br />Licencje: licenses</small>}</div></div>}
           <small>Brak cichej instalacji, aktualizacji lub fallbacku. Sidecar nasłuchuje wyłącznie na dynamicznym porcie 127.0.0.1.</small>
-          <details><summary>Pozostałe providery</summary><p>Fake — wyłącznie testy i demonstracje deweloperskie.</p><p>Ollama Development Runtime — {ollamaStatus ? `${ollamaStatus.state}: ${ollamaStatus.detail}` : 'status nieodczytany'} Nie jest wymaganiem produktu ani automatycznym fallbackiem.</p></details>
         </section>
 
         <section className="card settings-section">

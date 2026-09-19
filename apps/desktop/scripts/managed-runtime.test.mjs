@@ -24,7 +24,11 @@ assert.doesNotMatch(rust, /\/v1\/chat\/completions|response_format/)
 assert.match(rust, /\[greekgod-companion-v1\]/)
 for (const stop of ['<|system|>', '<|user|>', '<|end|>', '<|assistant|>']) assert.match(rust, new RegExp(stop.replaceAll('|', '\\|')))
 assert.match(model, /jsonSchema/) // provider-neutral request carries that schema to the runtime
-for (const setting of ['seed: 42', 'num_ctx: 4096', 'num_predict: 512', 'top_k: 40', 'top_p: 0.9', 'min_p: 0.1', 'repeat_last_n: 64', 'repeat_penalty: 1', 'presence_penalty: 0', 'frequency_penalty: 0']) assert.match(model, new RegExp(setting.replace('.', '\\.')))
+assert.match(rust, /--ctx-size", "4096"/)
+for (const setting of ['"seed":42', '"n_predict":512', '"temperature":0', '"top_k":40', '"top_p":0.9', '"min_p":0.1', '"repeat_last_n":64', '"repeat_penalty":1', '"presence_penalty":0', '"frequency_penalty":0']) {
+  assert.match(rust, new RegExp(setting.replace('.', '\\.')))
+}
+assert.doesNotMatch(model, /OllamaDevelopmentRuntime|127\.0\.0\.1:11434|\/api\/chat/)
 assert.doesNotMatch(acquire, /Phi|gguf|MODEL_SHA/i) // runtime acquisition never downloads a model
 assert.match(acquire, /b10760/)
 assert.match(acquire, /34dfb5aab953a1e69faf0fc185edda10ff08e515f5607f7b8cdda740b1ed88cb/)
