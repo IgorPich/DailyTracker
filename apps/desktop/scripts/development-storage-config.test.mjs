@@ -48,9 +48,9 @@ assert.equal(authorityLiveSmokeConfig.identifier, 'com.igorpich.formlog.authorit
 assert.equal(schema8PhysicalSmokeConfig.identifier, 'com.igorpich.formlog.schema8smoke')
 assert.equal(rehearsalConfig.identifier, 'com.igorpich.formlog.rehearsal')
 assert.equal(productionAuthorityConfig.identifier, 'com.igorpich.formlog')
-assert.equal(productionConfig.version, '3.0.2')
-assert.equal(rehearsalConfig.version, '3.0.2')
-assert.equal(productionAuthorityConfig.version, '3.0.2')
+assert.equal(productionConfig.version, '4.0.0-rc.1')
+assert.equal(rehearsalConfig.version, '4.0.0-rc.1')
+assert.equal(productionAuthorityConfig.version, '4.0.0-rc.1')
 assert.equal(
   productionConfig.build.beforeBuildCommand,
   productionAuthorityConfig.build.beforeBuildCommand,

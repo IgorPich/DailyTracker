@@ -1172,7 +1172,7 @@ dependencies = [
 
 [[package]]
 name = "greekgod-mobile"
-version = "3.0.2"
+version = "4.0.0-rc.1"
 dependencies = [
  "greekgod-mobile-platform",
  "greekgod-storage",
@@ -1213,7 +1213,7 @@ dependencies = [
 
 [[package]]
 name = "greekgod-sync"
-version = "3.0.1"
+version = "4.0.0-rc.1"
 dependencies = [
  "greekgod-storage",
  "serde",

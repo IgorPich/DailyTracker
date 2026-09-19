@@ -6,7 +6,15 @@ const gradle = await readFile(new URL('../src-tauri/gen/android/app/build.gradle
 const smokeGradle = await readFile(new URL('../src-tauri/gen/android/app/schema8-smoke.gradle', import.meta.url), 'utf8')
 const debugStrings = await readFile(new URL('../src-tauri/gen/android/app/src/debug/res/values/strings.xml', import.meta.url), 'utf8')
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+const tauriConfig = JSON.parse(await readFile(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'))
 const buildScript = await readFile(new URL('../scripts/build-schema8-smoke.mjs', import.meta.url), 'utf8')
+
+test('RC1 Android release metadata is explicit and keeps the production identifier', () => {
+  assert.equal(packageJson.version, '4.0.0-rc.1')
+  assert.equal(tauriConfig.version, '4.0.0-rc.1')
+  assert.equal(tauriConfig.identifier, 'com.igorpich.greekgod.mobile')
+  assert.equal(tauriConfig.bundle.android.versionCode, 3000003)
+})
 
 test('physical smoke APK cannot replace the stable Android package or look identical', () => {
   assert.match(gradle, /applicationId\s*=\s*"com\.igorpich\.greekgod\.mobile"/)
