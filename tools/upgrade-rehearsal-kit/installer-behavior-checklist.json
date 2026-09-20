@@ -1,0 +1,14 @@
+{
+  "formatVersion": 1,
+  "instructions": "Complete in the disposable environment. Do not include secrets or private data.",
+  "items": [
+    { "id": "stable-3.0.3-install-succeeds", "status": "PENDING", "evidence": "" },
+    { "id": "rc1-handles-existing-installation", "status": "PENDING", "evidence": "" },
+    { "id": "user-data-remains-intact", "status": "PENDING", "evidence": "" },
+    { "id": "installation-path-remains-coherent", "status": "PENDING", "evidence": "" },
+    { "id": "desktop-and-start-menu-shortcuts-coherent", "status": "PENDING", "evidence": "" },
+    { "id": "rc1-version-visible-correctly", "status": "PENDING", "evidence": "" },
+    { "id": "no-ai-runtime-or-model-installed", "status": "PENDING", "evidence": "" },
+    { "id": "no-dev-or-test-artifacts-installed", "status": "PENDING", "evidence": "" }
+  ]
+}

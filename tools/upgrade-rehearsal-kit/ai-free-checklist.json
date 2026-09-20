@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "instructions": "In the disposable environment only, replace PENDING with PASS or FAIL and add concise evidence. Do not include tokens, pairing material, or private data.",
+  "items": [
+    { "id": "journal-opens-edits-saves", "status": "PENDING", "evidence": "" },
+    { "id": "training-opens", "status": "PENDING", "evidence": "" },
+    { "id": "workout-save-edit-works", "status": "PENDING", "evidence": "" },
+    { "id": "program-builder-works", "status": "PENDING", "evidence": "" },
+    { "id": "progress-works", "status": "PENDING", "evidence": "" },
+    { "id": "analytics-works", "status": "PENDING", "evidence": "" },
+    { "id": "reports-work", "status": "PENDING", "evidence": "" },
+    { "id": "human-coach-works", "status": "PENDING", "evidence": "" },
+    { "id": "companion-shows-local-ai-unavailable", "status": "PENDING", "evidence": "" },
+    { "id": "settings-explains-missing-local-ai", "status": "PENDING", "evidence": "" },
+    { "id": "no-ollama-fallback", "status": "PENDING", "evidence": "" },
+    { "id": "no-cloud-fallback", "status": "PENDING", "evidence": "" },
+    { "id": "no-popup-or-error-loop", "status": "PENDING", "evidence": "" },
+    { "id": "representative-history-and-configuration-visible", "status": "PENDING", "evidence": "" }
+  ]
+}
