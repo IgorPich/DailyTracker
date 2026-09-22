@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "GreekGod Offline AI Pack Smoke",
+  "identifier": "com.igorpich.formlog.aipacksmoke",
+  "build": {
+    "beforeBuildCommand": "npm run build -- --mode schema8-physical-smoke"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "GreekGod Offline AI Pack Smoke — TEST DATA ONLY"
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

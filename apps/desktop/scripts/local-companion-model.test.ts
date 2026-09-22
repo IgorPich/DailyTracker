@@ -163,10 +163,10 @@ test('shared alias, multiple mentions and duplicate template rows produce NO_PRO
 
 test('asset identity is versioned and checksum-pinned', () => {
   assert.equal(LOCAL_MODEL.license, 'MIT')
-  assert.match(LOCAL_MODEL.manifestSha256, /^[a-f0-9]{64}$/)
-  assert.match(LOCAL_MODEL.modelFileSha256, /^[a-f0-9]{64}$/)
+  assert.equal(LOCAL_MODEL.modelFileSha256, '3913ce8d702ec0cb053c2c5238c4438596f2da99ecab56480e252f20580673db')
+  assert.equal(LOCAL_MODEL.approximateBytes, 2_176_177_152)
   assert.match(LOCAL_MODEL.expectedPath, /%LOCALAPPDATA%/)
-  assert.ok(LOCAL_MODEL.approximateBytes > 2_000_000_000)
+  assert.match(LOCAL_MODEL.expectedFileName, /2fe19245-Q4_0\.gguf$/)
 })
 
 test('pending inference can be cancelled explicitly and fails closed', async () => {

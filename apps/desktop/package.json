@@ -16,7 +16,9 @@
     "test:weight-window": "node scripts/weight-window.test.mjs && node scripts/journal.test.mjs",
     "test:human-coach": "node --experimental-strip-types --test scripts/human-coach-storage.test.ts scripts/coach-proposal-review.test.ts",
     "test:companion-memory": "node --experimental-strip-types --test scripts/companion-memory-storage.test.ts",
-    "test:companion-reactions": "node --experimental-strip-types --test scripts/companion-reactions.test.ts scripts/companion-product-ux.test.ts scripts/companion-session.test.ts scripts/local-companion-model.test.ts && node scripts/managed-runtime.test.mjs",
+    "test:companion-reactions": "node --experimental-strip-types --test scripts/companion-reactions.test.ts scripts/companion-product-ux.test.ts scripts/companion-session.test.ts scripts/local-companion-model.test.ts && node scripts/managed-runtime.test.mjs && node --test scripts/managed-runtime/ai-pack-tool.test.mjs",
+    "ai-pack:verify": "node scripts/managed-runtime/ai-pack-tool.mjs verify",
+    "ai-pack:build": "node scripts/managed-runtime/ai-pack-tool.mjs build",
     "test:human-coach:native": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
     "tauri:human-coach-smoke:build": "tauri build --debug --no-bundle --config src-tauri/tauri.human-coach-smoke.conf.json",
     "test:identity": "node --experimental-strip-types scripts/exercise-identity.test.ts",
@@ -33,6 +35,7 @@
     "tauri:authority-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-authority --config src-tauri/tauri.native-authority-smoke.conf.json",
     "tauri:authority-live-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-authority --config src-tauri/tauri.native-authority-live-smoke.conf.json",
     "tauri:schema8-physical-smoke:build": "node scripts/prepare-sync-service.mjs && tauri build --debug --no-bundle --features native-sqlite-authority --config src-tauri/tauri.schema8-physical-smoke.conf.json",
+    "tauri:ai-pack-smoke:build": "tauri build --debug --no-bundle --features native-sqlite-authority --config src-tauri/tauri.ai-pack-smoke.conf.json",
     "tauri:rehearsal:build": "tauri build --debug --no-bundle --features native-sqlite-production-authority --config src-tauri/tauri.rehearsal.conf.json",
     "tauri:production-authority:build": "npm run tauri:build",
     "tauri:build": "tauri build --features native-sqlite-production-authority"
