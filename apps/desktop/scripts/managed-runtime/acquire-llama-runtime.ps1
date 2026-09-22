@@ -18,7 +18,7 @@ if (!(Test-Path -LiteralPath $archive)) {
 if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $archiveSha256) { throw 'Pinned runtime archive checksum mismatch' }
 $license = Join-Path $downloads 'LICENSE-llama.cpp-b10760'
 if (!(Test-Path -LiteralPath $license)) { Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ggml-org/llama.cpp/$commit/LICENSE" -OutFile $license }
-if ((Get-FileHash -LiteralPath $license -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'e562a2ddfaf8280537795ac5ecd34e3012b6582a147ef69ba6a6a5c08c84757d') { throw 'Pinned llama.cpp license checksum mismatch' }
+if ((Get-FileHash -LiteralPath $license -Algorithm SHA256).Hash.ToLowerInvariant() -ne '94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d') { throw 'Pinned llama.cpp license checksum mismatch' }
 if (Test-Path -LiteralPath $runtime) { throw "Refusing to replace existing runtime: $runtime" }
 if (Test-Path -LiteralPath $staging) { throw "Refusing to replace existing staging directory: $staging" }
 New-Item -ItemType Directory -Force -Path $runtime | Out-Null

@@ -58,6 +58,8 @@ git -C <source> lfs fsck
   `34dfb5aab953a1e69faf0fc185edda10ff08e515f5607f7b8cdda740b1ed88cb`;
 - archive quantizer SHA-256
   `abde9c543104ba064354eab6acafb1f02fbe704cddb5f81591bcee42250bf372`;
+- pinned llama.cpp license raw-blob SHA-256
+  `94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d`;
 - archive reported build 10760 / commit `0f3a71be1`, compiled with Clang
   20.1.8 for Windows x86_64.
 
@@ -122,6 +124,10 @@ and run ordering were uncontrolled; no behavioral regression was observed.
 The pinned Microsoft source contains an MIT license plus `NOTICE.md` with the
 flash-attention BSD 3-Clause notice. Their authoritative text is retained under
 `legal/companion-model`. The pinned llama.cpp MIT text is retained there too.
+The audit found that the existing acquisition script's older expected llama.cpp
+license hash did not match the immutable b10760 commit. Direct retrieval and the
+Git blob both produced `94f29bbed...f1d010d`; the acquisition check was corrected
+to that authoritative value without changing runtime files or behavior.
 The existing runtime manifest and acquisition process continue to identify and
 retain the archive's exact `LICENSE-LLVM-OpenMP` (Apache-2.0 with LLVM
 exception). GreekGod's EULA remains `apps/desktop/src-tauri/LICENSE.txt`.
