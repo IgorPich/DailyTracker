@@ -1,7 +1,8 @@
 # Phi-3.5 GGUF provenance assessment
 
-Report only for final 4.0 planning. RC1 keeps the already approved model identity
-and checksum and neither downloads nor replaces any model.
+This planning assessment led to the official-source rebuild recorded in
+`phi-3.5-official-rebuild-qualification.md`. RC1 keeps the already approved
+model identity and checksum and neither downloads nor replaces any model.
 
 ## Recommendation
 
@@ -45,6 +46,8 @@ third-party GGUF's source lineage and packaging the correct notices.
 The reproducible conversion costs more validation and may produce bytes or model
 behavior different from the current asset, but it gives the cleanest auditable
 provenance: official source revision -> pinned tools -> recorded transformation
--> signed manifest. It is the recommended final-release strategy, subject to a
-separate product-owner approval and full requalification. It is not an RC1
-change.
+-> signed manifest. The strategy was executed on 2026-09-22: the rebuilt
+candidate has authoritative Microsoft source provenance and passed the unchanged
+corpus 27/27. It remains a qualified, unselected candidate; hosting,
+acquisition, packaging, and explicit production selection are separate release
+decisions. It is not an RC1 change.
