@@ -1,0 +1,3 @@
+# Distribution evidence is byte-addressed by the offline AI Pack contract.
+/legal/companion-model/* -text
+/apps/desktop/src-tauri/ai-pack/*.json -text

@@ -15,7 +15,7 @@ const initialAvatar = (): AvatarPresentationState => ({ semanticReaction: 'NEUTR
 
 export const companionProductAiState = (status?: LocalModelStatus): ProductAiState => {
   if (!status) return 'LOADING'
-  if (['RUNTIME_MISSING', 'RUNTIME_INVALID', 'MODEL_MISSING', 'MODEL_INVALID', 'CHECKSUM_MISMATCH'].includes(status.state)) return 'NOT_INSTALLED'
+  if (['RUNTIME_MISSING', 'RUNTIME_INVALID', 'MODEL_MISSING', 'MODEL_INVALID', 'MODEL_OUTDATED', 'PACK_MISSING', 'PACK_INCOMPATIBLE', 'PACK_CONTRACT_MISMATCH', 'ACTIVE_PACK_MISSING', 'ACTIVE_PACK_INVALID', 'LEGAL_INVALID', 'PROVENANCE_INVALID', 'CHECKSUM_MISMATCH'].includes(status.state)) return 'NOT_INSTALLED'
   if (['STARTING', 'INFERENCE_ACTIVE'].includes(status.state)) return 'LOADING'
   if (['READY_UNLOADED', 'READY_WARM', 'IDLE_UNLOADED', 'READY'].includes(status.state)) return 'READY'
   return 'UNAVAILABLE'

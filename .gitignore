@@ -2,6 +2,8 @@ node_modules/
 dist/
 .vite/
 .artifacts/
+GreekGod-AI-Pack-4.0/
+*.ai-pack-inventory.json
 *.local
 *.log
 *.tsbuildinfo

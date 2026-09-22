@@ -27,6 +27,7 @@ import type { Phase } from '../types'
 import { phaseLabel } from '../utils/labels'
 import { exportCsv, exportJson, normalizeData } from '../utils/storage'
 import { LOCAL_MODEL, managedCompanionModel, managedCompanionRuntime, type LocalModelStatus } from '../services/localCompanionModel'
+import { cancelOfflineAiPackImport, chooseAndInstallOfflineAiPack, type AiPackImportProgress } from '../services/offlineAiPack'
 
 const phases: Phase[] = ['Maintenance', 'Lean Gain', 'Mini Cut', 'Redukcja']
 
@@ -39,15 +40,17 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
   const [editingGym, setEditingGym] = useState<string | null>(null)
   const [gymNameDraft, setGymNameDraft] = useState('')
   const [aiStatus, setAiStatus] = useState<LocalModelStatus>()
-  const [aiBusy, setAiBusy] = useState(false)
-  const [showAiInstall, setShowAiInstall] = useState(false)
+  const [aiTesting, setAiTesting] = useState(false)
+  const [aiImporting, setAiImporting] = useState(false)
+  const [aiImportProgress, setAiImportProgress] = useState<AiPackImportProgress>()
+  const [aiImportMessage, setAiImportMessage] = useState<{ text: string; error?: boolean }>()
   const gymLocations = data.settings.gymLocations ?? []
   const refreshAiStatus = async () => {
     setAiStatus(await managedCompanionRuntime.status())
   }
   useEffect(() => { if (isDesktopApp()) void refreshAiStatus() }, [])
   const testAi = async () => {
-    setAiBusy(true)
+    setAiTesting(true)
     setAiStatus(aiStatus?.state === 'READY_WARM'
       ? { state: 'INFERENCE_ACTIVE', detail: 'Trwa lokalne wnioskowanie.' }
       : { state: 'STARTING', detail: 'Uruchamianie runtime i ładowanie modelu.' })
@@ -57,7 +60,25 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
       if (typeof value.message !== 'string' || !Array.isArray(value.evidenceIds) || value.evidenceIds.length) throw new Error('Nieprawidłowy wynik testu')
       await refreshAiStatus()
     } catch (error) { setAiStatus({ state: 'INFERENCE_FAILED', detail: error instanceof Error ? error.message : 'Test lokalny nie powiódł się.' }) }
-    finally { setAiBusy(false) }
+    finally { setAiTesting(false) }
+  }
+  const installAiPack = async () => {
+    setAiImporting(true); setAiImportMessage(undefined); setAiImportProgress(undefined)
+    try {
+      const result = await chooseAndInstallOfflineAiPack(setAiImportProgress)
+      if (!result) return
+      setAiImportMessage({ text: 'Pakiet AI został zweryfikowany i zainstalowany lokalnie.' })
+      setAiImporting(false)
+      await refreshAiStatus()
+    } catch (error) {
+      setAiImportMessage({ text: error instanceof Error ? error.message : String(error), error: true })
+      setAiImporting(false)
+      await refreshAiStatus()
+    } finally { setAiImporting(false) }
+  }
+  const cancelAiImport = async () => {
+    try { await cancelOfflineAiPackImport() }
+    catch (error) { setAiImportMessage({ text: error instanceof Error ? error.message : String(error), error: true }) }
   }
 
   const hasGymName = (name: string, except?: string) => gymLocations.some((item) => (
@@ -202,14 +223,15 @@ export function Settings({ onEditProgram, onEditJournal }: { onEditProgram: () =
         <section className="card settings-section companion-ai-settings">
           <div className="settings-section__heading"><span className="settings-icon"><Cpu size={19} /></span><div><h2>Companion AI</h2><p>Opcjonalne wnioskowanie lokalne. Brak modelu nie blokuje dziennika ani treningów.</p></div></div>
           <p><strong>{LOCAL_MODEL.version}</strong> · {LOCAL_MODEL.license} · suma pliku {LOCAL_MODEL.modelFileSha256.slice(0, 12)}…</p>
-          <p><strong>GreekGod Managed Runtime</strong> · opcjonalnie · około 2,3 GB na dysku</p>
+          <p><strong>GreekGod Offline AI Pack 4.0</strong> · opcjonalnie · około 2,3 GB na dysku</p>
           <p role="status">{!isDesktopApp() ? 'Status dostępny tylko w aplikacji Desktop.' : aiStatus ? `${aiStatus.state}: ${aiStatus.detail}` : 'Sprawdzanie lokalnego runtime…'}</p>
           {aiStatus?.runtimeVersion && <small>Runtime: {aiStatus.runtimeVersion}</small>}
-          <div><button type="button" className="button button--secondary" disabled={!isDesktopApp() || aiBusy} onClick={() => void refreshAiStatus()}>Odśwież status</button>
-          <button type="button" className="button button--ghost" disabled={!isDesktopApp() || aiBusy || !['READY_UNLOADED', 'READY_WARM', 'IDLE_UNLOADED'].includes(aiStatus?.state ?? '')} onClick={() => void testAi()}>{aiBusy ? 'Testowanie…' : 'Testuj lokalnie'}</button>
-          <button type="button" className="button button--ghost" onClick={() => setShowAiInstall((value) => !value)}>Zainstaluj lokalne AI</button></div>
-          {showAiInstall && <div className="message-banner"><div><strong>Instalacja ręczna — bez automatycznego pobierania</strong><p>Komponenty muszą pochodzić z zatwierdzonego pakietu GreekGod i trafić do zarządzanego katalogu użytkownika. Kanał dystrybucji nie został jeszcze zatwierdzony, dlatego aplikacja nie pobiera ani nie zastępuje plików.</p><p>Model działa wyłącznie na tym komputerze. Podczas użycia może chwilowo zajmować kilka GB RAM/VRAM; po 5 minutach bezczynności jest zwalniany. Dziennik, treningi i analityka działają bez AI.</p>{aiStatus?.assetRoot && <small>Katalog: {aiStatus.assetRoot}<br />Runtime: runtime\llama.cpp-b10760<br />Model: models\{LOCAL_MODEL.expectedFileName}<br />Manifesty: manifests<br />Licencje: licenses</small>}</div></div>}
-          <small>Brak cichej instalacji, aktualizacji lub fallbacku. Sidecar nasłuchuje wyłącznie na dynamicznym porcie 127.0.0.1.</small>
+          <div><button type="button" className="button button--secondary" disabled={!isDesktopApp() || aiTesting || aiImporting} onClick={() => void refreshAiStatus()}>Odśwież status</button>
+          <button type="button" className="button button--ghost" disabled={!isDesktopApp() || aiTesting || aiImporting || !['READY_UNLOADED', 'READY_WARM', 'IDLE_UNLOADED'].includes(aiStatus?.state ?? '')} onClick={() => void testAi()}>{aiTesting ? 'Testowanie…' : 'Testuj lokalnie'}</button>
+          <button type="button" className="button button--ghost" disabled={!isDesktopApp() || aiTesting || aiImporting} onClick={() => void installAiPack()}>Zainstaluj lokalny pakiet AI</button>
+          {aiImporting && aiImportProgress && <button type="button" className="button button--ghost" onClick={() => void cancelAiImport()}>Anuluj import</button>}</div>
+          <div className="message-banner"><div><strong>Pakiet lokalny — bez pobierania przez GreekGod</strong><p>Wybierz folder zatwierdzonego GreekGod Offline AI Pack z dysku, USB lub udziału sieciowego. Aplikacja sprawdzi manifest, wszystkie sumy i licencje, skopiuje pliki do chronionego katalogu, ponownie je zweryfikuje i dopiero wtedy aktywuje pakiet.</p><p>Model działa wyłącznie na tym komputerze. Dziennik, treningi i analityka działają bez AI.</p>{aiImportProgress && <p role="status">{aiImportProgress.phase}: {aiImportProgress.totalBytes > 0 ? `${Math.min(100, Math.round(aiImportProgress.completedBytes * 100 / aiImportProgress.totalBytes))}%` : 'przygotowanie'}{aiImportProgress.relativePath ? ` · ${aiImportProgress.relativePath}` : ''}</p>}{aiImportMessage && <p role="alert" className={aiImportMessage.error ? 'text-danger' : undefined}>{aiImportMessage.text}</p>}{aiStatus?.assetRoot && <small>Katalog zarządzany: {aiStatus.assetRoot}<br />Model: {LOCAL_MODEL.expectedFileName}</small>}</div></div>
+          <small>Brak automatycznego pobierania i zewnętrznego fallbacku. Sidecar nasłuchuje wyłącznie na dynamicznym porcie 127.0.0.1 i uruchamia się dopiero przy użyciu AI.</small>
         </section>
 
         <section className="card settings-section">

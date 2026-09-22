@@ -1,10 +1,11 @@
 use tauri::{Manager, RunEvent, WindowEvent};
 
+mod companion_memory_storage;
 #[cfg(windows)]
 mod desktop_instance;
 mod human_coach_storage;
-mod companion_memory_storage;
 mod managed_companion_runtime;
+mod offline_ai_pack;
 
 #[cfg(any(feature = "native-sqlite-shadow", feature = "native-sqlite-authority"))]
 mod native_storage_shadow {
@@ -22,6 +23,7 @@ mod native_storage_shadow {
     const AUTHORITY_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.authoritysmoke";
     const AUTHORITY_LIVE_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.authoritylivesmoke";
     const SCHEMA8_PHYSICAL_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.schema8smoke";
+    const AI_PACK_SMOKE_IDENTIFIER: &str = "com.igorpich.formlog.aipacksmoke";
     const REHEARSAL_IDENTIFIER: &str = "com.igorpich.formlog.rehearsal";
     #[cfg(feature = "native-sqlite-production-authority")]
     const PRODUCTION_IDENTIFIER: &str = "com.igorpich.formlog";
@@ -90,6 +92,7 @@ mod native_storage_shadow {
             || identifier == AUTHORITY_SMOKE_IDENTIFIER
             || identifier == AUTHORITY_LIVE_SMOKE_IDENTIFIER
             || identifier == SCHEMA8_PHYSICAL_SMOKE_IDENTIFIER
+            || identifier == AI_PACK_SMOKE_IDENTIFIER
             || identifier == REHEARSAL_IDENTIFIER;
         #[cfg(feature = "native-sqlite-production-authority")]
         let allowed = isolated_development || identifier == PRODUCTION_IDENTIFIER;
@@ -329,10 +332,14 @@ pub fn run() {
     let _instance = match desktop_instance::acquire(&context.config().identifier) {
         Ok(Some(guard)) => guard,
         Ok(None) => return, // Normal double launch: no window, storage initialization or error dialog.
-        Err(error) => { eprintln!("Cannot acquire Desktop instance guard: {error}"); return; }
+        Err(error) => {
+            eprintln!("Cannot acquire Desktop instance guard: {error}");
+            return;
+        }
     };
     let builder = tauri::Builder::default()
         .manage(managed_companion_runtime::ManagedRuntimeState::default())
+        .manage(managed_companion_runtime::ManagedAiPackInstallState::default())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init());
@@ -351,17 +358,28 @@ pub fn run() {
         native_storage_shadow::native_authority_replace,
         native_storage_shadow::native_authority_backup_before_import,
         managed_companion_runtime::managed_companion_status,
-        managed_companion_runtime::managed_companion_infer
+        managed_companion_runtime::managed_companion_infer,
+        managed_companion_runtime::managed_ai_pack_install,
+        managed_companion_runtime::managed_ai_pack_cancel_import
     ]);
     #[cfg(not(any(feature = "native-sqlite-shadow", feature = "native-sqlite-authority")))]
-    let builder = builder.invoke_handler(tauri::generate_handler![human_coach_storage::human_coach_save, companion_memory_storage::companion_memory_save, managed_companion_runtime::managed_companion_status, managed_companion_runtime::managed_companion_infer]);
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        human_coach_storage::human_coach_save,
+        companion_memory_storage::companion_memory_save,
+        managed_companion_runtime::managed_companion_status,
+        managed_companion_runtime::managed_companion_infer,
+        managed_companion_runtime::managed_ai_pack_install,
+        managed_companion_runtime::managed_ai_pack_cancel_import
+    ]);
     let app = builder
         .build(context)
         .expect("failed to initialize GreekGod");
 
     app.run(|app_handle, event| {
         if matches!(&event, RunEvent::Exit | RunEvent::ExitRequested { .. }) {
-            managed_companion_runtime::shutdown(&app_handle.state::<managed_companion_runtime::ManagedRuntimeState>());
+            managed_companion_runtime::shutdown(
+                &app_handle.state::<managed_companion_runtime::ManagedRuntimeState>(),
+            );
         }
         if let RunEvent::WindowEvent {
             label,
