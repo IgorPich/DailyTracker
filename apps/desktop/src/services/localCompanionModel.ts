@@ -13,7 +13,7 @@ export const LOCAL_MODEL = Object.freeze({
 
 export type LocalModelState = 'READY' | 'STARTING' | 'RUNTIME_UNAVAILABLE' | 'RUNTIME_MISSING' | 'RUNTIME_INVALID'
   | 'MODEL_MISSING' | 'MODEL_INVALID' | 'MODEL_OUTDATED' | 'PACK_MISSING' | 'PACK_INCOMPATIBLE' | 'PACK_CONTRACT_MISMATCH'
-  | 'ACTIVE_PACK_MISSING' | 'ACTIVE_PACK_INVALID' | 'LEGAL_INVALID' | 'PROVENANCE_INVALID' | 'CHECKSUM_MISMATCH' | 'READY_UNLOADED' | 'READY_WARM'
+  | 'ACTIVE_PACK_MISSING' | 'ACTIVE_PACK_INVALID' | 'LEGAL_INVALID' | 'PROVENANCE_INVALID' | 'NATIVE_PREREQUISITE_MISSING' | 'NATIVE_PREREQUISITE_INVALID' | 'CHECKSUM_MISMATCH' | 'READY_UNLOADED' | 'READY_WARM'
   | 'INFERENCE_ACTIVE' | 'IDLE_UNLOADED' | 'STOPPING' | 'FAILED' | 'UNSUPPORTED_HARDWARE' | 'INFERENCE_FAILED'
 export interface LocalModelStatus { state: LocalModelState; runtimeVersion?: string; detail: string; assetRoot?: string; installation?: 'OFFLINE_PACK' }
 export interface LocalInferenceRequest {
@@ -390,6 +390,7 @@ export class RealLocalCompanionModel<Request = unknown> implements CompanionMode
 
 export type ManagedModelState = 'MODEL_MISSING' | 'MODEL_INVALID' | 'MODEL_OUTDATED' | 'RUNTIME_MISSING' | 'RUNTIME_INVALID'
   | 'PACK_MISSING' | 'PACK_INCOMPATIBLE' | 'PACK_CONTRACT_MISMATCH' | 'ACTIVE_PACK_MISSING' | 'ACTIVE_PACK_INVALID' | 'LEGAL_INVALID' | 'PROVENANCE_INVALID'
+  | 'NATIVE_PREREQUISITE_MISSING' | 'NATIVE_PREREQUISITE_INVALID'
   | 'READY_UNLOADED' | 'STARTING' | 'READY_WARM' | 'INFERENCE_ACTIVE' | 'IDLE_UNLOADED' | 'STOPPING' | 'FAILED'
 export interface ManagedModelStatus { state: ManagedModelState; runtimeVersion: string; detail: string; endpoint?: string; assetRoot?: string; installation: 'OFFLINE_PACK' }
 

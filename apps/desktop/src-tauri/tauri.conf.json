@@ -40,7 +40,9 @@
     "externalBin": ["binaries/greekgod-sync-service"],
     "licenseFile": "LICENSE.txt",
     "resources": {
-      "windows/sync-service-lifecycle.ps1": "sync-service-lifecycle.ps1"
+      "windows/sync-service-lifecycle.ps1": "sync-service-lifecycle.ps1",
+      "windows-native-runtime/greekgod-windows-native-runtime.json": "greekgod-windows-native-runtime.json",
+      "binaries/windows-native-runtime/vcruntime140.dll": "vcruntime140.dll"
     },
     "publisher": "Igor Pich",
     "category": "Healthcare and Fitness",

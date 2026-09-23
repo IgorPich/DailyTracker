@@ -47,6 +47,7 @@
       { "relativePath": "mtmd.dll", "bytes": 1744384, "sha256": "70045cfa7ce5dc68a938fc76736c4156be5117d655bc3c74f8bc65a5a8482db0" }
     ]
   },
+  "windowsNativeRuntimeSet": "msvc-v14-x64-14.44.35211.0",
   "requiredFiles": [
     { "kind": "LEGAL", "relativePath": "legal/LICENSE-Microsoft-Phi-3.5", "bytes": 1085, "sha256": "1cb671fed8e99f35db8df0d75d4bbf3e80c16e977658f06a106a9e1fdef4cb85" },
     { "kind": "LEGAL", "relativePath": "legal/NOTICE-Microsoft-Phi-3.5.md", "bytes": 1773, "sha256": "ce13d3b636c44163a045b9e1cdf84d4dffb5a1fb51420586ae1d448166cbb8e8" },

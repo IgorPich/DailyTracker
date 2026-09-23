@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('Install', 'PrepareUpdate', 'Uninstall', 'InstallTask', 'UninstallTask', 'InstallFirewall', 'RemoveFirewall')]
+  [ValidateSet('Install', 'PrepareUpdate', 'Uninstall', 'InstallTask', 'UninstallTask', 'InstallFirewall', 'RemoveFirewall', 'VerifyNativeRuntime')]
   [string]$Action,
 
   [Parameter(Mandatory = $true)]
@@ -87,10 +87,40 @@ function Get-SyncServiceVersionContract {
   }
 }
 
+function Assert-AppLocalNativeRuntime {
+  $applicationDirectory = [IO.Path]::GetDirectoryName($ServiceExecutable)
+  $manifestPath = Join-Path $applicationDirectory 'greekgod-windows-native-runtime.json'
+  if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    throw 'NATIVE_PREREQUISITE_MISSING: Windows native runtime manifest is missing.'
+  }
+  $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+  if ($manifest.formatVersion -ne 1 -or
+      $manifest.platform -ne 'windows-x86_64' -or
+      $manifest.policy -ne 'APP_LOCAL_PINNED_VC_RUNTIME') {
+    throw 'NATIVE_PREREQUISITE_INVALID: Windows native runtime manifest is incompatible.'
+  }
+  foreach ($name in @($manifest.baseFiles)) {
+    $definition = @($manifest.files | Where-Object { $_.name -eq $name })
+    if ($definition.Count -ne 1 -or $definition[0].architecture -ne 'x64') {
+      throw "NATIVE_PREREQUISITE_INVALID: Invalid manifest entry for $name."
+    }
+    $path = Join-Path $applicationDirectory $name
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+      throw "NATIVE_PREREQUISITE_MISSING: $name is missing."
+    }
+    $file = Get-Item -LiteralPath $path
+    $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($file.Length -ne $definition[0].bytes -or $hash -ne $definition[0].sha256) {
+      throw "NATIVE_PREREQUISITE_INVALID: $name failed size/hash verification."
+    }
+  }
+}
+
 function Install-GreekGodSyncTask {
   if (-not (Test-Path -LiteralPath $ServiceExecutable -PathType Leaf)) {
     throw "Sync Service executable does not exist: $ServiceExecutable"
   }
+  Assert-AppLocalNativeRuntime
   $versionContract = Get-SyncServiceVersionContract
   if ([string]::IsNullOrWhiteSpace($versionContract.serviceVersion) -or
       $versionContract.protocolVersion -ne 1) {
@@ -251,4 +281,5 @@ switch ($Action) {
   'UninstallTask' { Uninstall-GreekGodSyncTask }
   'InstallFirewall' { Install-GreekGodFirewallRules }
   'RemoveFirewall' { Remove-GreekGodFirewallRules }
+  'VerifyNativeRuntime' { Assert-AppLocalNativeRuntime }
 }

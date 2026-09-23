@@ -9,15 +9,23 @@ const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repositoryRoot = resolve(scriptDir, '../../../..')
 export const contractPath = join(repositoryRoot, 'apps/desktop/src-tauri/ai-pack/greekgod-ai-pack-4.0.json')
 export const expectedContract = JSON.parse(await readFile(contractPath, 'utf8'))
+export const windowsRuntimeContract = JSON.parse(await readFile(join(repositoryRoot, 'apps/desktop/src-tauri/windows-native-runtime/greekgod-windows-native-runtime.json'), 'utf8'))
 
 const safeRelative = (value) => typeof value === 'string' && value.length > 0 && !isAbsolute(value)
   && !value.includes('\\') && !value.includes(':') && value.split('/').every((part) => part && part !== '.' && part !== '..')
 const runtimePath = (contract, file) => `${contract.runtime.relativePath}/${file.relativePath}`
 
 export function contractFiles(contract = expectedContract) {
+  const nativeFiles = contract.windowsNativeRuntimeSet
+    ? windowsRuntimeContract.aiPackFiles.map((name) => {
+      if (contract.windowsNativeRuntimeSet !== windowsRuntimeContract.contractId) throw new Error('NATIVE_RUNTIME_CONTRACT_MISMATCH')
+      const file = windowsRuntimeContract.files.find((candidate) => candidate.name === name)
+      return { path: `${contract.runtime.relativePath}/${file.name}`, bytes: file.bytes, sha256: file.sha256, kind: 'NATIVE_PREREQUISITE' }
+    }) : []
   const files = [
     { path: contract.model.relativePath, bytes: contract.model.bytes, sha256: contract.model.sha256, kind: 'MODEL' },
     ...contract.runtime.files.map((file) => ({ path: runtimePath(contract, file), bytes: file.bytes, sha256: file.sha256, kind: 'RUNTIME' })),
+    ...nativeFiles,
     ...contract.requiredFiles.map((file) => ({ path: file.relativePath, bytes: file.bytes, sha256: file.sha256, kind: file.kind })),
   ]
   const seen = new Set()
@@ -103,8 +111,8 @@ async function verifiedCopy(source, destination, expected) {
   await copyFile(source, destination)
 }
 
-export async function buildPack({ model, runtime, out }, expected = expectedContract) {
-  if (!model || !runtime || !out) throw new Error('build requires --model, --runtime and --out')
+export async function buildPack({ model, runtime, vcRuntime, out }, expected = expectedContract) {
+  if (!model || !runtime || !out || (expected.windowsNativeRuntimeSet && !vcRuntime)) throw new Error('build requires --model, --runtime, --vc-runtime and --out')
   const output = resolve(out)
   if (existsSync(output)) throw new Error(`OUTPUT_EXISTS: ${output}`)
   await mkdir(output, { recursive: false })
@@ -113,6 +121,7 @@ export async function buildPack({ model, runtime, out }, expected = expectedCont
       let source
       if (file.kind === 'MODEL') source = resolve(model)
       else if (file.kind === 'RUNTIME') source = join(resolve(runtime), file.path.slice(`${expected.runtime.relativePath}/`.length))
+      else if (file.kind === 'NATIVE_PREREQUISITE') source = join(resolve(vcRuntime), file.path.slice(`${expected.runtime.relativePath}/`.length))
       else if (file.path === 'legal/LICENSE-LLVM-OpenMP') source = join(resolve(runtime), 'LICENSE-LLVM-OpenMP')
       else source = join(repositoryRoot, legalSources.get(file.path) ?? '')
       await verifiedCopy(source, join(output, ...file.path.split('/')), file)
@@ -131,7 +140,8 @@ function argumentsFor(argv) {
   const [command, ...rest] = argv; const values = {}
   for (let index = 0; index < rest.length; index += 2) {
     if (!rest[index]?.startsWith('--') || rest[index + 1] === undefined) throw new Error(`Invalid argument: ${rest[index] ?? ''}`)
-    values[rest[index].slice(2)] = rest[index + 1]
+    const key = rest[index].slice(2).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())
+    values[key] = rest[index + 1]
   }
   return { command, values }
 }
@@ -147,7 +157,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       const result = await buildPack(values)
       console.log(`PASS built and verified: ${result.output}`)
       console.log(`Inventory: ${result.reportPath}`)
-    } else throw new Error('Usage: ai-pack-tool.mjs build --model <gguf> --runtime <dir> --out <dir> | verify --pack <dir>')
+    } else throw new Error('Usage: ai-pack-tool.mjs build --model <gguf> --runtime <dir> --vc-runtime <Microsoft.VC143.CRT> --out <dir> | verify --pack <dir>')
   } catch (error) {
     console.error(`FAIL ${error.message}`)
     process.exitCode = 1

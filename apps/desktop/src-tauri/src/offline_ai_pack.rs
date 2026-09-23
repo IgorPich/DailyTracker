@@ -9,6 +9,8 @@ use std::{
 };
 
 pub const CONTRACT_JSON: &str = include_str!("../ai-pack/greekgod-ai-pack-4.0.json");
+pub const WINDOWS_NATIVE_RUNTIME_JSON: &str =
+    include_str!("../windows-native-runtime/greekgod-windows-native-runtime.json");
 pub const ACTIVE_POINTER: &str = "active-pack.json";
 #[cfg(test)]
 pub const OLD_MODEL_SHA256: &str =
@@ -26,7 +28,32 @@ pub struct PackContract {
     pub greek_god_compatibility: Compatibility,
     pub model: ModelContract,
     pub runtime: RuntimeContract,
+    #[serde(default)]
+    pub windows_native_runtime_set: Option<String>,
     pub required_files: Vec<RequiredFile>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WindowsNativeRuntimeContract {
+    format_version: u32,
+    contract_id: String,
+    platform: String,
+    policy: String,
+    source: serde_json::Value,
+    base_files: Vec<String>,
+    ai_pack_files: Vec<String>,
+    files: Vec<WindowsNativeFile>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WindowsNativeFile {
+    name: String,
+    bytes: u64,
+    sha256: String,
+    file_version: String,
+    architecture: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -94,6 +121,7 @@ struct ExpectedFile {
 enum FileClass {
     Model,
     Runtime,
+    NativePrerequisite,
     Legal,
     Provenance,
 }
@@ -254,6 +282,63 @@ fn expected_files(contract: &PackContract) -> Result<BTreeMap<String, ExpectedFi
             },
         );
     }
+    if let Some(contract_id) = &contract.windows_native_runtime_set {
+        let native: WindowsNativeRuntimeContract =
+            serde_json::from_str(WINDOWS_NATIVE_RUNTIME_JSON).map_err(|error| {
+                PackError::new("NATIVE_RUNTIME_CONTRACT_INVALID", error.to_string())
+            })?;
+        if native.format_version != 1
+            || native.contract_id != *contract_id
+            || native.platform != "windows-x86_64"
+            || native.policy != "APP_LOCAL_PINNED_VC_RUNTIME"
+            || !native.source.is_object()
+            || native.base_files.is_empty()
+            || native.base_files.iter().any(|name| {
+                !native.files.iter().any(|file| {
+                    file.name == *name
+                        && file.architecture == "x64"
+                        && !file.file_version.is_empty()
+                })
+            })
+        {
+            return Err(PackError::new(
+                "NATIVE_RUNTIME_CONTRACT_MISMATCH",
+                "Unsupported Windows native runtime contract",
+            ));
+        }
+        for name in native.ai_pack_files {
+            let file = native
+                .files
+                .iter()
+                .find(|file| {
+                    file.name == name
+                        && file.architecture == "x64"
+                        && !file.file_version.is_empty()
+                })
+                .ok_or_else(|| {
+                    PackError::new(
+                        "NATIVE_RUNTIME_CONTRACT_INVALID",
+                        format!("Missing native runtime definition: {name}"),
+                    )
+                })?;
+            let relative_path = format!("{}/{}", contract.runtime.relative_path, file.name);
+            let expected = ExpectedFile {
+                relative_path: relative_path.clone(),
+                bytes: file.bytes,
+                sha256: file.sha256.clone(),
+                class: FileClass::NativePrerequisite,
+            };
+            if files
+                .insert(relative_path.to_lowercase(), expected)
+                .is_some()
+            {
+                return Err(PackError::new(
+                    "DUPLICATE_PATH",
+                    format!("Duplicate native runtime path: {relative_path}"),
+                ));
+            }
+        }
+    }
     for file in &contract.required_files {
         let class = match file.kind {
             RequiredFileKind::Legal => FileClass::Legal,
@@ -360,6 +445,8 @@ fn class_error(class: FileClass, missing: bool) -> &'static str {
         (FileClass::Model, false) => "MODEL_INVALID",
         (FileClass::Runtime, true) => "RUNTIME_MISSING",
         (FileClass::Runtime, false) => "RUNTIME_INVALID",
+        (FileClass::NativePrerequisite, true) => "NATIVE_PREREQUISITE_MISSING",
+        (FileClass::NativePrerequisite, false) => "NATIVE_PREREQUISITE_INVALID",
         (FileClass::Legal, _) => "LEGAL_INVALID",
         (FileClass::Provenance, _) => "PROVENANCE_INVALID",
     }
@@ -926,6 +1013,7 @@ mod tests {
                     sha256: sha(&data["runtime/server.exe"]),
                 }],
             },
+            windows_native_runtime_set: None,
             required_files: vec![file("legal/license.txt"), file("provenance/source.json")],
         };
         (contract, data)
@@ -957,6 +1045,22 @@ mod tests {
         assert_eq!(contract.model.bytes, 2176177152);
         assert_ne!(contract.model.sha256, OLD_MODEL_SHA256);
         assert_eq!(contract.runtime.files.len(), 24);
+        assert_eq!(
+            contract.windows_native_runtime_set.as_deref(),
+            Some("msvc-v14-x64-14.44.35211.0")
+        );
+        let files = expected_files(&contract).unwrap();
+        assert_eq!(files.len(), 33);
+        for name in ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"] {
+            assert_eq!(
+                files.get(&format!("runtime/{name}")).map(|file| file.class),
+                Some(FileClass::NativePrerequisite)
+            );
+        }
+        assert_eq!(
+            class_error(FileClass::NativePrerequisite, true),
+            "NATIVE_PREREQUISITE_MISSING"
+        );
     }
     #[test]
     fn verifies_complete_pack() {
