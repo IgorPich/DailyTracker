@@ -1,0 +1,18 @@
+{
+  "formatVersion": 1,
+  "kitId": "greekgod-4.0-windows-native-validation",
+  "platform": "windows-x86_64",
+  "installer": {
+    "fileName": "GreekGod_4.0.0-rc.1_x64-setup.exe",
+    "bytes": 6698369,
+    "sha256": "3d2b5f56338820a3789b8e09f813e6285f2b6c982b5961654a23770d2575ca88"
+  },
+  "aiPack": {
+    "directoryName": "ai-pack",
+    "packId": "com.igorpich.greekgod.offline-ai-pack",
+    "packVersion": "4.0.0",
+    "trustedPayloadFiles": 33,
+    "modelSha256": "3913ce8d702ec0cb053c2c5238c4438596f2da99ecab56480e252f20580673db",
+    "windowsNativeRuntimeSet": "msvc-v14-x64-14.44.35211.0"
+  }
+}
