@@ -1,0 +1,1603 @@
+{
+  "schemaVersion": 1,
+  "scope": "GreekGod 4.0 production Desktop, Sync Service, and approved llama.cpp b10760 PE files",
+  "llamaCpp": {
+    "build": "b10760",
+    "commit": "0f3a71be15af836d277c9f918adfafb45732677e",
+    "trustedRuntimeFiles": 24
+  },
+  "omitted": [
+    {
+      "name": "llama-quantize.exe",
+      "reason": "Not present in or distributed by the authoritative 24-file runtime contract"
+    }
+  ],
+  "peFileCount": 25,
+  "files": [
+    {
+      "name": "greekgod.exe",
+      "component": "DESKTOP",
+      "architecture": "x64",
+      "bytes": 16909312,
+      "sha256": "63ad23cd1e05d9047cab9a0c9c47a6ca05108a7bd0a7dbe44917d48b80027acd",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-core-synch-l1-2-0.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-locale-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-time-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-utility-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "bcrypt.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "bcryptprimitives.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "comctl32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "dwmapi.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "gdi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "ntdll.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "ole32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "oleaut32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "shell32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "shlwapi.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "user32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "ws2_32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        }
+      ]
+    },
+    {
+      "name": "greekgod-sync-service-x86_64-pc-windows-msvc.exe",
+      "component": "SYNC_SERVICE",
+      "architecture": "x64",
+      "bytes": 6828032,
+      "sha256": "5ccae1bd23ba7ae465e7e158c2f7dcdee71573cca23fc20e5937c5148883e3bf",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-core-synch-l1-2-0.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-locale-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-time-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-utility-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "bcrypt.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "bcryptprimitives.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "crypt32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "iphlpapi.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "ntdll.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "ws2_32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        }
+      ]
+    },
+    {
+      "name": "ggml-base.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 795136,
+      "sha256": "90019653b09ba00db880004c7416d4351e54f70d47a0f605bec1d5df8a7fb8c8",
+      "imports": [
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-time-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-utility-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-alderlake.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1230336,
+      "sha256": "2af74a6602a8d38844afcbb99763948fcd619cd02631c3ed10790b48e0f9db4e",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-cannonlake.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1448448,
+      "sha256": "fd77af00d34b50c3884a15e4beb5672c433ae29b18951b9e36857179a4689bd4",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-cascadelake.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1434112,
+      "sha256": "ee3a00bb925efdb1ca640a0e1c7bf6492fcb12767d8650f89d2afa565ba92af6",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-cooperlake.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1434624,
+      "sha256": "8efe676c118e854d43836f1141638114cb6f668dad098384dcbfaf8bb1ccec15",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-haswell.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1235968,
+      "sha256": "8e3bbf8d0aced02762d6a2280fe74c0f29f9d373161b3244b71c43632b8537da",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-icelake.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1440768,
+      "sha256": "ec91e456d2c595a442bead5ad42dea076d4badd64572dbc444d501165a409746",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-ivybridge.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1127424,
+      "sha256": "085a820be42eac511108a9935c058bbf2b4c943814e38378d90481b45d74248b",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-piledriver.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1131520,
+      "sha256": "d740a0a7c261ba443ae7905f71b2791be1bc3b228e90b058ede9f7c1615cb93a",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-sandybridge.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1107968,
+      "sha256": "4a2d34cc0506b2f71366de5ad8c8f4a14d7990f62aa6b10792861ba0475878bf",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-sapphirerapids.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1711616,
+      "sha256": "c7461fc8b85fe4e081d875cb653cb821b49dd1a3ff46806557c97af6d686024f",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-skylakex.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1441792,
+      "sha256": "6afca980f1b1bcc7c0e096dcce54d83c8705afb02d44a16b46b9af85a59d645f",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-sse42.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 932352,
+      "sha256": "0f76727fec2dcf5259d708cb583ae6bf9cc7a8b21e8c0f93fbfd1c5ccc16291c",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-x64.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 924160,
+      "sha256": "fd24bebb1f3403bd631295d74b7330414fbd3545b52a890c07c330b998170a49",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-cpu-zen4.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1441280,
+      "sha256": "3a64862960db433186edc40b806e1e82e5b39b4af91a8cf3ff64685b1b42896b",
+      "imports": [
+        {
+          "name": "advapi32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "libomp.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "ggml-vulkan.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 55572992,
+      "sha256": "3d7141d851ed7c8a31693c1413696bae536a8f40add24fd79fa2612fc144790c",
+      "imports": [
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140_1.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vulkan-1.dll",
+          "classification": "GPU_DRIVER_PROVIDED"
+        }
+      ]
+    },
+    {
+      "name": "ggml.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 86016,
+      "sha256": "ca63f33a59b8dff8ea66bbec024eca31ae86f43685f80b65c48f1a120795876b",
+      "imports": [
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-locale-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "libomp.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 768000,
+      "sha256": "a12116ba72d1d6820407cf30be23da04ce79d6bb8a71a5ee71759c5a1faa6f1c",
+      "imports": [
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "psapi.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        }
+      ]
+    },
+    {
+      "name": "llama-common.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 7771648,
+      "sha256": "c3e30505b5e4b3e986251aad01d72c1f2c8e83681f12b261f4458ba4e24d6b5a",
+      "imports": [
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-filesystem-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-locale-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-time-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-utility-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "crypt32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "ggml.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "llama.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "shell32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140_1.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "ws2_32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        }
+      ]
+    },
+    {
+      "name": "llama-server-impl.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 8870912,
+      "sha256": "1ba1fd9c009101036b682ea83967dc42e6c2d5863fc88b368479f311679740be",
+      "imports": [
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-filesystem-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-locale-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-time-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-utility-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "crypt32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "ggml.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "llama-common.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "llama.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "mtmd.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140_1.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "ws2_32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        }
+      ]
+    },
+    {
+      "name": "llama-server.exe",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 9216,
+      "sha256": "4d2f56c46859a3679fbfa35cc0fbad405ac239a7a35f64e9f2ff613407be0963",
+      "imports": [
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-locale-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "llama-server-impl.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "llama.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 3107840,
+      "sha256": "f5afd819fb0e8632228740f1aa5fde3ff165794eaca07ca2ee71a9fffdf9e6b1",
+      "imports": [
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-filesystem-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-locale-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "ggml.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    },
+    {
+      "name": "mtmd.dll",
+      "component": "LLAMA_CPP_B10760",
+      "architecture": "x64",
+      "bytes": 1744384,
+      "sha256": "70045cfa7ce5dc68a938fc76736c4156be5117d655bc3c74f8bc65a5a8482db0",
+      "imports": [
+        {
+          "name": "api-ms-win-crt-convert-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-environment-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-filesystem-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-heap-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-math-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-runtime-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-stdio-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "api-ms-win-crt-string-l1-1-0.dll",
+          "classification": "WINDOWS_UCRT_API_SET"
+        },
+        {
+          "name": "ggml-base.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "ggml.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "kernel32.dll",
+          "classification": "WINDOWS_10_11_SYSTEM_COMPONENT"
+        },
+        {
+          "name": "llama.dll",
+          "classification": "BUNDLED_APPLICATION_RUNTIME"
+        },
+        {
+          "name": "msvcp140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "classification": "MICROSOFT_VISUAL_CPP_RUNTIME"
+        }
+      ]
+    }
+  ]
+}

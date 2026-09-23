@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url'
 
 const desktopDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const config = JSON.parse(readFileSync(resolve(desktopDirectory, 'src-tauri', 'tauri.conf.json'), 'utf8'))
+const nativeContract = JSON.parse(readFileSync(
+  resolve(desktopDirectory, 'src-tauri', 'windows-native-runtime', 'greekgod-windows-native-runtime.json'),
+  'utf8',
+))
 const lifecycle = readFileSync(
   resolve(desktopDirectory, 'src-tauri', 'windows', 'sync-service-lifecycle.ps1'),
   'utf8',
@@ -21,7 +25,21 @@ assert.equal(
   config.bundle.resources['windows/sync-service-lifecycle.ps1'],
   'sync-service-lifecycle.ps1',
 )
+assert.equal(
+  config.bundle.resources['windows-native-runtime/greekgod-windows-native-runtime.json'],
+  'greekgod-windows-native-runtime.json',
+)
+assert.equal(
+  config.bundle.resources['binaries/windows-native-runtime/vcruntime140.dll'],
+  'vcruntime140.dll',
+)
 assert.equal(config.build.beforeBuildCommand, 'npm run build:bundle:production-authority')
+assert.deepEqual(nativeContract.baseFiles, ['vcruntime140.dll'])
+assert.deepEqual(nativeContract.aiPackFiles, ['msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'])
+assert.deepEqual(
+  Object.keys(config.bundle.resources).filter((path) => /(?:msvcp|vcruntime|concrt).*\.dll$/i.test(path)),
+  ['binaries/windows-native-runtime/vcruntime140.dll'],
+)
 assert.match(
   serviceMain,
   /cfg_attr\(all\(windows, not\(debug_assertions\)\), windows_subsystem = "windows"\)/,
@@ -48,6 +66,10 @@ for (const required of [
   '-RedirectStandardError $standardErrorPath',
   '-WindowStyle Hidden',
   '-Wait',
+  "'VerifyNativeRuntime' { Assert-AppLocalNativeRuntime }",
+  'NATIVE_PREREQUISITE_MISSING',
+  'NATIVE_PREREQUISITE_INVALID',
+  'Get-FileHash -LiteralPath $path -Algorithm SHA256',
 ]) {
   assert.ok(lifecycle.includes(required), `lifecycle is missing ${required}`)
 }

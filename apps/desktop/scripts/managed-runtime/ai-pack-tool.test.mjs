@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, unlink, writeFile } from 'node:fs/promise
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import test from 'node:test'
-import { contractFiles, validateContract, verifyPack } from './ai-pack-tool.mjs'
+import { contractFiles, expectedContract, validateContract, verifyPack, windowsRuntimeContract } from './ai-pack-tool.mjs'
 
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const data = new Map([
@@ -62,6 +62,21 @@ test('contract rejects traversal and duplicate/case-ambiguous paths', () => {
   assert.throws(() => contractFiles(traversal), /UNSAFE_PATH/)
   const duplicate = contract(); duplicate.requiredFiles.push({ ...duplicate.requiredFiles[0], relativePath: 'LEGAL/license.txt' })
   assert.throws(() => contractFiles(duplicate), /DUPLICATE_PATH/)
+})
+
+test('production contract pins all and only the approved x64 native prerequisites', () => {
+  assert.equal(expectedContract.windowsNativeRuntimeSet, windowsRuntimeContract.contractId)
+  const native = contractFiles(expectedContract).filter((file) => file.kind === 'NATIVE_PREREQUISITE')
+  assert.deepEqual(native.map((file) => file.path), [
+    'runtime/msvcp140.dll',
+    'runtime/vcruntime140.dll',
+    'runtime/vcruntime140_1.dll',
+  ])
+  assert.equal(contractFiles(expectedContract).length, 33)
+  assert.throws(
+    () => contractFiles({ ...expectedContract, windowsNativeRuntimeSet: 'arbitrary-substitution' }),
+    /NATIVE_RUNTIME_CONTRACT_MISMATCH/,
+  )
 })
 
 test('tooling and production integration contain no acquisition or network fallback', async () => {
