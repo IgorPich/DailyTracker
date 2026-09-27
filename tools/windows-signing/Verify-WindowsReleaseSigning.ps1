@@ -1,9 +1,10 @@
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory=$true)][ValidateSet('Development','RC','Final')][string]$Mode,
+  [Parameter(Mandatory=$true)][ValidateSet('DEVELOPMENT','RC','PRIVATE_UNSIGNED','PUBLIC_SIGNED')][string]$Mode,
   [Parameter(Mandatory=$true)][string]$ArtifactRoot,
   [string]$AiPackRoot,
   [string]$UninstallerPath,
+  [string]$ExpectedInstallerSha256,
   [string]$ExpectedPublisherSubject,
   [string]$PolicyPath,
   [switch]$Json
@@ -85,6 +86,7 @@ function Test-ArtifactSignature([string]$Path, [string]$SignTool) {
   }
   return [pscustomobject]@{
     path = [IO.Path]::GetFullPath($Path)
+    sha256 = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
     status = [string]$signature.Status
     signaturePresent = $present
     signerSubject = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { $null }
@@ -148,13 +150,23 @@ $policy = Get-Content -LiteralPath $policyFullPath -Raw | ConvertFrom-Json
 if ($policy.schemaVersion -ne 1) { throw "Unsupported signing policy schema: $($policy.schemaVersion)" }
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $artifactRootFull = [IO.Path]::GetFullPath($ArtifactRoot)
+$isPublicSigned = $Mode -eq 'PUBLIC_SIGNED'
+$isPrivateUnsigned = $Mode -eq 'PRIVATE_UNSIGNED'
+$isRelease = $isPublicSigned -or $isPrivateUnsigned
 $signTool = Find-SignTool
 if (-not $signTool) { Add-Failure 'SIGNTOOL_MISSING' 'Windows SDK SignTool is required for application-policy verification.' }
 
 $publisher = $ExpectedPublisherSubject
 if ([string]::IsNullOrWhiteSpace($publisher)) { $publisher = [string]$policy.expectedPublisherSubject }
-if ($Mode -eq 'Final' -and [string]::IsNullOrWhiteSpace($publisher)) {
-  Add-Failure 'EXPECTED_PUBLISHER_UNRESOLVED' 'Select and configure the production publisher subject before FINAL verification.'
+if ($isPublicSigned -and [string]::IsNullOrWhiteSpace($publisher)) {
+  Add-Failure 'EXPECTED_PUBLISHER_UNRESOLVED' 'Select and configure the production publisher subject before PUBLIC_SIGNED verification.'
+}
+if ($isRelease) {
+  if ($ExpectedInstallerSha256 -notmatch '^[a-fA-F0-9]{64}$') {
+    Add-Failure 'INSTALLER_SHA256_REQUIRED' 'PRIVATE_UNSIGNED and PUBLIC_SIGNED require an explicit expected SHA-256 for the exact distributed installer.'
+  } else {
+    $ExpectedInstallerSha256 = $ExpectedInstallerSha256.ToLowerInvariant()
+  }
 }
 
 $results = New-Object System.Collections.Generic.List[object]
@@ -175,7 +187,10 @@ foreach ($artifact in $policy.requiredArtifacts) {
   $expectedPaths.Add([IO.Path]::GetFullPath($path).ToLowerInvariant())
   $inspection = Test-ArtifactSignature $path $signTool
   $results.Add([pscustomobject]@{ id=$artifact.id; kind=$artifact.kind; inspection=$inspection })
-  if ($Mode -eq 'Final') {
+  if ($artifact.id -eq 'nsis-installer' -and $isRelease -and $ExpectedInstallerSha256 -match '^[a-f0-9]{64}$' -and $inspection.sha256 -ne $ExpectedInstallerSha256) {
+    Add-Failure 'INSTALLER_SHA256_MISMATCH' "Expected $ExpectedInstallerSha256, received $($inspection.sha256)."
+  }
+  if ($isPublicSigned) {
     if (-not $inspection.signaturePresent) { Add-Failure 'SIGNATURE_REQUIRED' "$($artifact.id) is unsigned."; continue }
     if ($inspection.status -ne 'Valid' -or -not $inspection.applicationPolicyValid) { Add-Failure 'SIGNATURE_INVALID' "$($artifact.id) failed Windows application-policy verification." }
     if ($inspection.fileDigest -ne 'sha256') { Add-Failure 'FILE_DIGEST_POLICY' "$($artifact.id) is not verified as SHA-256 Authenticode." }
@@ -183,7 +198,8 @@ foreach ($artifact in $policy.requiredArtifacts) {
     if ($inspection.timestampProtocol -ne 'RFC3161' -or $inspection.timestampDigest -ne 'sha256') { Add-Failure 'TIMESTAMP_POLICY' "$($artifact.id) lacks a verifiable RFC3161/SHA-256 timestamp." }
     if ($publisher -and $inspection.signerSubject -ne $publisher) { Add-Failure 'PUBLISHER_MISMATCH' "$($artifact.id) signer does not exactly match the approved publisher." }
   } elseif (-not $inspection.signaturePresent) {
-    Add-Warning 'UNSIGNED_NONFINAL_ALLOWED' "$($artifact.id) is unsigned in explicit $Mode mode."
+    if ($isPrivateUnsigned) { Add-Warning 'UNSIGNED_PRIVATE_RELEASE_ALLOWED' "$($artifact.id) is intentionally unsigned under the explicit PRIVATE_UNSIGNED policy." }
+    else { Add-Warning 'UNSIGNED_NONFINAL_ALLOWED' "$($artifact.id) is unsigned in explicit $Mode mode." }
   } elseif ($inspection.status -ne 'Valid' -or -not $inspection.applicationPolicyValid) {
     Add-Failure 'PRESENT_SIGNATURE_INVALID' "$($artifact.id) has a signature, but it is invalid."
   }
@@ -195,15 +211,17 @@ if ($UninstallerPath) {
   } else {
     $inspection = Test-ArtifactSignature $UninstallerPath $signTool
     $results.Add([pscustomobject]@{ id=$policy.uninstaller.id; kind='GREEKGOD_OWNED_UNINSTALLER'; inspection=$inspection })
-    if ($Mode -eq 'Final') {
+    if ($isPublicSigned) {
       if (-not $inspection.signaturePresent) { Add-Failure 'SIGNATURE_REQUIRED' 'NSIS uninstaller is unsigned.' }
       elseif ($inspection.status -ne 'Valid' -or -not $inspection.applicationPolicyValid) { Add-Failure 'SIGNATURE_INVALID' 'NSIS uninstaller failed Windows application-policy verification.' }
       if ($inspection.fileDigest -ne 'sha256') { Add-Failure 'FILE_DIGEST_POLICY' 'NSIS uninstaller is not verified as SHA-256 Authenticode.' }
       if (-not $inspection.timestampPresent -or $inspection.timestampProtocol -ne 'RFC3161' -or $inspection.timestampDigest -ne 'sha256') { Add-Failure 'TIMESTAMP_POLICY' 'NSIS uninstaller lacks a verifiable RFC3161/SHA-256 timestamp.' }
       if ($publisher -and $inspection.signerSubject -ne $publisher) { Add-Failure 'PUBLISHER_MISMATCH' 'NSIS uninstaller signer does not exactly match the approved publisher.' }
+    } elseif ($inspection.signaturePresent -and ($inspection.status -ne 'Valid' -or -not $inspection.applicationPolicyValid)) {
+      Add-Failure 'PRESENT_SIGNATURE_INVALID' 'NSIS uninstaller has a signature, but it is invalid.'
     }
   }
-} elseif ($Mode -eq 'Final') {
+} elseif ($isPublicSigned) {
   Add-Failure 'UNINSTALLER_EVIDENCE_REQUIRED' 'Install the final NSIS artifact in an isolated target and supply its generated uninstall.exe.'
 }
 
@@ -214,7 +232,7 @@ $owned = @(Get-ChildItem -LiteralPath $artifactRootFull -Recurse -File -ErrorAct
 foreach ($file in $owned) {
   $folded = $file.FullName.ToLowerInvariant()
   if (-not $expectedPaths.Contains($folded)) {
-    if ($Mode -eq 'Final') { Add-Failure 'UNEXPECTED_GREEKGOD_PE' $file.FullName }
+    if ($isRelease) { Add-Failure 'UNEXPECTED_GREEKGOD_PE' $file.FullName }
     else { Add-Warning 'NONFINAL_GREEKGOD_PE_OUTSIDE_SURFACE' $file.FullName }
   }
 }
@@ -226,7 +244,7 @@ if ($AiPackRoot) {
   } catch {
     Add-Failure 'AI_PACK_CONTRACT_FAILED' $_.Exception.Message
   }
-} elseif ($Mode -eq 'Final') {
+} elseif ($isRelease) {
   Add-Failure 'AI_PACK_EVIDENCE_REQUIRED' 'Supply the qualified Offline AI Pack to prove byte identity.'
 }
 

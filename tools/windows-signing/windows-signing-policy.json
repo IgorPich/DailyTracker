@@ -1,6 +1,13 @@
 {
   "schemaVersion": 1,
   "policyId": "greekgod-4.0-windows-authenticode",
+  "selectedGreekGod40DistributionPolicy": "PRIVATE_UNSIGNED",
+  "distributionPolicies": [
+    "DEVELOPMENT",
+    "RC",
+    "PRIVATE_UNSIGNED",
+    "PUBLIC_SIGNED"
+  ],
   "expectedPublisherSubject": null,
   "signature": {
     "fileDigest": "sha256",
