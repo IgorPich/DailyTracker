@@ -58,11 +58,16 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
+        "template": "windows/installer.nsi",
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico",
         "installerHooks": "windows/hooks.nsh",
         "displayLanguageSelector": false,
         "languages": ["Polish", "English"],
+        "customLanguageFiles": {
+          "Polish": "windows/languages/Polish.nsh",
+          "English": "windows/languages/English.nsh"
+        },
         "startMenuFolder": "GreekGod"
       },
       "wix": {
