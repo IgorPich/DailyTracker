@@ -16,6 +16,8 @@
     "test:dev-storage": "npm run test:dev-storage --workspace @greekgod/desktop",
     "audit:store": "npm run audit:store --workspace @greekgod/desktop",
     "audit:production-storage-bundle": "npm run audit:production-storage-bundle --workspace @greekgod/desktop",
+    "verify:windows-signing": "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File tools/windows-signing/Verify-WindowsReleaseSigning.ps1",
+    "test:windows-signing": "node tools/windows-signing/windows-signing.test.mjs",
     "preview": "npm run preview --workspace @greekgod/desktop --",
     "tauri": "npm run tauri --workspace @greekgod/desktop --",
     "tauri:dev": "npm run tauri:dev --workspace @greekgod/desktop --",

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "policyId": "greekgod-4.0-windows-authenticode",
+  "expectedPublisherSubject": null,
+  "signature": {
+    "fileDigest": "sha256",
+    "timestampProtocol": "RFC3161",
+    "timestampDigest": "sha256",
+    "verificationPolicy": "WINDOWS_AUTHENTICODE_APPLICATION_POLICY"
+  },
+  "requiredArtifacts": [
+    {
+      "id": "desktop",
+      "kind": "GREEKGOD_OWNED_PE",
+      "relativePath": "greekgod.exe"
+    },
+    {
+      "id": "sync-service",
+      "kind": "GREEKGOD_OWNED_PE",
+      "relativePath": "greekgod-sync-service.exe"
+    },
+    {
+      "id": "nsis-installer",
+      "kind": "GREEKGOD_OWNED_INSTALLER",
+      "relativePath": "bundle/nsis/GreekGod_4.0.0-rc.1_x64-setup.exe"
+    }
+  ],
+  "uninstaller": {
+    "id": "nsis-uninstaller",
+    "fileName": "uninstall.exe",
+    "finalVerificationRequiresInstalledPath": true
+  },
+  "ownedPePatterns": [
+    "greekgod*.exe"
+  ],
+  "aiPackContractPath": "apps/desktop/src-tauri/ai-pack/greekgod-ai-pack-4.0.json",
+  "nativeRuntimeContractPath": "apps/desktop/src-tauri/windows-native-runtime/greekgod-windows-native-runtime.json"
+}
