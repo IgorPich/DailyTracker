@@ -1,0 +1,8 @@
+{
+  "formatVersion": 1,
+  "syntheticOnly": true,
+  "sourceClassification": "SANITIZED_REHEARSAL_COPY",
+  "databaseFile": "greekgod-v3.sqlite",
+  "databaseSha256": "REPLACE_WITH_UPPERCASE_SHA256",
+  "description": "Representative schema-7 data containing only synthetic or sanitized values. No pairing, token, certificate, private-key, or service-identity material."
+}

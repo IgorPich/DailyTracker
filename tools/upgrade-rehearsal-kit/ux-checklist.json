@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "instructions": "In the disposable environment only, replace every PENDING with PASS or FAIL and add concise non-secret evidence. Never include usernames or machine identity.",
+  "items": [
+    { "id": "fresh-installer-ui-normal", "status": "PENDING", "evidence": "" },
+    { "id": "update-page-visible", "status": "PENDING", "evidence": "" },
+    { "id": "polish-wording-coherent", "status": "PENDING", "evidence": "" },
+    { "id": "english-wording-source-configuration-coherent", "status": "PENDING", "evidence": "" },
+    { "id": "no-blank-page-during-completed-upgrade", "status": "PENDING", "evidence": "" },
+    { "id": "no-visible-old-3.0.3-uninstaller", "status": "PENDING", "evidence": "" },
+    { "id": "cancellation-understandable", "status": "PENDING", "evidence": "" },
+    { "id": "cancelled-upgrade-leaves-stable-usable", "status": "PENDING", "evidence": "" },
+    { "id": "successful-upgrade-does-not-request-manual-uninstall", "status": "PENDING", "evidence": "" }
+  ]
+}
