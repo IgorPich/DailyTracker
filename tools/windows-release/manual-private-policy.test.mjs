@@ -11,16 +11,22 @@ function fixture() {
   const destination = mkdtempSync(join(tmpdir(), 'greekgod-manual-private-'))
   const paths = [
     'package-lock.json',
+    'package.json',
     'apps/desktop/package.json',
     'apps/desktop/src',
     'apps/desktop/src-tauri/Cargo.toml',
     'apps/desktop/src-tauri/Cargo.lock',
     'apps/desktop/src-tauri/tauri.conf.json',
+    'apps/desktop/src-tauri/tauri.production-authority.conf.json',
     'apps/desktop/src-tauri/src',
     'apps/desktop/src-tauri/windows/installer.nsi',
     'apps/sync-service/Cargo.toml',
     'apps/sync-service/Cargo.lock',
     'apps/sync-service/src',
+    'apps/mobile/package.json',
+    'apps/mobile/src-tauri/Cargo.toml',
+    'apps/mobile/src-tauri/tauri.conf.json',
+    'crates/greekgod-sync/Cargo.toml',
     'crates/greekgod-storage/src/lib.rs',
     'crates/greekgod-sync/src/lib.rs',
     'crates/greekgod-sync-client/src/lib.rs',
@@ -39,6 +45,8 @@ test('current GreekGod PC 4.0 repository satisfies MANUAL_PRIVATE', () => {
   const report = auditManualPrivatePolicy(root)
   assert.equal(report.verdict, 'PASS', report.failures.join('\n'))
   assert.equal(report.facts.mobilePartOfPc40ReleaseGate, false)
+  assert.equal(report.facts.pcVersion, '4.0.0')
+  assert.equal(report.facts.mobileVersion, '4.0.0-rc.1')
   assert.equal(report.facts.protocolVersion, 1)
   assert.equal(report.facts.schemaVersion, 8)
 })
@@ -85,6 +93,21 @@ test('guard rejects release-policy, install-mode and compatibility drift', () =>
     assert.ok(report.failures.some((failure) => failure.startsWith('MOBILE_BOUNDARY:')))
     assert.ok(report.failures.some((failure) => failure.startsWith('INSTALL_MODE:')))
     assert.ok(report.failures.some((failure) => failure.startsWith('PROTOCOL_VERSION:')))
+  } finally {
+    rmSync(temp, { recursive: true, force: true })
+  }
+})
+
+test('guard rejects accidental Desktop and Mobile version recoupling', () => {
+  const temp = fixture()
+  try {
+    const packagePath = join(temp, 'apps/mobile/package.json')
+    const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'))
+    packageJson.version = '4.0.0'
+    writeFileSync(packagePath, JSON.stringify(packageJson))
+    const report = auditManualPrivatePolicy(temp)
+    assert.equal(report.verdict, 'FAIL')
+    assert.ok(report.failures.some((failure) => failure.startsWith('MOBILE_VERSION_BOUNDARY:')))
   } finally {
     rmSync(temp, { recursive: true, force: true })
   }

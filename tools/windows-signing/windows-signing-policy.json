@@ -29,7 +29,7 @@
     {
       "id": "nsis-installer",
       "kind": "GREEKGOD_OWNED_INSTALLER",
-      "relativePath": "bundle/nsis/GreekGod_4.0.0-rc.1_x64-setup.exe"
+      "relativePath": "bundle/nsis/GreekGod_4.0.0_x64-setup.exe"
     }
   ],
   "uninstaller": {

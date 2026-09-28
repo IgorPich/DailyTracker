@@ -3,6 +3,7 @@
   "policyId": "greekgod-pc-4.0-manual-private",
   "releaseLine": "GreekGod PC 4.0",
   "productKind": "DESKTOP",
+  "pcVersion": "4.0.0",
   "updateDistributionPolicy": "MANUAL_PRIVATE",
   "windowsSigningPolicy": "PRIVATE_UNSIGNED",
   "automaticUpdateDiscovery": false,
@@ -24,6 +25,8 @@
   },
   "mobile": {
     "releaseLine": "GreekGod Mobile 2.0",
-    "partOfPc40ReleaseGate": false
+    "partOfPc40ReleaseGate": false,
+    "currentApplicationVersion": "4.0.0-rc.1",
+    "currentAndroidVersionCode": 3000003
   }
 }

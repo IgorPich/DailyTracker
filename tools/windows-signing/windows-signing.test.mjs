@@ -9,7 +9,7 @@ const root = resolve(import.meta.dirname, '../..')
 const verifier = join(root, 'tools/windows-signing/Verify-WindowsReleaseSigning.ps1')
 const currentArtifacts = join(root, 'apps/desktop/src-tauri/target/release')
 const signedFixture = join(root, 'apps/desktop/src-tauri/binaries/windows-native-runtime/vcruntime140.dll')
-const currentInstaller = join(currentArtifacts, 'bundle/nsis/GreekGod_4.0.0-rc.1_x64-setup.exe')
+const currentInstaller = join(currentArtifacts, 'bundle/nsis/GreekGod_4.0.0_x64-setup.exe')
 const powershell = `${process.env.SystemRoot ?? 'C:\\Windows'}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`
 const run = (args) => spawnSync(powershell, ['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',verifier,...args], { encoding: 'utf8' })
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
@@ -30,7 +30,7 @@ try {
   mkdirSync(join(temp, 'artifacts/bundle/nsis'), { recursive: true })
   mkdirSync(join(temp, 'unsigned/bundle/nsis'), { recursive: true })
   mkdirSync(join(temp, 'pack'), { recursive: true })
-  for (const path of ['artifacts/greekgod.exe','artifacts/greekgod-sync-service.exe','artifacts/bundle/nsis/GreekGod_4.0.0-rc.1_x64-setup.exe','uninstall.exe']) {
+  for (const path of ['artifacts/greekgod.exe','artifacts/greekgod-sync-service.exe','artifacts/bundle/nsis/GreekGod_4.0.0_x64-setup.exe','uninstall.exe']) {
     copyFileSync(signedFixture, join(temp, path))
   }
   const model = Buffer.from('qualified-test-model')
@@ -52,13 +52,13 @@ try {
   policy.nativeRuntimeContractPath = join(temp, 'native-contract.json')
   writeFileSync(join(temp, 'policy.json'), `${JSON.stringify(policy, null, 2)}\n`)
   const subject = 'CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
-  const signedInstallerHash = sha256(readFileSync(join(temp,'artifacts/bundle/nsis/GreekGod_4.0.0-rc.1_x64-setup.exe')))
+  const signedInstallerHash = sha256(readFileSync(join(temp,'artifacts/bundle/nsis/GreekGod_4.0.0_x64-setup.exe')))
   const valid = run(['-Mode','PUBLIC_SIGNED','-ArtifactRoot',join(temp,'artifacts'),'-AiPackRoot',join(temp,'pack'),'-UninstallerPath',join(temp,'uninstall.exe'),'-ExpectedInstallerSha256',signedInstallerHash,'-ExpectedPublisherSubject',subject,'-PolicyPath',join(temp,'policy.json'),'-Json'])
   assert.equal(valid.status, 0, valid.stdout + valid.stderr)
 
   copyFileSync(join(currentArtifacts, 'greekgod.exe'), join(temp, 'unsigned/greekgod.exe'))
   copyFileSync(join(currentArtifacts, 'greekgod-sync-service.exe'), join(temp, 'unsigned/greekgod-sync-service.exe'))
-  copyFileSync(currentInstaller, join(temp, 'unsigned/bundle/nsis/GreekGod_4.0.0-rc.1_x64-setup.exe'))
+  copyFileSync(currentInstaller, join(temp, 'unsigned/bundle/nsis/GreekGod_4.0.0_x64-setup.exe'))
   const unsignedInstallerHash = sha256(readFileSync(currentInstaller))
   const privateUnsigned = run(['-Mode','PRIVATE_UNSIGNED','-ArtifactRoot',join(temp,'unsigned'),'-AiPackRoot',join(temp,'pack'),'-ExpectedInstallerSha256',unsignedInstallerHash,'-PolicyPath',join(temp,'policy.json'),'-Json'])
   assert.equal(privateUnsigned.status, 0, privateUnsigned.stdout + privateUnsigned.stderr)

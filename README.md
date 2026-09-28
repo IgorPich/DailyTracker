@@ -64,9 +64,9 @@ Build najpierw tworzy statyczny frontend Vite, osadza go w aplikacji i nie uruch
 Wyniki:
 
 - samodzielny plik: `apps/desktop/src-tauri/target/release/greekgod.exe`,
-- instalator RC1: `apps/desktop/src-tauri/target/release/bundle/nsis/GreekGod_4.0.0-rc.1_x64-setup.exe`.
+- finalny instalator PC 4.0.0: `apps/desktop/src-tauri/target/release/bundle/nsis/GreekGod_4.0.0_x64-setup.exe`.
 
-Do wewnętrznego testu RC1 użyj pliku `GreekGod_4.0.0-rc.1_x64-setup.exe` wyłącznie w bezpiecznym, odizolowanym środowisku. Instalator działa dla bieżącego użytkownika, dodaje GreekGod do menu Start oraz skrót na pulpicie i konfiguruje usługę synchronizacji uruchamianą przez Harmonogram zadań. Kliknięcie systemowego `X` kończy aplikację Desktop; usługa synchronizacji działa niezależnie.
+GreekGod PC 4.0.0 jest prywatnie dystrybuowanym buildem `PRIVATE_UNSIGNED`; przed uruchomieniem należy porównać SHA-256 z finalnym rekordem release. Instalator działa dla bieżącego użytkownika, dodaje GreekGod do menu Start oraz skrót na pulpicie i konfiguruje usługę synchronizacji uruchamianą przez Harmonogram zadań. Kliknięcie systemowego `X` kończy aplikację Desktop; usługa synchronizacji działa niezależnie.
 
 ## Struktura
 
