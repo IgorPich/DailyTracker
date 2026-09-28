@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "policyId": "greekgod-pc-4.0-manual-private",
+  "releaseLine": "GreekGod PC 4.0",
+  "productKind": "DESKTOP",
+  "updateDistributionPolicy": "MANUAL_PRIVATE",
+  "windowsSigningPolicy": "PRIVATE_UNSIGNED",
+  "automaticUpdateDiscovery": false,
+  "periodicVersionChecks": false,
+  "productionUpdateUrls": [],
+  "installerDownloads": false,
+  "updaterService": false,
+  "cloudRequired": false,
+  "installer": {
+    "format": "NSIS",
+    "installMode": "currentUser",
+    "upgradeInitiation": "USER_LAUNCHES_TRUSTED_NEWER_INSTALLER",
+    "appDataOutsideReplacement": true
+  },
+  "artifactIntegrity": "FINAL_INSTALLER_SHA256",
+  "compatibility": {
+    "protocolVersion": 1,
+    "schemaVersion": 8
+  },
+  "mobile": {
+    "releaseLine": "GreekGod Mobile 2.0",
+    "partOfPc40ReleaseGate": false
+  }
+}

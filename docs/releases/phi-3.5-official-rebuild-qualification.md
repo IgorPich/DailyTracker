@@ -150,6 +150,11 @@ Still open and unchanged:
 - application/update channel;
 - the recorded installer upgrade-UX hardening observation.
 
+This is the historical qualification-phase list. It does not describe current
+PC 4.0 release status; later records select the production asset and Offline AI
+Pack, close native and installer gates, waive public signing for the private
+release, remove Android from PC scope, and select `MANUAL_PRIVATE` distribution.
+
 Conversion and quantization were reproduced once on the recorded Windows host.
 The checked-in script pins every observed input and output hash; any different
 host result must be treated as a new candidate and investigated, never silently
