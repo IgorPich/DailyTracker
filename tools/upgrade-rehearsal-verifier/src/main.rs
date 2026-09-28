@@ -59,9 +59,10 @@ fn run() -> Result<()> {
             let capture = capture(Path::new(&args[2]), &args[4], &args[5], expected_schema, Path::new(&args[7]))?;
             write_json(Path::new(&args[3]), &capture)
         }
-        Some("compare") if args.len() == 5 => compare_files(Path::new(&args[2]), Path::new(&args[3]), Path::new(&args[4])),
+        Some("compare") if args.len() == 5 => compare_files(Path::new(&args[2]), Path::new(&args[3]), Path::new(&args[4]), "4.0.0-rc.1"),
+        Some("compare-version") if args.len() == 6 => compare_files(Path::new(&args[2]), Path::new(&args[3]), Path::new(&args[5]), &args[4]),
         Some("compare-cancellation") if args.len() == 5 => compare_cancellation(Path::new(&args[2]), Path::new(&args[3]), Path::new(&args[4])),
-        _ => Err("usage: audit-seed <db> <expectations> | capture <db> <out> <stage> <app-version> <expected-schema> <expectations> | compare <before> <after> <out> | compare-cancellation <before> <after> <out>".into()),
+        _ => Err("usage: audit-seed <db> <expectations> | capture <db> <out> <stage> <app-version> <expected-schema> <expectations> | compare <before> <after> <out> | compare-version <before> <after> <expected-version> <out> | compare-cancellation <before> <after> <out>".into()),
     }
 }
 
@@ -515,7 +516,12 @@ fn hash_value(value: &Value) -> Result<String> {
     Ok(format!("{:X}", Sha256::digest(bytes)))
 }
 
-fn compare_files(before_path: &Path, after_path: &Path, out: &Path) -> Result<()> {
+fn compare_files(
+    before_path: &Path,
+    after_path: &Path,
+    out: &Path,
+    expected_target_version: &str,
+) -> Result<()> {
     let before: Capture = serde_json::from_slice(&fs::read(before_path)?)?;
     let after: Capture = serde_json::from_slice(&fs::read(after_path)?)?;
     let mut checks = Vec::new();
@@ -542,7 +548,7 @@ fn compare_files(before_path: &Path, after_path: &Path, out: &Path) -> Result<()
         check(
             &mut checks,
             "target app version",
-            after.app_version == "4.0.0-rc.1",
+            after.app_version == expected_target_version,
             after.app_version.clone(),
         );
     }
@@ -626,22 +632,94 @@ fn compare_cancellation(before_path: &Path, after_path: &Path, out: &Path) -> Re
     let before: Capture = serde_json::from_slice(&fs::read(before_path)?)?;
     let after: Capture = serde_json::from_slice(&fs::read(after_path)?)?;
     let mut checks = Vec::new();
-    check(&mut checks, "schema remains 7", before.schema_version == 7 && after.schema_version == 7, format!("{} -> {}", before.schema_version, after.schema_version));
-    check(&mut checks, "stable app version remains 3.0.3", before.app_version == "3.0.3" && after.app_version == "3.0.3", format!("{} -> {}", before.app_version, after.app_version));
-    check(&mut checks, "protocol remains 1", before.protocol_version == 1 && after.protocol_version == 1, format!("{} -> {}", before.protocol_version, after.protocol_version));
-    check(&mut checks, "SQLite integrity", before.integrity_check == "ok" && after.integrity_check == "ok", after.integrity_check.clone());
-    check(&mut checks, "data version unchanged", before.data_version == after.data_version, format!("{} -> {}", before.data_version, after.data_version));
-    check(&mut checks, "logical counts unchanged", before.counts == after.counts, "counts compared".into());
-    check(&mut checks, "duplicate state unchanged", before.duplicate_ids == after.duplicate_ids, "duplicate maps compared".into());
-    check(&mut checks, "canonical section hashes unchanged", before.section_hashes == after.section_hashes, "canonical SHA-256 compared".into());
-    check(&mut checks, "templates unchanged", before.template_programs == after.template_programs, "template projection compared".into());
-    check(&mut checks, "exercise identities unchanged", before.exercise_definitions == after.exercise_definitions, "exercise projection compared".into());
-    check(&mut checks, "gyms unchanged", before.gyms == after.gyms, "gym projection compared".into());
-    check(&mut checks, "journal unchanged", before.journal == after.journal, "journal projection compared".into());
-    check(&mut checks, "sync metadata unchanged", before.sync_counts == after.sync_counts, "sync counts compared".into());
-    let passed = checks.iter().all(|v: &Value| v.get("passed") == Some(&Value::Bool(true)));
-    write_json(out, &json!({"formatVersion":1,"verdict":if passed {"PASS"} else {"FAIL"},"before":before.stage,"after":after.stage,"checks":checks}))?;
-    if !passed { return Err(format!("cancellation comparison failed; see {}", out.display()).into()); }
+    check(
+        &mut checks,
+        "schema remains 7",
+        before.schema_version == 7 && after.schema_version == 7,
+        format!("{} -> {}", before.schema_version, after.schema_version),
+    );
+    check(
+        &mut checks,
+        "stable app version remains 3.0.3",
+        before.app_version == "3.0.3" && after.app_version == "3.0.3",
+        format!("{} -> {}", before.app_version, after.app_version),
+    );
+    check(
+        &mut checks,
+        "protocol remains 1",
+        before.protocol_version == 1 && after.protocol_version == 1,
+        format!("{} -> {}", before.protocol_version, after.protocol_version),
+    );
+    check(
+        &mut checks,
+        "SQLite integrity",
+        before.integrity_check == "ok" && after.integrity_check == "ok",
+        after.integrity_check.clone(),
+    );
+    check(
+        &mut checks,
+        "data version unchanged",
+        before.data_version == after.data_version,
+        format!("{} -> {}", before.data_version, after.data_version),
+    );
+    check(
+        &mut checks,
+        "logical counts unchanged",
+        before.counts == after.counts,
+        "counts compared".into(),
+    );
+    check(
+        &mut checks,
+        "duplicate state unchanged",
+        before.duplicate_ids == after.duplicate_ids,
+        "duplicate maps compared".into(),
+    );
+    check(
+        &mut checks,
+        "canonical section hashes unchanged",
+        before.section_hashes == after.section_hashes,
+        "canonical SHA-256 compared".into(),
+    );
+    check(
+        &mut checks,
+        "templates unchanged",
+        before.template_programs == after.template_programs,
+        "template projection compared".into(),
+    );
+    check(
+        &mut checks,
+        "exercise identities unchanged",
+        before.exercise_definitions == after.exercise_definitions,
+        "exercise projection compared".into(),
+    );
+    check(
+        &mut checks,
+        "gyms unchanged",
+        before.gyms == after.gyms,
+        "gym projection compared".into(),
+    );
+    check(
+        &mut checks,
+        "journal unchanged",
+        before.journal == after.journal,
+        "journal projection compared".into(),
+    );
+    check(
+        &mut checks,
+        "sync metadata unchanged",
+        before.sync_counts == after.sync_counts,
+        "sync counts compared".into(),
+    );
+    let passed = checks
+        .iter()
+        .all(|v: &Value| v.get("passed") == Some(&Value::Bool(true)));
+    write_json(
+        out,
+        &json!({"formatVersion":1,"verdict":if passed {"PASS"} else {"FAIL"},"before":before.stage,"after":after.stage,"checks":checks}),
+    )?;
+    if !passed {
+        return Err(format!("cancellation comparison failed; see {}", out.display()).into());
+    }
     println!("PASS cancellation: {} -> {}", before.stage, after.stage);
     Ok(())
 }
@@ -697,6 +775,8 @@ mod tests {
         let cancellation_comparison = temp.path().join("cancellation-comparison.json");
         let post = temp.path().join("post.json");
         let comparison = temp.path().join("comparison.json");
+        let final_post = temp.path().join("final-post.json");
+        let final_comparison = temp.path().join("final-comparison.json");
         fs::write(
             &expectations_path,
             serde_json::to_vec(&json!({
@@ -746,7 +826,8 @@ mod tests {
         )
         .unwrap();
         compare_cancellation(&baseline, &cancelled, &cancellation_comparison).unwrap();
-        let cancellation_result: Value = serde_json::from_slice(&fs::read(cancellation_comparison).unwrap()).unwrap();
+        let cancellation_result: Value =
+            serde_json::from_slice(&fs::read(cancellation_comparison).unwrap()).unwrap();
         assert_eq!(cancellation_result["verdict"], "PASS");
         Connection::open(&db)
             .unwrap()
@@ -757,8 +838,17 @@ mod tests {
             &capture(&db, "post", "4.0.0-rc.1", 8, &expectations_path).unwrap(),
         )
         .unwrap();
-        compare_files(&baseline, &post, &comparison).unwrap();
+        compare_files(&baseline, &post, &comparison, "4.0.0-rc.1").unwrap();
         let result: Value = serde_json::from_slice(&fs::read(comparison).unwrap()).unwrap();
         assert_eq!(result["verdict"], "PASS");
+        write_json(
+            &final_post,
+            &capture(&db, "final-post", "4.0.0", 8, &expectations_path).unwrap(),
+        )
+        .unwrap();
+        compare_files(&baseline, &final_post, &final_comparison, "4.0.0").unwrap();
+        let final_result: Value =
+            serde_json::from_slice(&fs::read(final_comparison).unwrap()).unwrap();
+        assert_eq!(final_result["verdict"], "PASS");
     }
 }
