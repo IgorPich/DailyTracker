@@ -8,6 +8,7 @@
     "store:default",
     "dialog:default",
     "fs:default",
+    "updater:default",
     {
       "identifier": "fs:allow-exists",
       "allow": [

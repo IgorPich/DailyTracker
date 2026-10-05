@@ -37,6 +37,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "externalBin": ["binaries/greekgod-sync-service"],
     "licenseFile": "LICENSE.txt",
     "resources": {
@@ -65,6 +66,18 @@
       },
       "wix": {
         "language": ["pl-PL", "en-US"]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJBRUJEREI0ODkyNEE5NzYKUldSMnFTU0p0TjNydWpYaDlrS25RWC96Y29yWmRLVFNzdVVDWVpRbVhSSkwzY3RxRTRlRDZZWnEK",
+      "endpoints": [
+        "https://github.com/IgorPich/DailyTracker/releases/latest/download/latest.json"
+      ],
+      "allowDowngrades": false,
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

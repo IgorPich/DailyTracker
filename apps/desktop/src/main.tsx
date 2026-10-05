@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import { AppProvider } from './context/AppContext'
 import { ToastProvider } from './context/ToastContext'
+import { UpdateProvider } from './context/UpdateContext'
 import './styles.css'
 
 const root = ReactDOM.createRoot(document.getElementById('root')!)
@@ -24,7 +25,9 @@ if (import.meta.env.MODE === 'sqlite-smoke') {
     <React.StrictMode>
       <AppProvider>
         <ToastProvider>
-          <App />
+          <UpdateProvider>
+            <App />
+          </UpdateProvider>
         </ToastProvider>
       </AppProvider>
     </React.StrictMode>,

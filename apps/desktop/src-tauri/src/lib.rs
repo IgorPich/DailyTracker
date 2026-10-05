@@ -1,5 +1,3 @@
-use tauri::{RunEvent, WindowEvent};
-
 #[cfg(any(feature = "native-sqlite-shadow", feature = "native-sqlite-authority"))]
 mod native_storage_shadow {
     use greekgod_storage::{
@@ -319,7 +317,8 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init());
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::new().build());
     #[cfg(any(feature = "native-sqlite-shadow", feature = "native-sqlite-authority"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
         native_storage_shadow::native_storage_probe,
@@ -333,20 +332,7 @@ pub fn run() {
         native_storage_shadow::native_authority_replace,
         native_storage_shadow::native_authority_backup_before_import
     ]);
-    let app = builder
-        .build(tauri::generate_context!())
-        .expect("failed to initialize GreekGod");
-
-    app.run(|app_handle, event| {
-        if let RunEvent::WindowEvent {
-            label,
-            event: WindowEvent::CloseRequested { .. },
-            ..
-        } = event
-        {
-            if label == "main" {
-                app_handle.exit(0);
-            }
-        }
-    });
+    builder
+        .run(tauri::generate_context!())
+        .expect("error while running GreekGod");
 }

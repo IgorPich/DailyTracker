@@ -10,6 +10,7 @@ import {
   FileSpreadsheet,
   MapPin,
   Plus,
+  RefreshCw,
   RotateCcw,
   ShieldCheck,
   Trash2,
@@ -21,6 +22,7 @@ import { DecimalInput } from '../components/DecimalInput'
 import { TemplateEditor } from '../components/TemplateEditor'
 import { useApp } from '../context/AppContext'
 import { useToast } from '../context/ToastContext'
+import { useUpdate } from '../context/UpdateContext'
 import { confirmAction, isDesktopApp, pickJsonText } from '../services/fileService'
 import { appDataStore } from '../services/appDataStore'
 import type { Phase, TrainingTemplate } from '../types'
@@ -32,6 +34,7 @@ const phases: Phase[] = ['Maintenance', 'Lean Gain', 'Mini Cut', 'Redukcja']
 export function Settings() {
   const { data, updateSettings, updateTemplate, addGymLocation, renameGymLocation, deleteGymLocation, replaceData, clearData } = useApp()
   const { showToast } = useToast()
+  const update = useUpdate()
   const inputRef = useRef<HTMLInputElement>(null)
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null)
   const [newGymName, setNewGymName] = useState('')
@@ -39,6 +42,19 @@ export function Settings() {
   const [gymNameDraft, setGymNameDraft] = useState('')
   const [editingTemplate, setEditingTemplate] = useState<TrainingTemplate | null>(null)
   const gymLocations = data.settings.gymLocations ?? []
+  const updateStatus = update.phase === 'checking'
+    ? 'Sprawdzanie…'
+    : update.phase === 'downloading'
+      ? `Pobieranie${update.progress === undefined ? '…' : ` · ${update.progress}%`}`
+      : update.phase === 'ready'
+        ? `Wersja ${update.availableVersion} jest gotowa. Zostanie zainstalowana po zamknięciu aplikacji.`
+        : update.phase === 'up-to-date'
+          ? 'Masz najnowszą stabilną wersję.'
+          : update.phase === 'error'
+            ? update.message ?? 'Nie udało się sprawdzić aktualizacji.'
+            : update.phase === 'unsupported'
+              ? 'Aktualizacje są dostępne w aplikacji Windows.'
+              : 'Aktualizacje są sprawdzane automatycznie przy uruchomieniu.'
 
   const hasGymName = (name: string, except?: string) => gymLocations.some((item) => (
     item !== except && item.localeCompare(name.trim(), 'pl', { sensitivity: 'accent' }) === 0
@@ -175,6 +191,19 @@ export function Settings() {
         <section className="card settings-section template-settings">
           <div className="settings-section__heading"><span className="settings-icon"><Dumbbell size={19} /></span><div><h2>Szablony treningowe</h2><p>Trwałe zmiany będą używane w przyszłych treningach. Zapisana historia nie zostanie zmieniona.</p></div></div>
           <div className="template-settings__list">{data.templates.map((template) => <div className="template-settings__row" key={template.id}><span className="template-code">{template.code}</span><div><strong>{template.name}</strong><small>{template.exercises.length} ćwiczeń</small></div><button type="button" className="button button--secondary button--small" onClick={() => setEditingTemplate(template)}><Edit3 size={15} /> Edytuj szablon</button></div>)}</div>
+        </section>
+
+        <section className="card settings-section update-settings">
+          <div className="settings-section__heading"><span className="settings-icon"><RefreshCw size={19} /></span><div><h2>Aktualizacje</h2><p>Stabilne wydania pobierają się w tle i instalują bezpiecznie po zamknięciu GreekGod.</p></div></div>
+          <div className="update-summary">
+            <div><span>Aktualna wersja</span><strong>{update.currentVersion}</strong><small className={update.phase === 'error' ? 'update-summary__error' : ''}>{updateStatus}</small></div>
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={update.phase === 'checking' || update.phase === 'downloading' || update.phase === 'ready' || update.phase === 'unsupported'}
+              onClick={() => void update.checkNow()}
+            ><RefreshCw size={16} /> Sprawdź aktualizacje</button>
+          </div>
         </section>
 
         <section className="card settings-section">

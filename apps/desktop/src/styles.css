@@ -896,6 +896,13 @@ body.report-screenshot-mode .report-sheet { border-radius: 8px; }
 .gym-location-row > input { height: 37px; }
 .gym-location-empty { padding: 12px 0 2px; color: var(--muted); font-size: .67rem; }
 .template-settings { grid-column: 1 / -1; }
+.update-settings { grid-column: 1 / -1; }
+.update-summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.update-summary > div { display: grid; gap: 4px; }
+.update-summary span { color: var(--muted); font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; }
+.update-summary strong { font-size: .9rem; }
+.update-summary small { color: var(--muted); font-size: .65rem; line-height: 1.45; }
+.update-summary__error { color: #ff9b93 !important; }
 .template-settings__list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .template-settings__row { min-height: 62px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 8px 10px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.055); border-radius: 12px; }
 .template-settings__row > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
