@@ -1,0 +1,32 @@
+{
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "GreekGod Updater Rehearsal",
+  "identifier": "com.igorpich.formlog.updater-rehearsal",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "GreekGod Updater Rehearsal"
+      }
+    ]
+  },
+  "bundle": {
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/updater-rehearsal-hooks.nsh",
+        "startMenuFolder": "GreekGod Updater Rehearsal"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/IgorPich/DailyTracker-updater-rehearsal/releases/latest/download/latest.json"
+      ],
+      "allowDowngrades": false,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
