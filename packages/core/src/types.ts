@@ -1,6 +1,7 @@
 export type Phase = 'Maintenance' | 'Lean Gain' | 'Mini Cut' | 'Redukcja'
 
 export interface DailyEntry {
+  measurements?: Record<string, number>
   id: string
   date: string
   weight?: number
@@ -57,7 +58,7 @@ export interface TemplateExercise {
 
 export interface TrainingTemplate {
   id: string
-  code: 'A' | 'B' | 'C' | 'D'
+  code: string
   name: string
   exercises: TemplateExercise[]
 }
@@ -70,6 +71,7 @@ export interface ExerciseDefinition {
 }
 
 export interface Settings {
+  journalConfiguration?: JournalConfiguration
   phase: Phase
   calorieTarget: number
   proteinTarget: number
@@ -77,6 +79,17 @@ export interface Settings {
   gymLocations?: string[]
   lastGymLocation?: string
   trendThresholds: TrendThresholds
+}
+
+export interface JournalMetricTracking {
+  metricId: string
+  initiallyTracked: boolean
+  transitions: Array<{ from: string; tracked: boolean }>
+}
+
+export interface JournalConfiguration {
+  version: 1
+  metrics: JournalMetricTracking[]
 }
 
 export interface TrendThresholds {

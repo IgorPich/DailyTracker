@@ -12,6 +12,24 @@ import { fullAppDataFixture } from '../fixtures/full-app-data.fixture.ts'
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 
+const schemaEightFixture = (): AppData => {
+  const data = fullAppDataFixture()
+  data.dailyEntries[0].measurements = { CHEST: 101.5, BICEPS: 36 }
+  data.templates[0].code = 'PPL-X'
+  data.settings.journalConfiguration = {
+    version: 1,
+    metrics: [{
+      metricId: 'CHEST',
+      initiallyTracked: true,
+      transitions: [{ from: '2026-01-01', tracked: true }],
+    }],
+  }
+  Object.assign(data.dailyEntries[0], { additiveDailyMetadata: { retained: true } })
+  Object.assign(data.templates[0], { additiveTemplateMetadata: { cycle: 'sanitized' } })
+  Object.assign(data.settings, { additiveSettingsMetadata: ['retained'] })
+  return data
+}
+
 class LegacyMigrationSource implements LegacyAuthorityMigrationSource {
   migrationLoads = 0
   ordinaryLoads = 0
@@ -154,6 +172,44 @@ test('revision polling reloads an externally committed sync mutation', async () 
 
   equal(changed?.coachNotes.mobile, 'synced')
   equal(await store.loadIfChanged(), undefined)
+})
+
+test('existing schema-8 AppData preserves hidden additive fields through a normal 3.x edit', async () => {
+  const fixture = schemaEightFixture()
+  const legacy = new LegacyMigrationSource(fixture)
+  const bridge = new FakeAuthorityBridge()
+  bridge.bootstrapped = true
+  bridge.revision = 8
+  bridge.data = clone(fixture)
+  const store = new DevelopmentAuthoritativeAppDataStore(legacy, bridge)
+
+  const loaded = await store.load()
+  loaded.dailyEntries[0] = {
+    ...loaded.dailyEntries[0],
+    weight: 81.8,
+    note: '3.x visible edit',
+  }
+  loaded.settings.calorieTarget = 3000
+  await store.save(loaded)
+  const reopened = await store.load()
+
+  deepStrictEqual(reopened.dailyEntries[0].measurements, { CHEST: 101.5, BICEPS: 36 })
+  deepStrictEqual(
+    (reopened.dailyEntries[0] as typeof reopened.dailyEntries[0] & { additiveDailyMetadata: unknown }).additiveDailyMetadata,
+    { retained: true },
+  )
+  equal(reopened.templates[0].code, 'PPL-X')
+  deepStrictEqual(
+    (reopened.templates[0] as typeof reopened.templates[0] & { additiveTemplateMetadata: unknown }).additiveTemplateMetadata,
+    { cycle: 'sanitized' },
+  )
+  deepStrictEqual(reopened.settings.journalConfiguration, fixture.settings.journalConfiguration)
+  deepStrictEqual(
+    (reopened.settings as typeof reopened.settings & { additiveSettingsMetadata: unknown }).additiveSettingsMetadata,
+    ['retained'],
+  )
+  equal(reopened.dailyEntries[0].weight, 81.8)
+  equal(reopened.settings.calorieTarget, 3000)
 })
 
 test('stale desktop snapshot fails closed instead of overwriting external data', async () => {

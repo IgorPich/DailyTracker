@@ -2,6 +2,8 @@ export type {
   AppData,
   DailyEntry,
   ExerciseDefinition,
+  JournalConfiguration,
+  JournalMetricTracking,
   Phase,
   Settings,
   TemplateExercise,

@@ -106,7 +106,21 @@ impl NativeAppDataStore {
         service_id: &str,
         limit: usize,
     ) -> StorageResult<Vec<PreparedRemoteOperation>> {
-        let operations = self.pending_outbox(limit)?;
+        if self.load_sync_remote(service_id)?.is_none() {
+            return Err(StorageError::InvalidMutation(format!(
+                "unknown sync remote {service_id}"
+            )));
+        }
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT OR IGNORE INTO daily_delivery(service_id,operation_id,status)
+                 SELECT ?1,operation_id,'legacy_needs_review' FROM sync_outbox
+                 WHERE entity_type='daily_entry' AND acknowledged_at IS NULL",
+                [service_id],
+            )?;
+            Ok(())
+        })?;
+        let operations = self.pending_outbox_for_remote(limit, Some(service_id))?;
         self.with_connection(|connection| {
             if load_remote_with_connection(connection, service_id)?.is_none() {
                 return Err(StorageError::InvalidMutation(format!(
@@ -368,21 +382,29 @@ fn prepare_operation(
     service_id: &str,
     operation: OutboxOperation,
 ) -> StorageResult<PreparedRemoteOperation> {
-    let remote_base_revision = connection
-        .query_row(
-            r#"
+    let remote_base_revision = if operation.entity_type == crate::SyncEntityType::DailyEntry {
+        connection.query_row(
+            "SELECT original_remote_base FROM daily_delivery WHERE service_id=?1 AND operation_id=?2 AND status='pending'",
+            params![service_id, operation.operation_id],
+            |row| row.get::<_, i64>(0),
+        )?
+    } else {
+        connection
+            .query_row(
+                r#"
             SELECT remote_revision FROM sync_remote_entities
             WHERE service_id = ?1 AND entity_type = ?2 AND entity_id = ?3
             "#,
-            params![
-                service_id,
-                operation.entity_type.as_str(),
-                &operation.entity_id
-            ],
-            |row| row.get::<_, i64>(0),
-        )
-        .optional()?
-        .unwrap_or(0);
+                params![
+                    service_id,
+                    operation.entity_type.as_str(),
+                    &operation.entity_id
+                ],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+            .unwrap_or(0)
+    };
     Ok(PreparedRemoteOperation {
         request: SyncMutationRequest {
             operation_id: operation.operation_id,

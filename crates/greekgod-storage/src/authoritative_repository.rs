@@ -637,6 +637,45 @@ mod tests {
     }
 
     #[test]
+    fn schema_eight_hidden_fields_survive_normal_snapshot_edits() {
+        let directory = tempdir().expect("temporary schema-eight directory");
+        let store = NativeAppDataStore::new(directory.path().join(DATABASE_FILENAME))
+            .expect("native store");
+        let mut schema_eight = fixture();
+        schema_eight["dailyEntries"][0]["measurements"] = json!({"CHEST":101.5,"BICEPS":36});
+        schema_eight["dailyEntries"][0]["additiveMetadata"] = json!({"source":"sanitized"});
+        schema_eight["templates"][0]["code"] = json!("PPL-X");
+        schema_eight["templates"][0]["metadata"] = json!({"cycle":2});
+        schema_eight["settings"]["journalConfiguration"] = json!({
+            "version":1,
+            "metrics":[{"metricId":"CHEST","initiallyTracked":true,"transitions":[]}]
+        });
+        let bootstrap = store
+            .bootstrap_from_legacy_snapshot(&schema_eight, "desktop-bootstrap")
+            .expect("bootstrap schema-eight fixture");
+        let mut edited = store.load_authoritative_snapshot().unwrap().data;
+        edited["dailyEntries"][0]["weight"] = json!(81.8);
+        edited["settings"]["calorieTarget"] = json!(3000);
+
+        store
+            .replace_authoritative_snapshot(&edited, "desktop-test", bootstrap.global_revision)
+            .expect("normal 3.x-style edit");
+        let reopened = NativeAppDataStore::new(store.database_path()).unwrap();
+        let loaded = reopened.load_authoritative_snapshot().unwrap().data;
+
+        assert_eq!(loaded, edited);
+        assert_eq!(
+            loaded["dailyEntries"][0]["measurements"],
+            json!({"CHEST":101.5,"BICEPS":36})
+        );
+        assert_eq!(loaded["templates"][0]["code"], "PPL-X");
+        assert_eq!(
+            loaded["settings"]["journalConfiguration"],
+            schema_eight["settings"]["journalConfiguration"]
+        );
+    }
+
+    #[test]
     fn workout_delete_creates_tombstone_and_stale_resurrection_is_rejected() {
         let (_directory, store, revision) = bootstrapped_store();
         let workout_revision = store

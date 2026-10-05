@@ -2,6 +2,7 @@ import { deepStrictEqual, equal, notStrictEqual, strictEqual } from 'node:assert
 import test from 'node:test'
 import { deleteDailyEntry, findDailyEntryByDate, upsertDailyEntry } from '../src/dailyEntryOperations.ts'
 import { dailyEntryFixture as entry } from './fixtures/dailyEntry.fixture.ts'
+import type { DailyEntry } from '../src/types.ts'
 
 test('adds a new day at the end without sorting existing entries', () => {
   const entries = [
@@ -90,6 +91,21 @@ test('preserves every DailyEntry field without normalization', () => {
 
   deepStrictEqual(result[0], completeEntry)
   strictEqual(result[0], completeEntry)
+})
+
+test('3.x-style DailyEntry edits preserve hidden schema-8 measurements and additive metadata', () => {
+  const stored = entry('entry-schema-8', '2026-08-26', {
+    weight: 82,
+    measurements: { CHEST: 101.5, BICEPS: 36 },
+  }) as DailyEntry & { importedMetadata: { source: string } }
+  stored.importedMetadata = { source: 'sanitized-schema-8-fixture' }
+  const edited = { ...stored, weight: 81.8, note: '3.x visible edit' }
+
+  const result = upsertDailyEntry([stored], edited)
+
+  deepStrictEqual(result[0].measurements, { CHEST: 101.5, BICEPS: 36 })
+  deepStrictEqual((result[0] as typeof stored).importedMetadata, stored.importedMetadata)
+  equal(result[0].weight, 81.8)
 })
 
 test('removes separate id and date collisions exactly like the existing application', () => {
