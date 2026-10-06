@@ -1,16 +1,18 @@
 use axum::{
-    extract::State,
+    extract::{ConnectInfo, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
-use greekgod_storage::{NativeAppDataStore, PairedDeviceCredentials, StorageError};
+use greekgod_storage::{NativeAppDataStore, PairedDevice, PairedDeviceCredentials, StorageError};
 use greekgod_sync::{
     CompatibilityRequest, HandshakeResponse, PullRequest, PullResponse, PushRequest, PushResponse,
     SyncEngine, SyncEngineError, SyncStatus,
 };
 use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 mod tls_identity;
@@ -24,9 +26,14 @@ struct ServiceState {
     engine: Arc<SyncEngine>,
     store: NativeAppDataStore,
     certificate_fingerprint_sha256: String,
+    base_url: String,
+    bind_ip: IpAddr,
+    desktop_control_token_hash: [u8; 32],
 }
 
 const DEVICE_ID_HEADER: &str = "x-greekgod-device-id";
+const DESKTOP_CONTROL_HEADER: &str = "x-greekgod-desktop-control";
+const PAIRING_WINDOW_TTL_SECONDS: u64 = 120;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,6 +72,24 @@ struct PairResponse {
     service_id: String,
     certificate_fingerprint_sha256: String,
     credentials: PairedDeviceCredentials,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PairingBootstrap {
+    base_url: String,
+    service_id: String,
+    nonce: String,
+    certificate_fingerprint_sha256: String,
+    expires_at_epoch: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopStatusResponse {
+    service_id: String,
+    certificate_fingerprint_sha256: String,
+    paired_devices: Vec<PairedDevice>,
 }
 
 #[derive(Debug)]
@@ -124,11 +149,16 @@ impl IntoResponse for ApiError {
 pub fn build_router(
     store: NativeAppDataStore,
     identity: ServicePublicIdentity,
+    bind: SocketAddr,
+    desktop_control_token: &str,
 ) -> Result<Router, SyncEngineError> {
     let state = ServiceState {
         engine: Arc::new(SyncEngine::new(store.clone(), identity.service_id)?),
         store,
         certificate_fingerprint_sha256: identity.certificate_fingerprint_sha256,
+        base_url: format!("https://{bind}"),
+        bind_ip: bind.ip(),
+        desktop_control_token_hash: Sha256::digest(desktop_control_token.as_bytes()).into(),
     };
     Ok(Router::new()
         .route("/v1/health", get(health))
@@ -138,7 +168,57 @@ pub fn build_router(
         .route("/v1/sync/pull", post(pull))
         .route("/v1/sync/status", get(status))
         .route("/v1/device/revoke", post(revoke_current_device))
+        .route("/v1/desktop/status", get(desktop_status))
+        .route("/v1/desktop/pairing", post(open_desktop_pairing))
+        .route("/v1/desktop/pairing/cancel", post(cancel_desktop_pairing))
         .with_state(state))
+}
+
+async fn desktop_status(
+    State(state): State<ServiceState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> Result<Json<DesktopStatusResponse>, ApiError> {
+    authorize_desktop(&state, peer, &headers)?;
+    let paired_devices = state
+        .store
+        .paired_devices()?
+        .into_iter()
+        .filter(|device| device.revoked_at.is_none())
+        .collect();
+    Ok(Json(DesktopStatusResponse {
+        service_id: state.engine.status()?.service_id,
+        certificate_fingerprint_sha256: state.certificate_fingerprint_sha256,
+        paired_devices,
+    }))
+}
+
+async fn open_desktop_pairing(
+    State(state): State<ServiceState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> Result<Json<PairingBootstrap>, ApiError> {
+    authorize_desktop(&state, peer, &headers)?;
+    let window = state
+        .store
+        .open_pairing_window(PAIRING_WINDOW_TTL_SECONDS)?;
+    Ok(Json(PairingBootstrap {
+        base_url: state.base_url,
+        service_id: state.engine.status()?.service_id,
+        nonce: window.nonce,
+        certificate_fingerprint_sha256: state.certificate_fingerprint_sha256,
+        expires_at_epoch: window.expires_at_epoch,
+    }))
+}
+
+async fn cancel_desktop_pairing(
+    State(state): State<ServiceState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    authorize_desktop(&state, peer, &headers)?;
+    state.store.close_pairing_windows()?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn health(State(state): State<ServiceState>) -> Result<Json<HealthResponse>, ApiError> {
@@ -236,6 +316,26 @@ fn authorize(
     Ok(())
 }
 
+fn authorize_desktop(
+    state: &ServiceState,
+    peer: SocketAddr,
+    headers: &HeaderMap,
+) -> Result<(), ApiError> {
+    if !peer.ip().is_loopback() && peer.ip() != state.bind_ip {
+        return Err(ApiError {
+            status: StatusCode::FORBIDDEN,
+            code: "desktop_control_forbidden".into(),
+            message: "Desktop control is available only to the local computer".into(),
+        });
+    }
+    let token = header_value(headers, DESKTOP_CONTROL_HEADER)?;
+    let actual: [u8; 32] = Sha256::digest(token.as_bytes()).into();
+    if actual != state.desktop_control_token_hash {
+        return Err(StorageError::UnauthorizedDevice.into());
+    }
+    Ok(())
+}
+
 fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, ApiError> {
     headers
         .get(name)
@@ -262,8 +362,24 @@ mod tests {
                 store,
                 certificate_fingerprint_sha256:
                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+                base_url: "https://192.168.1.25:39173".into(),
+                bind_ip: "192.168.1.25".parse().expect("bind IP"),
+                desktop_control_token_hash: Sha256::digest(b"desktop-control-test").into(),
             },
         )
+    }
+
+    fn desktop_headers() -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            DESKTOP_CONTROL_HEADER,
+            "desktop-control-test".parse().expect("desktop token"),
+        );
+        headers
+    }
+
+    fn local_desktop_peer() -> ConnectInfo<SocketAddr> {
+        ConnectInfo("192.168.1.25:51000".parse().expect("desktop peer"))
     }
 
     async fn pair_and_headers(state: &ServiceState) -> HeaderMap {
@@ -409,5 +525,60 @@ mod tests {
             .await
             .expect_err("revoked token");
         assert_eq!(rejected.status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn local_desktop_control_opens_and_cancels_the_authority_pairing_window() {
+        let (_directory, state) = state();
+        let Json(status) = desktop_status(
+            State(state.clone()),
+            local_desktop_peer(),
+            desktop_headers(),
+        )
+        .await
+        .expect("desktop status");
+        assert_eq!(status.service_id, "service-http-test");
+        assert!(status.paired_devices.is_empty());
+
+        let Json(pairing) = open_desktop_pairing(
+            State(state.clone()),
+            local_desktop_peer(),
+            desktop_headers(),
+        )
+        .await
+        .expect("open pairing");
+        assert_eq!(pairing.base_url, "https://192.168.1.25:39173");
+        assert_eq!(pairing.service_id, "service-http-test");
+        assert_eq!(pairing.nonce.len(), 32);
+
+        cancel_desktop_pairing(
+            State(state.clone()),
+            local_desktop_peer(),
+            desktop_headers(),
+        )
+        .await
+        .expect("cancel pairing");
+        assert!(matches!(
+            state.store.pair_device(&pairing.nonce, "mobile", "Phone"),
+            Err(StorageError::PairingWindowClosed)
+        ));
+    }
+
+    #[tokio::test]
+    async fn desktop_control_rejects_remote_lan_peers_and_wrong_tokens() {
+        let (_directory, state) = state();
+        let remote = desktop_status(
+            State(state.clone()),
+            ConnectInfo("192.168.1.50:51000".parse().expect("remote peer")),
+            desktop_headers(),
+        )
+        .await
+        .expect_err("remote peer must fail");
+        assert_eq!(remote.status, StatusCode::FORBIDDEN);
+
+        let wrong_token = desktop_status(State(state), local_desktop_peer(), HeaderMap::new())
+            .await
+            .expect_err("missing token must fail");
+        assert_eq!(wrong_token.status, StatusCode::UNAUTHORIZED);
     }
 }

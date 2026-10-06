@@ -1,6 +1,8 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-use greekgod_storage::{NativeAppDataStore, PairingWindow, DATABASE_FILENAME};
+use greekgod_storage::{
+    NativeAppDataStore, PairingWindow, DATABASE_FILENAME, SYNC_RUNTIME_DESCRIPTOR_FILENAME,
+};
 use greekgod_sync::{PROTOCOL_VERSION, SERVICE_VERSION};
 use greekgod_sync_service::{
     build_router, ensure_crypto_provider, ServicePublicIdentity, ServiceTlsIdentity,
@@ -17,6 +19,7 @@ use std::sync::{
     Arc, OnceLock,
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 mod discovery;
 
@@ -71,6 +74,63 @@ enum BindSelection {
 struct PairingConfig {
     ttl_seconds: u64,
     output_path: PathBuf,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeDescriptor<'a> {
+    base_url: String,
+    service_id: &'a str,
+    certificate_fingerprint_sha256: &'a str,
+    desktop_control_token: &'a str,
+}
+
+struct RuntimeDescriptorGuard {
+    path: PathBuf,
+}
+
+impl RuntimeDescriptorGuard {
+    fn create(
+        database_path: &Path,
+        bind: SocketAddr,
+        identity: &ServicePublicIdentity,
+        desktop_control_token: &str,
+    ) -> Result<Self, String> {
+        let path = database_path.with_file_name(SYNC_RUNTIME_DESCRIPTOR_FILENAME);
+        let temporary_path = path.with_extension(format!("json.tmp-{}", Uuid::new_v4()));
+        let encoded = serde_json::to_vec(&RuntimeDescriptor {
+            base_url: format!("https://{bind}"),
+            service_id: &identity.service_id,
+            certificate_fingerprint_sha256: &identity.certificate_fingerprint_sha256,
+            desktop_control_token,
+        })
+        .map_err(|error| format!("could not encode Sync Service runtime descriptor: {error}"))?;
+        let write_result = (|| {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary_path)?;
+            file.write_all(&encoded)?;
+            file.sync_all()?;
+            if path.exists() {
+                std::fs::remove_file(&path)?;
+            }
+            std::fs::rename(&temporary_path, &path)
+        })();
+        if let Err(error) = write_result {
+            let _ = std::fs::remove_file(&temporary_path);
+            return Err(format!(
+                "could not publish Sync Service runtime descriptor: {error}"
+            ));
+        }
+        Ok(Self { path })
+    }
+}
+
+impl Drop for RuntimeDescriptorGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 impl Config {
@@ -246,13 +306,25 @@ async fn run() -> Result<(), String> {
         .rustls_config()
         .await
         .map_err(|error| error.to_string())?;
-    let router =
-        build_router(store.clone(), public_identity.clone()).map_err(|error| error.to_string())?;
     let listener =
         TcpListener::bind(bind).map_err(|error| format!("could not bind {bind}: {error}"))?;
     listener
         .set_nonblocking(true)
         .map_err(|error| format!("could not configure TLS listener: {error}"))?;
+    let desktop_control_token = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+    let router = build_router(
+        store.clone(),
+        public_identity.clone(),
+        bind,
+        &desktop_control_token,
+    )
+    .map_err(|error| error.to_string())?;
+    let _runtime_descriptor = RuntimeDescriptorGuard::create(
+        &canonical_database_path,
+        bind,
+        &public_identity,
+        &desktop_control_token,
+    )?;
     if let Some(pairing) = config.pairing {
         let window = store
             .open_pairing_window(pairing.ttl_seconds)
@@ -293,7 +365,7 @@ async fn run() -> Result<(), String> {
     let server_result = axum_server::from_tcp_rustls(listener, tls_config)
         .map_err(|error| format!("could not create HTTPS listener: {error}"))?
         .handle(handle)
-        .serve(router.into_make_service())
+        .serve(router.into_make_service_with_connect_info::<SocketAddr>())
         .await
         .map_err(|error| format!("HTTPS server failed: {error}"));
     if let Some(discovery) = discovery {
@@ -570,6 +642,34 @@ mod tests {
         assert!(output.contains(&identity.certificate_fingerprint_sha256));
         assert!(write_pairing_window(&path, bind, &identity, &window).is_err());
         assert!(!format!("{window:?}").contains("secret-nonce"));
+    }
+
+    #[test]
+    fn runtime_descriptor_uses_the_active_identity_and_is_removed_on_shutdown() {
+        let directory = tempfile::tempdir().expect("runtime descriptor directory");
+        let database = directory.path().join(DATABASE_FILENAME);
+        std::fs::write(&database, []).expect("database placeholder");
+        let identity = ServicePublicIdentity {
+            service_id: "service-runtime-test".into(),
+            certificate_fingerprint_sha256:
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into(),
+        };
+        let path = directory.path().join(SYNC_RUNTIME_DESCRIPTOR_FILENAME);
+        let guard = RuntimeDescriptorGuard::create(
+            &database,
+            "192.168.1.25:39173".parse().expect("bind"),
+            &identity,
+            "desktop-control-secret",
+        )
+        .expect("runtime descriptor");
+        let descriptor: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).expect("read runtime descriptor"))
+                .expect("parse runtime descriptor");
+        assert_eq!(descriptor["baseUrl"], "https://192.168.1.25:39173");
+        assert_eq!(descriptor["serviceId"], "service-runtime-test");
+        assert_eq!(descriptor["desktopControlToken"], "desktop-control-secret");
+        drop(guard);
+        assert!(!path.exists());
     }
 
     #[test]

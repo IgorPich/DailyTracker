@@ -26,6 +26,7 @@ pub use service_identity_repository::*;
 pub use sync_repository::*;
 
 pub const DATABASE_FILENAME: &str = "greekgod-v3.sqlite";
+pub const SYNC_RUNTIME_DESCRIPTOR_FILENAME: &str = "greekgod-sync-runtime.json";
 pub const MINIMUM_SAFE_WAL_SQLITE_VERSION: &str = "3.51.3";
 
 const MIGRATION_1_SQL: &str = r#"

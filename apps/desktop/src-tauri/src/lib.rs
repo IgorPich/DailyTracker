@@ -2,11 +2,16 @@
 mod native_storage_shadow {
     use greekgod_storage::{
         AuthoritativeStorageStatus, NativeAppDataStore, NativeStorageProbe, StorageError,
-        DATABASE_FILENAME,
+        DATABASE_FILENAME, SYNC_RUNTIME_DESCRIPTOR_FILENAME,
     };
+    use greekgod_sync_client::{
+        DesktopControlClient, DesktopServiceStatus, MobileSyncError, PairingBootstrap,
+    };
+    use serde::Deserialize;
     use serde::Serialize;
     use serde_json::Value;
     use std::path::PathBuf;
+    use std::process::Command;
     use tauri::{AppHandle, Manager};
 
     const DEVELOPMENT_IDENTIFIER: &str = "com.igorpich.formlog.dev";
@@ -37,6 +42,19 @@ mod native_storage_shadow {
     impl From<StorageError> for NativeCommandError {
         fn from(error: StorageError) -> Self {
             Self::new(error.kind(), error.to_string())
+        }
+    }
+
+    impl From<MobileSyncError> for NativeCommandError {
+        fn from(error: MobileSyncError) -> Self {
+            let kind = match error {
+                MobileSyncError::PcUnavailable(_) => "sync_service_unavailable",
+                MobileSyncError::PinMismatch | MobileSyncError::Unauthorized => {
+                    "sync_identity_error"
+                }
+                _ => "sync_service_error",
+            };
+            Self::new(kind, error.to_string())
         }
     }
 
@@ -75,6 +93,15 @@ mod native_storage_shadow {
         backup_path: Option<PathBuf>,
     }
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SyncRuntimeDescriptor {
+        base_url: String,
+        service_id: String,
+        certificate_fingerprint_sha256: String,
+        desktop_control_token: String,
+    }
+
     fn isolated_database_path(app: &AppHandle) -> CommandResult<PathBuf> {
         let identifier = app.config().identifier.as_str();
         let isolated_development = identifier == DEVELOPMENT_IDENTIFIER
@@ -103,6 +130,80 @@ mod native_storage_shadow {
             ));
         }
         Ok(app_data_dir.join(DATABASE_FILENAME))
+    }
+
+    fn desktop_control_client(app: &AppHandle) -> CommandResult<DesktopControlClient> {
+        let database_path = isolated_database_path(app)?;
+        let descriptor_path = database_path.with_file_name(SYNC_RUNTIME_DESCRIPTOR_FILENAME);
+        let encoded = std::fs::read(&descriptor_path).map_err(|error| {
+            NativeCommandError::new(
+                "sync_service_unavailable",
+                format!("Sync Service runtime descriptor is unavailable: {error}"),
+            )
+        })?;
+        let descriptor: SyncRuntimeDescriptor =
+            serde_json::from_slice(&encoded).map_err(|error| {
+                NativeCommandError::new(
+                    "sync_service_unavailable",
+                    format!("Sync Service runtime descriptor is invalid: {error}"),
+                )
+            })?;
+        let identity = NativeAppDataStore::new(database_path)?
+            .load_service_identity()?
+            .ok_or_else(|| {
+                NativeCommandError::new(
+                    "sync_service_unavailable",
+                    "Sync Service identity is not initialized",
+                )
+            })?;
+        if descriptor.service_id != identity.service_id
+            || !descriptor
+                .certificate_fingerprint_sha256
+                .eq_ignore_ascii_case(&identity.certificate_fingerprint_sha256)
+        {
+            return Err(NativeCommandError::new(
+                "sync_identity_error",
+                "Sync Service runtime identity does not match the production database",
+            ));
+        }
+        DesktopControlClient::pinned(
+            &descriptor.base_url,
+            &identity.certificate_fingerprint_sha256,
+            &identity.service_id,
+            &descriptor.desktop_control_token,
+        )
+        .map_err(Into::into)
+    }
+
+    #[cfg(windows)]
+    fn request_installed_sync_service_start() -> CommandResult<()> {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let status = Command::new("schtasks.exe")
+            .args(["/Run", "/TN", "GreekGod Sync Service"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .map_err(|error| {
+                NativeCommandError::new(
+                    "sync_service_unavailable",
+                    format!("Could not request the installed Sync Service task: {error}"),
+                )
+            })?;
+        if !status.success() {
+            return Err(NativeCommandError::new(
+                "sync_service_unavailable",
+                "The installed Sync Service task could not be started",
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
+    fn request_installed_sync_service_start() -> CommandResult<()> {
+        Err(NativeCommandError::new(
+            "sync_service_unavailable",
+            "Installed Sync Service startup is available only on Windows",
+        ))
     }
 
     async fn run_native<T>(
@@ -312,6 +413,48 @@ mod native_storage_shadow {
             backup_path: Some(backup_path),
         })
     }
+
+    #[tauri::command]
+    pub(super) async fn desktop_sync_status(app: AppHandle) -> CommandResult<DesktopServiceStatus> {
+        desktop_control_client(&app)?
+            .status()
+            .await
+            .map_err(Into::into)
+    }
+
+    #[tauri::command]
+    pub(super) async fn desktop_sync_open_pairing(
+        app: AppHandle,
+    ) -> CommandResult<PairingBootstrap> {
+        let mut last_error = None;
+        for attempt in 0..25 {
+            match desktop_control_client(&app) {
+                Ok(client) => match client.open_pairing().await {
+                    Ok(pairing) => return Ok(pairing),
+                    Err(error) => last_error = Some(error.into()),
+                },
+                Err(error) => last_error = Some(error),
+            }
+            if attempt == 0 {
+                request_installed_sync_service_start()?;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+        Err(last_error.unwrap_or_else(|| {
+            NativeCommandError::new(
+                "sync_service_unavailable",
+                "Sync Service did not become available",
+            )
+        }))
+    }
+
+    #[tauri::command]
+    pub(super) async fn desktop_sync_cancel_pairing(app: AppHandle) -> CommandResult<()> {
+        desktop_control_client(&app)?
+            .cancel_pairing()
+            .await
+            .map_err(Into::into)
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -332,7 +475,10 @@ pub fn run() {
         native_storage_shadow::native_authority_bootstrap,
         native_storage_shadow::native_authority_load,
         native_storage_shadow::native_authority_replace,
-        native_storage_shadow::native_authority_backup_before_import
+        native_storage_shadow::native_authority_backup_before_import,
+        native_storage_shadow::desktop_sync_status,
+        native_storage_shadow::desktop_sync_open_pairing,
+        native_storage_shadow::desktop_sync_cancel_pairing
     ]);
     builder
         .run(tauri::generate_context!())

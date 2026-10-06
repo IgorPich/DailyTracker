@@ -20,6 +20,7 @@ import {
 import { PageHeader } from '../components/PageHeader'
 import { DecimalInput } from '../components/DecimalInput'
 import { TemplateEditor } from '../components/TemplateEditor'
+import { PhoneSyncSettings } from '../components/PhoneSyncSettings'
 import { useApp } from '../context/AppContext'
 import { useToast } from '../context/ToastContext'
 import { useUpdate } from '../context/UpdateContext'
@@ -205,6 +206,8 @@ export function Settings() {
             ><RefreshCw size={16} /> Sprawdź aktualizacje</button>
           </div>
         </section>
+
+        <PhoneSyncSettings />
 
         <section className="card settings-section">
           <div className="settings-section__heading"><span className="settings-icon"><Database size={19} /></span><div><h2>Twoje dane</h2><p>{data.dailyEntries.length} wpisów dziennika · {data.workouts.length} treningów</p></div></div>

@@ -138,6 +138,15 @@ impl NativeAppDataStore {
         })
     }
 
+    pub fn close_pairing_windows(&self) -> StorageResult<usize> {
+        self.with_connection(|connection| {
+            Ok(connection.execute(
+                "UPDATE pairing_windows SET consumed_at = CURRENT_TIMESTAMP WHERE consumed_at IS NULL",
+                [],
+            )?)
+        })
+    }
+
     pub fn authenticate_device(&self, device_id: &str, device_token: &str) -> StorageResult<()> {
         self.with_connection(|connection| {
             let transaction =
@@ -343,6 +352,18 @@ mod tests {
         store
             .pair_device(&current.nonce, "mobile-current", "Current phone")
             .expect("current pairing window remains active");
+    }
+
+    #[test]
+    fn closing_pairing_windows_invalidates_the_active_nonce() {
+        let (_directory, store) = store();
+        let window = store.open_pairing_window(120).expect("pairing window");
+        assert_eq!(store.close_pairing_windows().expect("close window"), 1);
+        assert!(matches!(
+            store.pair_device(&window.nonce, "mobile-a", "Gym phone"),
+            Err(StorageError::PairingWindowClosed)
+        ));
+        assert_eq!(store.close_pairing_windows().expect("repeat close"), 0);
     }
 
     #[test]

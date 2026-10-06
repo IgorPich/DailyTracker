@@ -903,6 +903,19 @@ body.report-screenshot-mode .report-sheet { border-radius: 8px; }
 .update-summary strong { font-size: .9rem; }
 .update-summary small { color: var(--muted); font-size: .65rem; line-height: 1.45; }
 .update-summary__error { color: #ff9b93 !important; }
+.phone-sync-settings { grid-column: 1 / -1; }
+.phone-sync-summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.phone-sync-summary > div { display: grid; gap: 4px; }
+.phone-sync-summary span { color: var(--muted); font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; }
+.phone-sync-summary strong { font-size: .9rem; }
+.phone-sync-summary small { color: var(--muted); font-size: .65rem; }
+.phone-sync-expired { margin-top: 12px; color: #ffb26b; font-size: .68rem; }
+.phone-pairing-panel { position: relative; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 20px; margin-top: 16px; padding: 16px; border: 1px solid var(--line-soft); border-radius: 14px; background: rgba(255,255,255,.025); }
+.phone-pairing-panel img { display: block; padding: 7px; border-radius: 10px; background: #fff; }
+.phone-pairing-panel > div { display: grid; justify-items: start; gap: 8px; }
+.phone-pairing-panel strong { font-size: .86rem; }
+.phone-pairing-panel p { color: var(--muted); font-size: .67rem; }
+.phone-pairing-close { position: absolute; top: 8px; right: 8px; }
 .template-settings__list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .template-settings__row { min-height: 62px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 8px 10px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.055); border-radius: 12px; }
 .template-settings__row > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }

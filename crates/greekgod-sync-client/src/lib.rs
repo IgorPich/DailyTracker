@@ -1,4 +1,4 @@
-use greekgod_storage::{NativeAppDataStore, PairedDeviceCredentials, StorageError};
+use greekgod_storage::{NativeAppDataStore, PairedDevice, PairedDeviceCredentials, StorageError};
 use greekgod_sync::{
     CompatibilityRequest, HandshakeResponse, OperationOutcome, PullRequest, PullResponse,
     PushRequest, PushResponse, PROTOCOL_VERSION,
@@ -68,6 +68,24 @@ pub struct PairingResult {
     pub service_id: String,
     pub certificate_fingerprint_sha256: String,
     pub credentials: PairedDeviceCredentials,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingBootstrap {
+    pub base_url: String,
+    pub service_id: String,
+    pub nonce: String,
+    pub certificate_fingerprint_sha256: String,
+    pub expires_at_epoch: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopServiceStatus {
+    pub service_id: String,
+    pub certificate_fingerprint_sha256: String,
+    pub paired_devices: Vec<PairedDevice>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -147,6 +165,147 @@ pub struct LanSyncTransport {
     device_token: String,
 }
 
+#[derive(Clone)]
+pub struct DesktopControlClient {
+    client: Client,
+    base_url: String,
+    service_id: String,
+    certificate_fingerprint_sha256: String,
+    control_token: String,
+}
+
+fn pinned_https_client(
+    base_url: &str,
+    fingerprint: &str,
+) -> Result<(Client, String), MobileSyncError> {
+    if !base_url.starts_with("https://") {
+        return Err(MobileSyncError::InvalidConfiguration(
+            "HTTPS URL is required".into(),
+        ));
+    }
+    let expected = decode_fingerprint(fingerprint)?;
+    let provider = rustls::crypto::ring::default_provider();
+    let verifier = FingerprintVerifier {
+        expected,
+        algorithms: provider.signature_verification_algorithms,
+    };
+    let tls = rustls::ClientConfig::builder_with_provider(Arc::new(provider))
+        .with_safe_default_protocol_versions()
+        .map_err(|error| MobileSyncError::Transport(error.to_string()))?
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(verifier))
+        .with_no_client_auth();
+    let client = Client::builder()
+        .https_only(true)
+        .timeout(Duration::from_secs(12))
+        .tls_backend_preconfigured(tls)
+        .build()
+        .map_err(classify_reqwest_error)?;
+    Ok((client, base_url.trim_end_matches('/').to_owned()))
+}
+
+impl DesktopControlClient {
+    pub fn pinned(
+        base_url: &str,
+        fingerprint: &str,
+        service_id: &str,
+        control_token: &str,
+    ) -> Result<Self, MobileSyncError> {
+        if service_id.trim().is_empty() || control_token.trim().is_empty() {
+            return Err(MobileSyncError::InvalidConfiguration(
+                "serviceId and Desktop control token are required".into(),
+            ));
+        }
+        let (client, base_url) = pinned_https_client(base_url, fingerprint)?;
+        Ok(Self {
+            client,
+            base_url,
+            service_id: service_id.to_owned(),
+            certificate_fingerprint_sha256: fingerprint.to_ascii_lowercase(),
+            control_token: control_token.to_owned(),
+        })
+    }
+
+    fn request(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        request.header("x-greekgod-desktop-control", &self.control_token)
+    }
+
+    async fn checked_response(
+        &self,
+        request: reqwest::RequestBuilder,
+    ) -> Result<reqwest::Response, MobileSyncError> {
+        let response = self
+            .request(request)
+            .send()
+            .await
+            .map_err(classify_reqwest_error)?;
+        if response.status().as_u16() == 401 || response.status().as_u16() == 403 {
+            return Err(MobileSyncError::Unauthorized);
+        }
+        if !response.status().is_success() {
+            return Err(MobileSyncError::Transport(format!(
+                "Desktop control returned HTTP {}",
+                response.status()
+            )));
+        }
+        Ok(response)
+    }
+
+    pub async fn status(&self) -> Result<DesktopServiceStatus, MobileSyncError> {
+        let status: DesktopServiceStatus = self
+            .checked_response(
+                self.client
+                    .get(format!("{}/v1/desktop/status", self.base_url)),
+            )
+            .await?
+            .json()
+            .await
+            .map_err(|error| MobileSyncError::Transport(error.to_string()))?;
+        self.verify_identity(&status.service_id, &status.certificate_fingerprint_sha256)?;
+        Ok(status)
+    }
+
+    pub async fn open_pairing(&self) -> Result<PairingBootstrap, MobileSyncError> {
+        let pairing: PairingBootstrap = self
+            .checked_response(
+                self.client
+                    .post(format!("{}/v1/desktop/pairing", self.base_url)),
+            )
+            .await?
+            .json()
+            .await
+            .map_err(|error| MobileSyncError::Transport(error.to_string()))?;
+        self.verify_identity(&pairing.service_id, &pairing.certificate_fingerprint_sha256)?;
+        if pairing.base_url != self.base_url
+            || pairing.nonce.is_empty()
+            || pairing.expires_at_epoch <= 0
+        {
+            return Err(MobileSyncError::InvalidConfiguration(
+                "Desktop pairing payload is invalid".into(),
+            ));
+        }
+        Ok(pairing)
+    }
+
+    pub async fn cancel_pairing(&self) -> Result<(), MobileSyncError> {
+        self.checked_response(
+            self.client
+                .post(format!("{}/v1/desktop/pairing/cancel", self.base_url)),
+        )
+        .await?;
+        Ok(())
+    }
+
+    fn verify_identity(&self, service_id: &str, fingerprint: &str) -> Result<(), MobileSyncError> {
+        if service_id != self.service_id
+            || !fingerprint.eq_ignore_ascii_case(&self.certificate_fingerprint_sha256)
+        {
+            return Err(MobileSyncError::PinMismatch);
+        }
+        Ok(())
+    }
+}
+
 impl LanSyncTransport {
     pub fn pinned(
         base_url: &str,
@@ -162,27 +321,10 @@ impl LanSyncTransport {
                 "HTTPS URL, deviceId and device token are required".into(),
             ));
         }
-        let expected = decode_fingerprint(fingerprint)?;
-        let provider = rustls::crypto::ring::default_provider();
-        let verifier = FingerprintVerifier {
-            expected,
-            algorithms: provider.signature_verification_algorithms,
-        };
-        let tls = rustls::ClientConfig::builder_with_provider(Arc::new(provider))
-            .with_safe_default_protocol_versions()
-            .map_err(|error| MobileSyncError::Transport(error.to_string()))?
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(verifier))
-            .with_no_client_auth();
-        let client = Client::builder()
-            .https_only(true)
-            .timeout(Duration::from_secs(12))
-            .tls_backend_preconfigured(tls)
-            .build()
-            .map_err(classify_reqwest_error)?;
+        let (client, base_url) = pinned_https_client(base_url, fingerprint)?;
         Ok(Self {
             client,
-            base_url: base_url.trim_end_matches('/').to_owned(),
+            base_url,
             device_id: device_id.to_owned(),
             device_token: device_token.to_owned(),
         })

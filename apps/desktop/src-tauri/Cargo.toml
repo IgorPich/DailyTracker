@@ -13,7 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [features]
 default = []
 native-sqlite-shadow = ["dep:greekgod-storage"]
-native-sqlite-authority = ["dep:greekgod-storage"]
+native-sqlite-authority = ["dep:greekgod-storage", "dep:greekgod-sync-client", "dep:tokio"]
 native-sqlite-production-authority = ["native-sqlite-authority"]
 
 [build-dependencies]
@@ -21,6 +21,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 greekgod-storage = { path = "../../../crates/greekgod-storage", optional = true }
+greekgod-sync-client = { path = "../../../crates/greekgod-sync-client", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
@@ -28,3 +29,4 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-store = "2"
 tauri-plugin-updater = "=2.11.0"
+tokio = { version = "=1.53.1", features = ["time"], optional = true }
