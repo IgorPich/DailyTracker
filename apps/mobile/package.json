@@ -1,7 +1,7 @@
 {
   "name": "@greekgod/mobile",
   "private": true,
-  "version": "3.0.3",
+  "version": "3.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -19,6 +19,7 @@
     "@greekgod/core": "*",
     "@greekgod/design-tokens": "*",
     "@tauri-apps/api": "^2.11.1",
+    "jsqr": "1.4.0",
     "lucide-react": "^1.31.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

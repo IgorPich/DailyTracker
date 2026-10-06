@@ -70,6 +70,11 @@ class AutoSyncPayload {
 }
 
 @InvokeArg
+class ServiceIdPayload {
+    lateinit var serviceId: String
+}
+
+@InvokeArg
 class RestTimerPayload {
     lateinit var databasePath: String
     lateinit var deviceId: String
@@ -278,6 +283,20 @@ class GreekGodMobilePlugin(private val activity: Activity) : Plugin(activity) {
             invoke.resolve()
         } catch (error: Exception) {
             invoke.reject("GreekGod automatic sync could not be scheduled", error)
+        }
+    }
+
+    @Command
+    fun cancelAutoSync(invoke: Invoke) {
+        try {
+            val args = invoke.parseArgs(ServiceIdPayload::class.java)
+            require(args.serviceId.isNotBlank())
+            val workManager = WorkManager.getInstance(activity.applicationContext)
+            workManager.cancelUniqueWork("greekgod-sync:${args.serviceId}")
+            workManager.cancelUniqueWork("greekgod-sync:${args.serviceId}:available")
+            invoke.resolve()
+        } catch (error: Exception) {
+            invoke.reject("GreekGod automatic sync could not be retired", error)
         }
     }
 

@@ -516,7 +516,7 @@ impl<T: SyncTransport> MobileSyncEngine<T> {
             pushed_operations: pushed,
             pulled_changes: pulled,
             conflicts_resolved: conflicts,
-            pending_changes: self.store.pending_outbox(1_000)?.len(),
+            pending_changes: self.store.transmittable_outbox_count(&self.service_id)?,
         })
     }
 

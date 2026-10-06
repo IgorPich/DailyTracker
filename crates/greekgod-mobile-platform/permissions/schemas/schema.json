@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the cancelAutoSync command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cancelAutoSync",
+          "markdownDescription": "Enables the cancelAutoSync command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cancelAutoSync command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cancelAutoSync",
+          "markdownDescription": "Denies the cancelAutoSync command without any pre-configured scope."
+        },
+        {
           "description": "Enables the deleteSecret command without any pre-configured scope.",
           "type": "string",
           "const": "allow-deleteSecret",

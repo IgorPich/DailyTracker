@@ -10,6 +10,32 @@
 <tr>
 <td>
 
+`greekgod-mobile-platform:allow-cancelAutoSync`
+
+</td>
+<td>
+
+Enables the cancelAutoSync command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`greekgod-mobile-platform:deny-cancelAutoSync`
+
+</td>
+<td>
+
+Denies the cancelAutoSync command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `greekgod-mobile-platform:allow-deleteSecret`
 
 </td>

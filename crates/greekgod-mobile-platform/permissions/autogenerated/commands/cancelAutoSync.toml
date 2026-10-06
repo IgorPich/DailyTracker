@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-cancelAutoSync"
+description = "Enables the cancelAutoSync command without any pre-configured scope."
+commands.allow = ["cancelAutoSync"]
+
+[[permission]]
+identifier = "deny-cancelAutoSync"
+description = "Denies the cancelAutoSync command without any pre-configured scope."
+commands.deny = ["cancelAutoSync"]

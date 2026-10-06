@@ -64,6 +64,13 @@ struct SecretKeyPayload<'a> {
 }
 
 #[cfg(target_os = "android")]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ServiceIdPayload<'a> {
+    service_id: &'a str,
+}
+
+#[cfg(target_os = "android")]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SecretResponse {
@@ -212,6 +219,26 @@ impl<R: Runtime> MobilePlatform<R> {
         {
             self.handle
                 .run_mobile_plugin::<serde::de::IgnoredAny>("scheduleAutoSync", config)
+                .map_err(|error| PlatformError::Plugin(error.to_string()))?;
+            Ok(())
+        }
+        #[cfg(not(target_os = "android"))]
+        Err(PlatformError::Unsupported)
+    }
+
+    pub fn cancel_auto_sync(&self, service_id: &str) -> Result<()> {
+        if service_id.trim().is_empty() {
+            return Err(PlatformError::Plugin(
+                "automatic sync service identity is invalid".into(),
+            ));
+        }
+        #[cfg(target_os = "android")]
+        {
+            self.handle
+                .run_mobile_plugin::<serde::de::IgnoredAny>(
+                    "cancelAutoSync",
+                    ServiceIdPayload { service_id },
+                )
                 .map_err(|error| PlatformError::Plugin(error.to_string()))?;
             Ok(())
         }

@@ -60,6 +60,42 @@ impl NativeAppDataStore {
         })
     }
 
+    pub fn replace_sync_remote(
+        &self,
+        previous_service_id: Option<&str>,
+        service_id: &str,
+        certificate_fingerprint_sha256: &str,
+        last_known_host: &str,
+    ) -> StorageResult<SyncRemoteState> {
+        validate_remote_identity(service_id, certificate_fingerprint_sha256, last_known_host)?;
+        self.with_connection(|connection| {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            transaction.execute(
+                r#"
+                INSERT INTO sync_remotes (
+                  service_id, certificate_fingerprint_sha256, last_known_host
+                ) VALUES (?1, ?2, ?3)
+                ON CONFLICT(service_id) DO UPDATE SET
+                  certificate_fingerprint_sha256 = excluded.certificate_fingerprint_sha256,
+                  last_known_host = excluded.last_known_host,
+                  updated_at = CURRENT_TIMESTAMP
+                "#,
+                params![service_id, certificate_fingerprint_sha256, last_known_host],
+            )?;
+            let remote =
+                load_remote_with_connection(&transaction, service_id)?.ok_or_else(|| {
+                    StorageError::InvalidData("sync remote disappeared after replacement".into())
+                })?;
+            if let Some(previous) = previous_service_id.filter(|previous| *previous != service_id) {
+                transaction
+                    .execute("DELETE FROM sync_remotes WHERE service_id = ?1", [previous])?;
+            }
+            transaction.commit()?;
+            Ok(remote)
+        })
+    }
+
     pub fn load_sync_remote(&self, service_id: &str) -> StorageResult<Option<SyncRemoteState>> {
         self.with_connection(|connection| load_remote_with_connection(connection, service_id))
     }
@@ -132,6 +168,10 @@ impl NativeAppDataStore {
                 .map(|operation| prepare_operation(connection, service_id, operation))
                 .collect()
         })
+    }
+
+    pub fn transmittable_outbox_count(&self, service_id: &str) -> StorageResult<usize> {
+        Ok(self.prepare_remote_outbox(service_id, 1_000)?.len())
     }
 
     pub fn acknowledge_remote_operation(
@@ -569,6 +609,84 @@ mod tests {
     }
 
     #[test]
+    fn transmittable_count_excludes_legacy_review_rows_and_returns_to_zero_after_ack() {
+        let directory = tempdir().expect("temporary transmittable-count database");
+        let store = NativeAppDataStore::new(directory.path().join(DATABASE_FILENAME))
+            .expect("native store");
+        store
+            .bootstrap_from_legacy_snapshot(
+                &json!({
+                    "version": 4,
+                    "dailyEntries": [],
+                    "workouts": [],
+                    "templates": [],
+                    "exerciseLibrary": [],
+                    "settings": { "gymLocations": [] },
+                    "coachNotes": {}
+                }),
+                "mobile:test",
+            )
+            .expect("bootstrap");
+
+        for index in 1..=4 {
+            let date = format!("2026-08-{index:02}");
+            store
+                .apply_local_mutation(&SyncMutationRequest {
+                    operation_id: format!("81000000-0000-4000-8000-{index:012}"),
+                    change_set_id: format!("82000000-0000-4000-8000-{index:012}"),
+                    device_id: "mobile:test".into(),
+                    entity_type: SyncEntityType::DailyEntry,
+                    entity_id: date.clone(),
+                    base_revision: 0,
+                    order_position: Some(i64::from(index)),
+                    operation_type: SyncOperationType::Upsert,
+                    payload: Some(json!({ "id": date, "date": date, "weight": 80 })),
+                })
+                .expect("historical daily mutation");
+        }
+        store
+            .register_sync_remote("service-a", &"ab".repeat(32), "https://192.168.1.10:47832")
+            .expect("remote");
+
+        assert_eq!(store.transmittable_outbox_count("service-a").unwrap(), 0);
+        assert_eq!(store.pending_outbox(100).unwrap().len(), 4);
+        let quarantined_before = store
+            .daily_conflicts()
+            .unwrap()
+            .into_iter()
+            .map(|row| (row.operation_id, row.status, row.payload))
+            .collect::<Vec<_>>();
+        assert_eq!(quarantined_before.len(), 4);
+        assert!(quarantined_before
+            .iter()
+            .all(|(_, status, _)| status == "legacy_needs_review"));
+
+        store
+            .apply_local_mutation(&local_workout("83000000-0000-4000-8000-000000000001", 0, 8))
+            .expect("eligible workout mutation");
+        assert_eq!(store.transmittable_outbox_count("service-a").unwrap(), 1);
+        assert_eq!(store.pending_outbox(100).unwrap().len(), 5);
+
+        let operation = store
+            .prepare_remote_outbox("service-a", 1)
+            .unwrap()
+            .remove(0);
+        store
+            .acknowledge_remote_operation("service-a", &operation.request.operation_id, 40)
+            .expect("acknowledge eligible operation");
+
+        assert_eq!(store.transmittable_outbox_count("service-a").unwrap(), 0);
+        assert_eq!(store.pending_outbox(100).unwrap().len(), 4);
+        let quarantined_after = store
+            .daily_conflicts()
+            .unwrap()
+            .into_iter()
+            .map(|row| (row.operation_id, row.status, row.payload))
+            .collect::<Vec<_>>();
+        assert_eq!(quarantined_after, quarantined_before);
+    }
+
+    #[test]
     fn paired_sync_remotes_can_be_enumerated_without_secrets() {
         let (_directory, store) = store();
         store
@@ -578,6 +696,47 @@ mod tests {
         assert_eq!(remotes.len(), 2);
         assert_eq!(remotes[0].service_id, "service-a");
         assert_eq!(remotes[1].service_id, "service-b");
+    }
+
+    #[test]
+    fn remote_replacement_is_atomic_and_preserves_the_local_outbox() {
+        let (_directory, store) = store();
+        store
+            .apply_local_mutation(&local_workout("91000000-0000-4000-8000-000000000010", 0, 8))
+            .expect("pending local operation");
+        let pending_before = store.pending_outbox(100).expect("outbox before");
+
+        assert!(store
+            .replace_sync_remote(
+                Some("service-a"),
+                "service-invalid",
+                &"cd".repeat(32),
+                "http://192.168.1.11:39173",
+            )
+            .is_err());
+        assert_eq!(
+            store
+                .list_sync_remotes()
+                .expect("remote after failed replacement")[0]
+                .service_id,
+            "service-a"
+        );
+
+        store
+            .replace_sync_remote(
+                Some("service-a"),
+                "service-b",
+                &"cd".repeat(32),
+                "https://192.168.1.11:39173",
+            )
+            .expect("replacement remote");
+        let remotes = store.list_sync_remotes().expect("remote after replacement");
+        assert_eq!(remotes.len(), 1);
+        assert_eq!(remotes[0].service_id, "service-b");
+        assert_eq!(
+            store.pending_outbox(100).expect("outbox after replacement"),
+            pending_before
+        );
     }
 
     #[test]

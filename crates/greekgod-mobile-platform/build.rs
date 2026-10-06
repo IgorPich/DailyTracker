@@ -7,6 +7,7 @@ fn main() {
         "networkStatus",
         "releaseLocalNetwork",
         "scheduleAutoSync",
+        "cancelAutoSync",
         "startRestTimer",
         "restTimerStatus",
     ])

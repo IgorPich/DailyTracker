@@ -88,6 +88,8 @@ struct MobileStorageStatusResponse {
 struct MobileSyncOverviewResponse {
     remotes: Vec<SyncRemoteState>,
     pending_changes: usize,
+    transmittable_pending_changes: usize,
+    review_changes: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -325,9 +327,17 @@ async fn mobile_sync_overview(app: AppHandle) -> CommandResult<MobileSyncOvervie
     let database_path = mobile_database_path(&app)?;
     run_native(move || {
         let store = NativeAppDataStore::new(database_path)?;
+        let remotes = store.list_sync_remotes()?;
+        let transmittable_pending_changes = remotes
+            .first()
+            .map(|remote| store.transmittable_outbox_count(&remote.service_id))
+            .transpose()?
+            .unwrap_or(0);
         Ok(MobileSyncOverviewResponse {
-            remotes: store.list_sync_remotes()?,
+            remotes,
             pending_changes: store.pending_outbox(1_000)?.len(),
+            transmittable_pending_changes,
+            review_changes: store.daily_conflicts()?.len(),
         })
     })
     .await
@@ -337,6 +347,7 @@ async fn mobile_sync_overview(app: AppHandle) -> CommandResult<MobileSyncOvervie
 async fn mobile_pair(
     app: AppHandle,
     pairing: PairingInput,
+    previous_service_id: Option<String>,
 ) -> CommandResult<MobilePairingResponse> {
     let directory = mobile_data_directory(&app)?;
     let device_id = load_or_create_device_id(&directory)?;
@@ -355,12 +366,18 @@ async fn mobile_pair(
     let database_path = mobile_database_path(&app)?;
     let fingerprint = paired.certificate_fingerprint_sha256;
     let host = pairing.base_url;
+    let replacement_previous_service_id = previous_service_id.clone();
     let registered = run_native({
         let service_id = service_id.clone();
         let host = host.clone();
         move || {
             let store = NativeAppDataStore::new(database_path)?;
-            store.register_sync_remote(&service_id, &fingerprint, &host)?;
+            store.replace_sync_remote(
+                replacement_previous_service_id.as_deref(),
+                &service_id,
+                &fingerprint,
+                &host,
+            )?;
             Ok(store.pending_outbox(1_000)?.len())
         }
     })
@@ -384,6 +401,12 @@ async fn mobile_pair(
             return Err(error);
         }
     };
+    if let Some(previous) = previous_service_id.filter(|previous| previous != &service_id) {
+        let _ = app.mobile_platform().cancel_auto_sync(&previous);
+        let _ = app
+            .mobile_platform()
+            .delete_secret(&sync_secret_key(&previous));
+    }
     let _ = schedule_auto_sync(&app, &mobile_database_path(&app)?, &service_id, &device_id);
     Ok(MobilePairingResponse {
         service_id,

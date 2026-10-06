@@ -26,7 +26,7 @@ export interface PairingCode {
   serviceId: string
   certificateFingerprintSha256: string
   nonce: string
-  expiresAtEpoch?: number
+  expiresAtEpoch: number
 }
 
 export interface SyncRemote {
@@ -39,6 +39,8 @@ export interface SyncRemote {
 export interface SyncOverview {
   remotes: SyncRemote[]
   pendingChanges: number
+  transmittablePendingChanges: number
+  reviewChanges: number
 }
 
 export interface SyncNowResponse {
@@ -85,10 +87,10 @@ export class NativeMobileStore implements MobileStore {
     return invoke<SyncOverview>('mobile_sync_overview')
   }
 
-  pair(pairing: PairingCode) {
+  pair(pairing: PairingCode, previousServiceId?: string) {
     return invoke<{ serviceId: string; lastKnownHost: string; pendingChanges: number }>(
       'mobile_pair',
-      { pairing },
+      { pairing, previousServiceId },
     )
   }
 
