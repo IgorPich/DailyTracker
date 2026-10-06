@@ -10,12 +10,17 @@ const lifecycle = readFileSync(
   'utf8',
 )
 const hooks = readFileSync(resolve(desktopDirectory, 'src-tauri', 'windows', 'hooks.nsh'), 'utf8')
+const installerTemplate = readFileSync(resolve(desktopDirectory, 'src-tauri', 'windows', 'installer.nsi'), 'utf8')
+const polishInstaller = readFileSync(resolve(desktopDirectory, 'src-tauri', 'windows', 'Polish.nsh'), 'utf8')
 const serviceMain = readFileSync(
   resolve(desktopDirectory, '..', 'sync-service', 'src', 'main.rs'),
   'utf8',
 )
 
 assert.deepEqual(config.bundle.targets, ['nsis'])
+assert.equal(config.bundle.windows.nsis.template, 'windows/installer.nsi')
+assert.deepEqual(config.bundle.windows.nsis.languages, ['Polish', 'English'])
+assert.equal(config.bundle.windows.nsis.customLanguageFiles.Polish, 'windows/Polish.nsh')
 assert.deepEqual(config.bundle.externalBin, ['binaries/greekgod-sync-service'])
 assert.equal(
   config.bundle.resources['windows/sync-service-lifecycle.ps1'],
@@ -70,5 +75,21 @@ for (const required of [
 
 assert.ok(!hooks.includes('Remove-Item'))
 assert.ok(!hooks.includes('greekgod-v3.sqlite" /'))
+
+assert.match(installerTemplate, /\$\{If\} \$WixMode = 0\s+Abort\s+\$\{EndIf\}/)
+assert.match(installerTemplate, /\$UpdateMode = 1/)
+assert.match(installerTemplate, /MUI_FINISHPAGE_RUN/)
+assert.doesNotMatch(installerTemplate, /MUI_FINISHPAGE_SHOWREADME/)
+for (const key of [
+  'addOrReinstall',
+  'alreadyInstalledLong',
+  'appRunning',
+  'dontUninstall',
+  'uninstallBeforeInstalling',
+  'webview2Downloading',
+  'deleteAppData',
+]) {
+  assert.match(polishInstaller, new RegExp(`LangString ${key} \\$\\{LANG_POLISH\\} "[^"]+"`))
+}
 
 console.log('PASS Windows Sync Service bundle/lifecycle policy')

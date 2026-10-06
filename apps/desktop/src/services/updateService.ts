@@ -1,6 +1,7 @@
 import { isTauri } from '@tauri-apps/api/core'
 import type { Update } from '@tauri-apps/plugin-updater'
 import { appDataStore } from './appDataStore'
+import { createCloseLifecycle, type CloseFailureStage } from './closeLifecycle'
 
 export type UpdatePhase = 'idle' | 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error' | 'unsupported'
 
@@ -21,8 +22,6 @@ let status: UpdateStatus = {
 let downloadedUpdate: Update | undefined
 let startupCheck: Promise<void> | undefined
 let activeCheck: Promise<void> | undefined
-let installing = false
-let allowClose = false
 const listeners = new Set<Listener>()
 
 const publish = (next: UpdateStatus) => {
@@ -97,27 +96,22 @@ export const registerUpdateCloseHandler = async () => {
   if (!isTauri()) return () => undefined
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   const window = getCurrentWindow()
-  return window.onCloseRequested(async (event) => {
-    if (allowClose || !downloadedUpdate) return
-    event.preventDefault()
-    if (installing) return
-    installing = true
-
-    try {
-      await appDataStore.flush()
-      await downloadedUpdate.install({ restartAfterInstall: true })
-    } catch (error) {
+  const reportFailure = (stage: CloseFailureStage, error: unknown) => {
+    if (stage === 'install') {
       publish({
         currentVersion: status.currentVersion,
         phase: 'error',
-        availableVersion: downloadedUpdate.version,
+        availableVersion: downloadedUpdate?.version,
         message: 'Aktualizacja nie została zainstalowana. Obecna wersja pozostała bez zmian.',
       })
-      console.error('GreekGod update installation failed.', error)
-      allowClose = true
-      await window.close()
-    } finally {
-      installing = false
     }
+    console.error(`GreekGod close failed during ${stage}.`, error)
+  }
+  const handleClose = createCloseLifecycle({
+    beginShutdown: () => appDataStore.beginShutdown(),
+    getStagedUpdate: () => downloadedUpdate,
+    destroyWindow: () => window.destroy(),
+    reportFailure,
   })
+  return window.onCloseRequested(handleClose)
 }

@@ -19,10 +19,11 @@ assert.deepEqual(config.plugins.updater.endpoints, [
   'https://github.com/IgorPich/DailyTracker/releases/latest/download/latest.json',
 ])
 assert.ok(capability.permissions.includes('updater:default'))
+assert.ok(capability.permissions.includes('core:window:allow-destroy'))
 assert.match(updateService, /await update\.download\(/)
 assert.doesNotMatch(updateService, /downloadAndInstall/)
-assert.match(updateService, /await appDataStore\.flush\(\)/)
-assert.match(updateService, /downloadedUpdate\.install\(\{ restartAfterInstall: true \}\)/)
+assert.match(updateService, /appDataStore\.beginShutdown\(\)/)
+assert.match(updateService, /destroyWindow: \(\) => window\.destroy\(\)/)
 assert.match(updateService, /onCloseRequested/)
 assert.doesNotMatch(nativeRuntime, /CloseRequested|app_handle\.exit/)
 
