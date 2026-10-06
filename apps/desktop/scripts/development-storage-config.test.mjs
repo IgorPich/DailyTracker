@@ -41,7 +41,7 @@ assert.equal(authoritySmokeConfig.identifier, 'com.igorpich.formlog.authoritysmo
 assert.equal(authorityLiveSmokeConfig.identifier, 'com.igorpich.formlog.authoritylivesmoke')
 assert.equal(rehearsalConfig.identifier, 'com.igorpich.formlog.rehearsal')
 assert.equal(productionAuthorityConfig.identifier, 'com.igorpich.formlog')
-assert.equal(productionConfig.version, '3.0.3')
+assert.equal(productionConfig.version, packageJson.version)
 assert.equal(rehearsalConfig.version, '3.0.3')
 assert.equal(productionAuthorityConfig.version, '3.0.3')
 assert.equal(
