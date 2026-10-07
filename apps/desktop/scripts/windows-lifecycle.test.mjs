@@ -16,6 +16,8 @@ const serviceMain = readFileSync(
   resolve(desktopDirectory, '..', 'sync-service', 'src', 'main.rs'),
   'utf8',
 )
+const postInstallHook = /!macro NSIS_HOOK_POSTINSTALL([\s\S]*?)!macroend/.exec(hooks)?.[1]
+const preUninstallHook = /!macro NSIS_HOOK_PREUNINSTALL([\s\S]*?)!macroend/.exec(hooks)?.[1]
 
 assert.deepEqual(config.bundle.targets, ['nsis'])
 assert.equal(config.bundle.windows.nsis.template, 'windows/installer.nsi')
@@ -60,6 +62,10 @@ for (const required of [
 assert.ok(!/Remove-Item[^\n]*(greekgod-v3\.sqlite|DatabasePath)/i.test(lifecycle))
 assert.ok(!/Profile\s+(Public|Any|Domain)/i.test(lifecycle))
 assert.ok(!/LocalPort\s+(Any|\*)/i.test(lifecycle))
+assert.match(lifecycle, /'Install'\s*\{\s*Install-GreekGodSyncTask\s*Invoke-ElevatedFirewallAction 'InstallFirewall'/)
+assert.match(lifecycle, /'InstallTask'\s*\{ Install-GreekGodSyncTask \}/)
+assert.match(lifecycle, /'Uninstall'\s*\{\s*Uninstall-GreekGodSyncTask\s*Invoke-ElevatedFirewallAction 'RemoveFirewall'/)
+assert.match(lifecycle, /-Verb RunAs/)
 
 for (const required of [
   'NSIS_HOOK_PREINSTALL',
@@ -75,6 +81,15 @@ for (const required of [
 
 assert.ok(!hooks.includes('Remove-Item'))
 assert.ok(!hooks.includes('greekgod-v3.sqlite" /'))
+assert.ok(postInstallHook, 'post-install hook is missing')
+assert.equal((postInstallHook.match(/\$UpdateMode = 1/g) ?? []).length, 2)
+assert.equal((postInstallHook.match(/-Action InstallTask\b/g) ?? []).length, 2)
+assert.equal((postInstallHook.match(/-Action Install\b/g) ?? []).length, 2)
+assert.match(postInstallHook, /\$UpdateMode = 1[\s\S]*?-Action InstallTask[\s\S]*?\$\{Else\}[\s\S]*?-Action Install/)
+assert.match(postInstallHook, /CopyFiles \/SILENT[\s\S]*?\$UpdateMode = 1[\s\S]*?-Action InstallTask[\s\S]*?\$\{Else\}[\s\S]*?-Action Install/)
+assert.doesNotMatch(postInstallHook, /RunAs|InstallFirewall/)
+assert.ok(preUninstallHook, 'pre-uninstall hook is missing')
+assert.match(preUninstallHook, /-Action Uninstall\b/)
 
 assert.match(installerTemplate, /\$\{If\} \$WixMode = 0\s+Abort\s+\$\{EndIf\}/)
 assert.match(installerTemplate, /\$UpdateMode = 1/)

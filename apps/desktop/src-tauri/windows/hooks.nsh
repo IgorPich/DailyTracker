@@ -16,13 +16,21 @@
 !macro NSIS_HOOK_POSTINSTALL
   Delete "$DESKTOP\Formlog.lnk"
   CreateShortCut "$DESKTOP\GreekGod.lnk" "$INSTDIR\greekgod.exe" "" "$INSTDIR\greekgod.exe" 0
-  nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\sync-service-lifecycle.ps1" -Action Install -ServiceExecutable "$INSTDIR\greekgod-sync-service.exe" -DatabasePath "$APPDATA\com.igorpich.formlog\greekgod-v3.sqlite"'
+  ${If} $UpdateMode = 1
+    nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\sync-service-lifecycle.ps1" -Action InstallTask -ServiceExecutable "$INSTDIR\greekgod-sync-service.exe" -DatabasePath "$APPDATA\com.igorpich.formlog\greekgod-v3.sqlite"'
+  ${Else}
+    nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\sync-service-lifecycle.ps1" -Action Install -ServiceExecutable "$INSTDIR\greekgod-sync-service.exe" -DatabasePath "$APPDATA\com.igorpich.formlog\greekgod-v3.sqlite"'
+  ${EndIf}
   Pop $0
   StrCmp $0 "0" greekgod_sync_install_success greekgod_sync_install_failed
   greekgod_sync_install_failed:
     IfFileExists "$TEMP\greekgod-sync-service.previous.exe" 0 greekgod_sync_install_abort
       CopyFiles /SILENT "$TEMP\greekgod-sync-service.previous.exe" "$INSTDIR\greekgod-sync-service.exe"
-      nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\sync-service-lifecycle.ps1" -Action Install -ServiceExecutable "$INSTDIR\greekgod-sync-service.exe" -DatabasePath "$APPDATA\com.igorpich.formlog\greekgod-v3.sqlite"'
+      ${If} $UpdateMode = 1
+        nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\sync-service-lifecycle.ps1" -Action InstallTask -ServiceExecutable "$INSTDIR\greekgod-sync-service.exe" -DatabasePath "$APPDATA\com.igorpich.formlog\greekgod-v3.sqlite"'
+      ${Else}
+        nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\sync-service-lifecycle.ps1" -Action Install -ServiceExecutable "$INSTDIR\greekgod-sync-service.exe" -DatabasePath "$APPDATA\com.igorpich.formlog\greekgod-v3.sqlite"'
+      ${EndIf}
       Pop $1
     greekgod_sync_install_abort:
       Abort "Nie udało się bezpiecznie uruchomić GreekGod Sync Service. Baza danych nie została usunięta."
