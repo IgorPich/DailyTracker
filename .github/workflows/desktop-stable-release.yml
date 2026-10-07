@@ -1,0 +1,190 @@
+name: Desktop stable release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-stable-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Reject ineligible release tags before production approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the exact tagged commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pinned Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+
+      - name: Validate stable tag, versions, updater policy, and exact checkout
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$EXPECTED_SHA"
+          node apps/desktop/scripts/release/validate-stable-release.mjs --tag "$RELEASE_TAG"
+
+  build-and-validate:
+    name: Build and validate signed Windows release
+    needs: preflight
+    runs-on: windows-latest
+    environment: production-release
+    timeout-minutes: 60
+    steps:
+      - name: Check out the exact tagged commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pinned Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: npm
+
+      - name: Install pinned Rust toolchain
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.95.0-x86_64-pc-windows-msvc --profile minimal
+          rustup default 1.95.0-x86_64-pc-windows-msvc
+          if ((rustc --version) -notmatch '^rustc 1\.95\.0 ') { throw 'Unexpected Rust version.' }
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate stable tag, versions, updater policy, and exact checkout
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          if ((git rev-parse HEAD) -ne $env:EXPECTED_SHA) { throw 'Checkout does not match the triggering tag SHA.' }
+          if ((git rev-list -n 1 $env:RELEASE_TAG) -ne $env:EXPECTED_SHA) { throw 'Tag does not resolve to the checked-out commit.' }
+          node apps/desktop/scripts/release/validate-stable-release.mjs --tag $env:RELEASE_TAG
+
+      - name: Verify required signing secrets exist
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw 'TAURI_SIGNING_PRIVATE_KEY is not configured.' }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) { throw 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not configured.' }
+
+      - name: Run Desktop and shared-core checks
+        run: |
+          npm run typecheck --workspace @greekgod/core
+          npm run typecheck --workspace @greekgod/desktop
+          npm test --workspace @greekgod/core
+          npm test --workspace @greekgod/desktop
+
+      - name: Build signed production-authority NSIS updater
+        id: tauri
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: npm run tauri
+          args: --features native-sqlite-production-authority
+
+      - name: Audit generated content for signing secrets and token patterns
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node apps/desktop/scripts/release/audit-release-output.mjs apps/desktop/dist apps/desktop/src-tauri/target/release/greekgod.exe apps/desktop/src-tauri/target/release/bundle
+
+      - name: Stage exact updater assets and generate latest.json
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          node apps/desktop/scripts/release/stage-release-assets.mjs --tag $env:RELEASE_TAG --repository $env:RELEASE_REPOSITORY --bundle-dir apps/desktop/src-tauri/target/release/bundle/nsis --output release-staging
+          node apps/desktop/scripts/release/validate-release-assets.mjs --tag $env:RELEASE_TAG --repository $env:RELEASE_REPOSITORY --directory release-staging
+
+      - name: Upload validated release staging artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-stable-release-${{ github.ref_name }}
+          path: release-staging/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish validated stable GitHub Release
+    needs: build-and-validate
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the exact tagged commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Download validated release staging artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: desktop-stable-release-${{ github.ref_name }}
+          path: release-staging
+
+      - name: Revalidate assets before any GitHub mutation
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: node apps/desktop/scripts/release/validate-release-assets.mjs --tag $env:RELEASE_TAG --repository $env:RELEASE_REPOSITORY --directory release-staging
+
+      - name: Require version to exceed the current stable GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          node apps/desktop/scripts/release/validate-github-release-order.mjs --candidate-tag $env:RELEASE_TAG --repository $env:RELEASE_REPOSITORY
+
+      - name: Create or update draft release and upload exact assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: ./apps/desktop/scripts/release/Publish-StableRelease.ps1 -Tag $env:RELEASE_TAG -AssetsDirectory release-staging -Mode StageDraft
+
+      - name: Download and validate draft release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          New-Item -ItemType Directory -Path remote-release -Force | Out-Null
+          gh release download $env:RELEASE_TAG --dir remote-release
+          node apps/desktop/scripts/release/validate-release-assets.mjs --tag $env:RELEASE_TAG --repository $env:RELEASE_REPOSITORY --directory remote-release
+
+      - name: Promote validated draft to stable latest release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: ./apps/desktop/scripts/release/Publish-StableRelease.ps1 -Tag $env:RELEASE_TAG -AssetsDirectory release-staging -Mode Publish
