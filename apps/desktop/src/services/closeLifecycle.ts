@@ -67,7 +67,7 @@ export const createCloseLifecycle = (dependencies: CloseLifecycleDependencies) =
       const cancelFallback = scheduleExitFallback(() => { void destroyOnce() }, UPDATE_INSTALL_EXIT_FALLBACK_MS)
       try {
         // On Windows Tauri exits the process after successfully launching the passive installer.
-        await stagedUpdate.install({ restartAfterInstall: true })
+        await stagedUpdate.install({ restartAfterInstall: false })
       } catch (error) {
         dependencies.reportFailure('install', error)
       } finally {

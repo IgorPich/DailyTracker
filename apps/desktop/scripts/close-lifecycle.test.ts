@@ -80,7 +80,7 @@ test('staged update starts only after flush and repeated close events are idempo
   flushed.resolve()
   await installStarted.promise
   await firstClose
-  assert.deepEqual(calls, ['begin-shutdown', 'install:true', 'destroy'])
+  assert.deepEqual(calls, ['begin-shutdown', 'install:false', 'destroy'])
   assert.equal(fallbackDelay, UPDATE_INSTALL_EXIT_FALLBACK_MS)
   assert.equal(cancelCount, 1)
   assert.equal(firstEvent.prevented(), 1)

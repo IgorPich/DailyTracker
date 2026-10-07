@@ -1,5 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useToast } from './ToastContext'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   checkForUpdates,
   getUpdateStatus,
@@ -16,8 +15,6 @@ const UpdateContext = createContext<UpdateContextValue | null>(null)
 
 export function UpdateProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState(getUpdateStatus)
-  const announcedVersion = useRef<string>()
-  const { showToast } = useToast()
 
   useEffect(() => subscribeToUpdates(setStatus), [])
 
@@ -34,12 +31,6 @@ export function UpdateProvider({ children }: { children: ReactNode }) {
       unregister()
     }
   }, [])
-
-  useEffect(() => {
-    if (status.phase !== 'ready' || !status.availableVersion || announcedVersion.current === status.availableVersion) return
-    announcedVersion.current = status.availableVersion
-    showToast(`GreekGod ${status.availableVersion} jest gotowy i zostanie zainstalowany po zamknięciu aplikacji.`, 'info', 8_000)
-  }, [showToast, status.availableVersion, status.phase])
 
   const checkNow = useCallback(() => checkForUpdates(true), [])
   const value = useMemo(() => ({ ...status, checkNow }), [checkNow, status])
