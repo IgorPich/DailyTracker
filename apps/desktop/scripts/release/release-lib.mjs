@@ -35,6 +35,41 @@ export const validateReleaseOrder = (candidateTag, currentTag) => {
   return { candidate, current }
 }
 
+export const validateGitHubReleaseOrder = ({ candidateTag, latestResponse, releasesResponse, policy }) => {
+  if (latestResponse.status === 200) {
+    const release = latestResponse.body
+    if (!release || release.draft !== false || release.prerelease !== false || typeof release.tag_name !== 'string') {
+      throw new Error('GitHub latest release response is not a published stable release.')
+    }
+    return { mode: 'existing-stable', ...validateReleaseOrder(candidateTag, release.tag_name) }
+  }
+
+  if (latestResponse.status !== 404) {
+    throw new Error(`GitHub latest release request failed with HTTP ${latestResponse.status}.`)
+  }
+  if (!releasesResponse) {
+    throw new Error('GitHub release listing is required after a latest-release 404.')
+  }
+  if (releasesResponse.status !== 200) {
+    throw new Error(`GitHub release listing failed with HTTP ${releasesResponse.status}.`)
+  }
+  if (!Array.isArray(releasesResponse.body)) {
+    throw new Error('GitHub release listing response is malformed.')
+  }
+
+  const publishedStable = releasesResponse.body.filter((release) => !release?.draft && !release?.prerelease)
+  for (const release of publishedStable) {
+    if (typeof release.tag_name !== 'string') throw new Error('A published stable release has no tag.')
+    versionFromTag(release.tag_name)
+  }
+  if (publishedStable.length !== 0) {
+    throw new Error('GitHub latest release returned 404 despite published stable releases.')
+  }
+
+  const floorTag = `v${policy.historicalVersionFloorExclusive}`
+  return { mode: 'first-stable', ...validateReleaseOrder(candidateTag, floorTag) }
+}
+
 export const cargoPackageVersion = (contents) => {
   const section = contents.split(/(?=^\[)/m).find((candidate) => /^\[package\]\s*$/m.test(candidate))
   const version = section && /^version\s*=\s*"([^"]+)"\s*$/m.exec(section)?.[1]

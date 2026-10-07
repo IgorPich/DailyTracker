@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { createLatestManifest, stageReleaseAssets, validateReleaseAssets } from './release-assets-lib.mjs'
-import { cargoPackageVersion, validatePolicyState, validateReleaseOrder, versionFromTag } from './release-lib.mjs'
+import { cargoPackageVersion, validateGitHubReleaseOrder, validatePolicyState, validateReleaseOrder, versionFromTag } from './release-lib.mjs'
 import policy from './release-policy.json' with { type: 'json' }
 
 const directory = resolve(fileURLToPath(new URL('.', import.meta.url)))
@@ -40,6 +40,27 @@ test('release order must advance beyond the current stable GitHub release', () =
   assert.throws(() => validateReleaseOrder('v4.0.1', 'v4.0.1'), /must be newer/)
   assert.throws(() => validateReleaseOrder('v4.0.1', 'v4.0.2'), /must be newer/)
   assert.throws(() => validateReleaseOrder('v4.0.2-rc.1', 'v4.0.1'), /stable SemVer/)
+})
+
+test('GitHub ordering handles an existing stable, first-release bootstrap, and API failures fail closed', () => {
+  assert.deepEqual(validateGitHubReleaseOrder({
+    candidateTag: 'v4.0.3',
+    latestResponse: { status: 200, body: { tag_name: 'v4.0.2', draft: false, prerelease: false } },
+    policy,
+  }), { mode: 'existing-stable', candidate: '4.0.3', current: '4.0.2' })
+
+  assert.deepEqual(validateGitHubReleaseOrder({
+    candidateTag: 'v4.0.3',
+    latestResponse: { status: 404, body: { message: 'Not Found' } },
+    releasesResponse: { status: 200, body: [] },
+    policy,
+  }), { mode: 'first-stable', candidate: '4.0.3', current: policy.historicalVersionFloorExclusive })
+
+  assert.throws(() => validateGitHubReleaseOrder({
+    candidateTag: 'v4.0.3',
+    latestResponse: { status: 503, body: { message: 'Unavailable' } },
+    policy,
+  }), /HTTP 503/)
 })
 
 test('stable policy fails closed on every protected updater setting and version mismatch', () => {
@@ -136,5 +157,6 @@ test('workflow separates secret-bearing build from token-bearing publish and pro
   assert.match(workflow, /contents: write/)
   assert.match(workflow, /build-and-validate:[\s\S]*needs: preflight/)
   assert.match(workflow, /group: desktop-stable-release\s/)
-  assert.match(workflow, /releases\/latest[\s\S]*validate-release-order[\s\S]*-Mode StageDraft/)
+  assert.match(workflow, /validate-github-release-order\.mjs[\s\S]*-Mode StageDraft/)
+  assert.doesNotMatch(workflow, /4\.0\.0/)
 })

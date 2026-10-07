@@ -162,9 +162,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           RELEASE_REPOSITORY: ${{ github.repository }}
         run: |
-          $currentTag = gh api "repos/$env:RELEASE_REPOSITORY/releases/latest" --jq .tag_name
-          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($currentTag)) { throw 'Could not resolve the current stable GitHub Release.' }
-          node apps/desktop/scripts/release/validate-release-order.mjs --candidate-tag $env:RELEASE_TAG --current-tag $currentTag
+          node apps/desktop/scripts/release/validate-github-release-order.mjs --candidate-tag $env:RELEASE_TAG --repository $env:RELEASE_REPOSITORY
 
       - name: Create or update draft release and upload exact assets
         shell: pwsh
