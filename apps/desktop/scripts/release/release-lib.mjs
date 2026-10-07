@@ -94,7 +94,7 @@ export const validatePolicyState = ({ tag, rootVersion, desktopVersion, cargoVer
   }
   if (new URL(updater.endpoints[0]).protocol !== 'https:') throw new Error('Production updater endpoint must use HTTPS.')
   if (updater.allowDowngrades !== false) throw new Error('allowDowngrades must be explicitly false.')
-  if (updater.windows?.installMode !== policy.windowsInstallMode) throw new Error('Windows updater installMode must remain passive.')
+  if (updater.windows?.installMode !== policy.windowsInstallMode) throw new Error(`Windows updater installMode must remain ${policy.windowsInstallMode}.`)
   if (config.bundle?.createUpdaterArtifacts !== true) throw new Error('Signed updater artifact generation must be enabled.')
   if (JSON.stringify(config.bundle?.targets) !== JSON.stringify([policy.bundleTarget])) throw new Error('Stable Desktop release must build only the NSIS target.')
   return version

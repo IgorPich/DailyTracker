@@ -16,7 +16,7 @@ const validConfig = (version = '4.0.1') => ({
   version,
   identifier: policy.productionIdentifier,
   bundle: { targets: ['nsis'], createUpdaterArtifacts: true },
-  plugins: { updater: { pubkey: policy.updaterPublicKey, endpoints: [policy.updaterEndpoint], allowDowngrades: false, windows: { installMode: 'passive' } } },
+  plugins: { updater: { pubkey: policy.updaterPublicKey, endpoints: [policy.updaterEndpoint], allowDowngrades: false, windows: { installMode: 'quiet' } } },
 })
 
 const validState = (overrides = {}) => ({
@@ -69,7 +69,7 @@ test('stable policy fails closed on every protected updater setting and version 
     (state) => { state.config.plugins.updater.pubkey = 'changed' },
     (state) => { state.config.plugins.updater.endpoints = ['http://example.invalid/latest.json'] },
     (state) => { state.config.plugins.updater.allowDowngrades = true },
-    (state) => { state.config.plugins.updater.windows.installMode = 'quiet' },
+    (state) => { state.config.plugins.updater.windows.installMode = 'passive' },
     (state) => { state.config.bundle.createUpdaterArtifacts = false },
     (state) => { state.config.bundle.targets = ['msi'] },
   ]

@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "GreekGod",
-  "version": "4.0.3",
+  "version": "4.0.4",
   "identifier": "com.igorpich.formlog",
   "build": {
     "beforeDevCommand": "npm run dev -- --port 1420",
@@ -81,7 +81,7 @@
       ],
       "allowDowngrades": false,
       "windows": {
-        "installMode": "passive"
+        "installMode": "quiet"
       }
     }
   }
